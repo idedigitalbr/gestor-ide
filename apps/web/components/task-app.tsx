@@ -351,6 +351,48 @@ export function TaskApp() {
     }
   }
 
+  function handleReorderTask(
+    draggedTaskId: string,
+    targetTaskId: string | null,
+    targetStatus: TaskStatus
+  ) {
+    const dragged = tasks.find((t) => t.id === draggedTaskId);
+    if (!dragged) return;
+
+    const updatedDragged: Task = {
+      ...dragged,
+      status: targetStatus,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setTasks((prev) => {
+      const withoutDragged = prev.filter((t) => t.id !== draggedTaskId);
+      if (!targetTaskId) {
+        return [...withoutDragged, updatedDragged];
+      }
+      const targetIndex = withoutDragged.findIndex((t) => t.id === targetTaskId);
+      if (targetIndex === -1) {
+        return [...withoutDragged, updatedDragged];
+      }
+      const next = [...withoutDragged];
+      next.splice(targetIndex, 0, updatedDragged);
+      return next;
+    });
+
+    if (
+      isConnectedCrm &&
+      !draggedTaskId.startsWith("task-") &&
+      dragged.status !== targetStatus
+    ) {
+      void ideCrmClient
+        .updateTask(
+          draggedTaskId,
+          mapGestorTaskToCrmUpdateInput(updatedDragged)
+        )
+        .catch(() => null);
+    }
+  }
+
   function handleUpdateTaskSubtasks(taskId: string, subtasks: Task["subtasks"]) {
     const previousTask = tasks.find((t) => t.id === taskId);
     setTasks((prev) =>
@@ -371,6 +413,22 @@ export function TaskApp() {
         if (added) {
           void ideCrmClient
             .createChecklistItem(taskId, added.title)
+            .then((res) => {
+              if (res?.item?.id) {
+                setTasks((prev) =>
+                  prev.map((t) =>
+                    t.id === taskId
+                      ? {
+                          ...t,
+                          subtasks: (t.subtasks ?? []).map((s) =>
+                            s.id === added.id ? { ...s, id: res.item.id } : s
+                          ),
+                        }
+                      : t
+                  )
+                );
+              }
+            })
             .catch(() => null);
         }
       } else if (subtasks.length < prevItems.length) {
@@ -555,6 +613,8 @@ export function TaskApp() {
               onDeleteTask={handleDeleteTask}
               onOpenDetails={handleOpenDetails}
               onAddTask={handleAddTask}
+              onUpdateSubtasks={handleUpdateTaskSubtasks}
+              onReorderTasks={handleReorderTask}
             />
           )}
         </main>

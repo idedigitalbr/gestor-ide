@@ -8,7 +8,6 @@ import type {
 import {
   ChevronDown,
   FolderKanban,
-  PanelLeftClose,
   Search,
   ShieldCheck,
   Briefcase,
@@ -17,7 +16,6 @@ import {
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,

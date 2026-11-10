@@ -16,7 +16,6 @@ import {
   Search,
   SlidersHorizontal,
   RotateCcw,
-  ShieldCheck,
   PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -79,7 +78,7 @@ export function AppHeader({
 
   return (
     <header className="planw-app-header h-11 px-3 border-b border-border bg-background/95 backdrop-blur-xs flex items-center justify-between select-none text-xs shrink-0 z-10 text-foreground">
-      {/* Lado Esquerdo: Botão de Alternar Sidebar + Breadcrumb + Abas (Quadro / Tabela) */}
+      {/* Lado Esquerdo: Botão de Alternar Sidebar + Breadcrumb */}
       <div className="flex items-center gap-1.5 min-w-0">
         <Button
           variant="ghost"
@@ -93,7 +92,7 @@ export function AppHeader({
         </Button>
 
         {/* Breadcrumb de Gestão e Projeto Ativo */}
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground px-1 border-r border-border pr-2.5 mr-1 max-w-[260px] truncate">
+        <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground px-1 max-w-[320px] truncate">
           <span
             className="font-medium text-foreground truncate cursor-default"
             title={currentManagementName || "Todas as Gestões"}
@@ -107,45 +106,6 @@ export function AppHeader({
           >
             {currentProjectName || "Todos os Projetos"}
           </span>
-        </div>
-
-        {/* View Tabs */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              onModuleChange("tasks");
-              onViewModeChange("kanban");
-            }}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer border",
-              activeModule === "tasks" && viewMode === "kanban"
-                ? "bg-secondary text-secondary-foreground border-border shadow-2xs"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40 border-transparent"
-            )}
-            title="Visualização em Quadro Kanban"
-          >
-            <Kanban className="w-3.5 h-3.5" />
-            <span>Quadro</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onModuleChange("tasks");
-              onViewModeChange("table");
-            }}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer border",
-              activeModule === "tasks" && viewMode === "table"
-                ? "bg-secondary text-secondary-foreground border-border shadow-2xs"
-                : "text-muted-foreground hover:text-foreground hover:bg-secondary/40 border-transparent"
-            )}
-            title="Visualização em Tabela"
-          >
-            <TableIcon className="w-3.5 h-3.5" />
-            <span>Tabela</span>
-          </button>
         </div>
       </div>
 
@@ -312,27 +272,6 @@ export function AppHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        {/* Botão de Conexão IDE CRM */}
-        <button
-          type="button"
-          onClick={onOpenCrmModal}
-          className={cn(
-            "hidden lg:flex items-center gap-1 h-7 px-2 rounded-md text-[11px] transition-colors cursor-pointer border",
-            isConnectedCrm
-              ? "bg-secondary text-secondary-foreground border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/40 border-transparent"
-          )}
-          title="Status de integração com o IDE CRM"
-        >
-          <ShieldCheck
-            className={cn(
-              "w-3.5 h-3.5",
-              isConnectedCrm ? "text-primary" : "text-muted-foreground"
-            )}
-          />
-          <span>{isConnectedCrm ? "CRM Conectado" : "IDE CRM"}</span>
-        </button>
 
         <span className="text-[11px] font-mono text-muted-foreground hidden md:inline ml-0.5">
           {totalTasks}
