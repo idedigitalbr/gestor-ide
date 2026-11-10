@@ -15,9 +15,9 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Menu,
   RotateCcw,
   ShieldCheck,
+  PanelLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,10 @@ import {
 import { cn } from "@/lib/utils";
 
 interface AppHeaderProps {
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
+  currentManagementName?: string;
+  currentProjectName?: string;
   activeModule: AppModuleSection;
   onModuleChange: (module: AppModuleSection) => void;
   viewMode: ViewMode;
@@ -39,13 +43,16 @@ interface AppHeaderProps {
   filters: TaskFilter;
   onFilterChange: (filters: TaskFilter) => void;
   onOpenNewTaskModal: () => void;
-  onToggleMobileSidebar: () => void;
   onOpenCrmModal: () => void;
   isConnectedCrm: boolean;
   totalTasks: number;
 }
 
 export function AppHeader({
+  isSidebarOpen,
+  onToggleSidebar,
+  currentManagementName,
+  currentProjectName,
   activeModule,
   onModuleChange,
   viewMode,
@@ -53,7 +60,6 @@ export function AppHeader({
   filters,
   onFilterChange,
   onOpenNewTaskModal,
-  onToggleMobileSidebar,
   onOpenCrmModal,
   isConnectedCrm,
   totalTasks,
@@ -73,17 +79,35 @@ export function AppHeader({
 
   return (
     <header className="planw-app-header h-11 px-3 border-b border-border bg-background/95 backdrop-blur-xs flex items-center justify-between select-none text-xs shrink-0 z-10 text-foreground">
-      {/* Lado Esquerdo: Mobile Menu + Abas de Visualização (Quadro / Tabela) */}
+      {/* Lado Esquerdo: Botão de Alternar Sidebar + Breadcrumb + Abas (Quadro / Tabela) */}
       <div className="flex items-center gap-1.5 min-w-0">
         <Button
           variant="ghost"
-          size="icon"
-          className="md:hidden h-7 w-7 text-muted-foreground mr-1"
-          onClick={onToggleMobileSidebar}
-          aria-label="Abrir menu lateral"
+          size="sm"
+          className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+          onClick={onToggleSidebar}
+          aria-label={isSidebarOpen ? "Recolher barra lateral (Ctrl+B)" : "Expandir barra lateral (Ctrl+B)"}
+          title={isSidebarOpen ? "Recolher barra lateral (Ctrl+B)" : "Expandir barra lateral (Ctrl+B)"}
         >
-          <Menu className="w-4 h-4" />
+          <PanelLeft className="w-4 h-4" />
         </Button>
+
+        {/* Breadcrumb de Gestão e Projeto Ativo */}
+        <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground px-1 border-r border-border pr-2.5 mr-1 max-w-[260px] truncate">
+          <span
+            className="font-medium text-foreground truncate cursor-default"
+            title={currentManagementName || "Todas as Gestões"}
+          >
+            {currentManagementName || "Todas as Gestões"}
+          </span>
+          <span className="text-muted-foreground/50">/</span>
+          <span
+            className="truncate cursor-default"
+            title={currentProjectName || "Todos os Projetos"}
+          >
+            {currentProjectName || "Todos os Projetos"}
+          </span>
+        </div>
 
         {/* View Tabs */}
         <div className="flex items-center gap-1">

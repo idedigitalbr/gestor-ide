@@ -78,6 +78,10 @@ export interface CrmProjectManagement {
   description?: string | null;
   color?: string | null;
   status?: string;
+  _count?: {
+    projects?: number;
+    members?: number;
+  };
 }
 
 export interface CrmProject {
@@ -87,6 +91,7 @@ export interface CrmProject {
   description?: string | null;
   status: string;
   priority?: string;
+  color?: string | null;
   projectManagementId: string;
   projectManagement?: {
     id: string;
@@ -94,8 +99,8 @@ export interface CrmProject {
     color?: string | null;
   } | null;
   _count?: {
-    tasks: number;
-    members: number;
+    tasks?: number;
+    members?: number;
   };
 }
 

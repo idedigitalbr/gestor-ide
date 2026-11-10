@@ -13,6 +13,7 @@ import {
   type CrmFinancialSummary,
   type CrmLead,
   type CrmProject,
+  type CrmProjectManagement,
   type CrmProjectMember,
   type CrmUserProfile,
   type Task,
@@ -52,7 +53,9 @@ export function TaskApp() {
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
   const [activeModule, setActiveModule] = useState<AppModuleSection>("tasks");
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Barra lateral retrátil (shadcn/ui Sidebar): PADRÃO FECHADA (false) conforme solicitado
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Estado de Integração com a API Central do IDE CRM
   const [isApiReachable, setIsApiReachable] = useState(false);
@@ -61,6 +64,13 @@ export function TaskApp() {
   const [isCrmModalOpen, setIsCrmModalOpen] = useState(false);
 
   // Dados sincronizados do IDE CRM
+  const [managements, setManagements] = useState<CrmProjectManagement[]>([]);
+  const [selectedManagementId, setSelectedManagementId] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("gestor_selected_management_id") || null;
+    }
+    return null;
+  });
   const [projects, setProjects] = useState<CrmProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [contacts, setContacts] = useState<CrmContact[]>([]);
@@ -108,6 +118,7 @@ export function TaskApp() {
         setCurrentUser(session.user);
 
         const [
+          managementsRes,
           projectsRes,
           tasksRes,
           contactsRes,
@@ -117,6 +128,7 @@ export function TaskApp() {
           finEntriesRes,
           membersRes,
         ] = await Promise.all([
+          ideCrmClient.listManagements().catch(() => ({ managements: [] })),
           ideCrmClient.listProjects().catch(() => ({ projects: [] })),
           ideCrmClient
             .listTasks({
@@ -133,6 +145,7 @@ export function TaskApp() {
             .catch(() => ({ members: [] })),
         ]);
 
+        setManagements(managementsRes.managements ?? []);
         setProjects(projectsRes.projects ?? []);
         if (tasksRes && Array.isArray(tasksRes.tasks)) {
           const mapped = tasksRes.tasks.map((t, idx) =>
@@ -161,10 +174,42 @@ export function TaskApp() {
     return () => window.clearTimeout(timer);
   }, [syncWithIdeCrm, selectedProjectId]);
 
+  // Atalho de teclado: Ctrl+B ou Cmd+B para abrir/fechar a barra lateral
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        setIsSidebarOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  function handleSelectManagement(managementId: string | null) {
+    setSelectedManagementId(managementId);
+    if (typeof window !== "undefined") {
+      if (managementId) {
+        localStorage.setItem("gestor_selected_management_id", managementId);
+      } else {
+        localStorage.removeItem("gestor_selected_management_id");
+      }
+    }
+    // Se o projeto selecionado não pertencer à nova gestão, volta para ver todos daquela gestão
+    if (managementId && selectedProjectId) {
+      const p = projects.find((item) => item.id === selectedProjectId);
+      if (p && p.projectManagementId !== managementId) {
+        setSelectedProjectId(null);
+      }
+    }
+  }
+
   async function handleDisconnectCrm() {
     await ideCrmClient.logout();
     setIsConnectedCrm(false);
     setCurrentUser(null);
+    setManagements([]);
+    setSelectedManagementId(null);
     setProjects([]);
     setSelectedProjectId(null);
     setTasks(INITIAL_TASKS);
@@ -176,11 +221,35 @@ export function TaskApp() {
     return tasks.find((t) => t.id === selectedTaskId) ?? null;
   }, [tasks, selectedTaskId]);
 
-  // Filtered tasks computation
+  const currentManagement = useMemo(() => {
+    if (!selectedManagementId) return null;
+    return managements.find((m) => m.id === selectedManagementId) ?? null;
+  }, [managements, selectedManagementId]);
+
+  const currentProject = useMemo(() => {
+    if (!selectedProjectId) return null;
+    return projects.find((p) => p.id === selectedProjectId) ?? null;
+  }, [projects, selectedProjectId]);
+
+  // Filtered tasks computation respeitando a Hierarquia: Gestão -> Projeto -> Filtros
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      if (selectedProjectId && task.projectId && task.projectId !== selectedProjectId) {
-        return false;
+      // 1. Filtro por Projeto Ativo
+      if (selectedProjectId) {
+        if (task.projectId && task.projectId !== selectedProjectId) {
+          return false;
+        }
+      } else if (selectedManagementId) {
+        // Se estiver em "Todos os Projetos" de uma Gestão específica,
+        // exibe apenas tarefas cujos projetos pertençam àquela gestão
+        const allowedProjectIds = new Set(
+          projects
+            .filter((p) => p.projectManagementId === selectedManagementId)
+            .map((p) => p.id)
+        );
+        if (task.projectId && !allowedProjectIds.has(task.projectId)) {
+          return false;
+        }
       }
 
       if (filters.search) {
@@ -201,7 +270,7 @@ export function TaskApp() {
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId]);
+  }, [tasks, filters, selectedProjectId, selectedManagementId, projects]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -220,7 +289,12 @@ export function TaskApp() {
     data: Omit<Task, "id" | "createdAt" | "code"> & { code?: string }
   ) {
     const tempId = generateTaskId();
-    const targetProjectId = selectedProjectId || projects[0]?.id;
+    const targetProjectId =
+      selectedProjectId ||
+      (selectedManagementId
+        ? projects.find((p) => p.projectManagementId === selectedManagementId)?.id
+        : null) ||
+      projects[0]?.id;
     const newTask: Task = {
       ...data,
       id: tempId,
@@ -410,24 +484,27 @@ export function TaskApp() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      {/* Sidebar (~200px compact) */}
+      {/* Sidebar Retrátil (Padrão: Fechada) */}
       <Sidebar
-        currentView={viewMode}
-        onViewChange={setViewMode}
-        activeModule={activeModule}
-        onModuleChange={setActiveModule}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        managements={managements}
+        selectedManagementId={selectedManagementId}
+        onSelectManagement={handleSelectManagement}
         projects={projects}
         selectedProjectId={selectedProjectId}
         onSelectProject={setSelectedProjectId}
         isConnectedCrm={isConnectedCrm}
         onOpenCrmModal={() => setIsCrmModalOpen(true)}
-        isOpenMobile={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <AppHeader
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          currentManagementName={currentManagement?.name}
+          currentProjectName={currentProject?.name}
           activeModule={activeModule}
           onModuleChange={setActiveModule}
           viewMode={viewMode}
@@ -435,7 +512,6 @@ export function TaskApp() {
           filters={filters}
           onFilterChange={setFilters}
           onOpenNewTaskModal={() => handleOpenNewTask("A Fazer")}
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onOpenCrmModal={() => setIsCrmModalOpen(true)}
           isConnectedCrm={isConnectedCrm}
           totalTasks={filteredTasks.length}
