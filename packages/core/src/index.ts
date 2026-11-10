@@ -216,11 +216,18 @@ export interface CrmFinancialEntry {
   category?: {
     id: string;
     name: string;
+  } | string | null;
+  categoryName?: string | null;
+  financialCategory?: {
+    id: string;
+    name: string;
+    color?: string | null;
   } | null;
   contactProfile?: {
     id: string;
     displayName: string;
   } | null;
+  financialContactName?: string | null;
 }
 
 export interface CrmFinancialSummary {

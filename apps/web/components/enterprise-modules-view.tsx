@@ -514,7 +514,12 @@ export function EnterpriseModulesView({
                       {entry.description}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {entry.category?.name ?? "Geral"}
+                      {typeof entry.category === "string"
+                        ? entry.category
+                        : entry.category?.name ??
+                          entry.categoryName ??
+                          entry.financialCategory?.name ??
+                          "Geral"}
                     </TableCell>
                     <TableCell>
                       <Badge

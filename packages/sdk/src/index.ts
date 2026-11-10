@@ -270,12 +270,18 @@ export class IdeCrmClient {
 
   async listContacts(search?: string): Promise<{ contacts: CrmContact[] }> {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";
-    return this.request(`/contacts${query}`);
+    const res = await this.request<{ contacts?: CrmContact[]; items?: CrmContact[] }>(
+      `/contacts${query}`
+    );
+    return { contacts: res.contacts ?? res.items ?? [] };
   }
 
   async listCompanies(search?: string): Promise<{ companies: CrmCompany[] }> {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";
-    return this.request(`/companies${query}`);
+    const res = await this.request<{ companies?: CrmCompany[]; items?: CrmCompany[] }>(
+      `/companies${query}`
+    );
+    return { companies: res.companies ?? res.items ?? [] };
   }
 
   // --------------------------------------------------------------------------
@@ -283,7 +289,8 @@ export class IdeCrmClient {
   // --------------------------------------------------------------------------
 
   async listLeads(): Promise<{ leads: CrmLead[] }> {
-    return this.request("/leads");
+    const res = await this.request<{ leads?: CrmLead[]; items?: CrmLead[] }>("/leads");
+    return { leads: res.leads ?? res.items ?? [] };
   }
 
   async getCrmDashboardSummary(): Promise<{
@@ -302,11 +309,39 @@ export class IdeCrmClient {
   // --------------------------------------------------------------------------
 
   async getFinanceSummary(): Promise<CrmFinancialSummary> {
-    return this.request("/finance/summary");
+    const res = await this.request<
+      CrmFinancialSummary & {
+        summary?: {
+          pendingReceivables?: number;
+          pendingPayables?: number;
+          receivedThisMonth?: number;
+          paidThisMonth?: number;
+          netThisMonth?: number;
+          overdueTotal?: number;
+        };
+      }
+    >("/finance/summary");
+
+    if (res.summary) {
+      return {
+        totalReceivable: res.summary.pendingReceivables ?? 0,
+        totalPayable: res.summary.pendingPayables ?? 0,
+        paidReceivable: res.summary.receivedThisMonth ?? 0,
+        paidPayable: res.summary.paidThisMonth ?? 0,
+        balance: res.summary.netThisMonth ?? 0,
+        overdueCount: res.summary.overdueTotal ? 1 : 0,
+      };
+    }
+
+    return res;
   }
 
   async listFinanceEntries(): Promise<{ entries: CrmFinancialEntry[] }> {
-    return this.request("/finance/entries");
+    const res = await this.request<{
+      entries?: CrmFinancialEntry[];
+      items?: CrmFinancialEntry[];
+    }>("/finance/entries");
+    return { entries: res.entries ?? res.items ?? [] };
   }
 }
 
