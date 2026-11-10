@@ -1,0 +1,183 @@
+@import "tailwindcss";
+
+:root {
+  --background: #08090a;
+  --foreground: #ededed;
+  --card: #151619;
+  --card-foreground: #ededed;
+  --popover: #18191d;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #08090a;
+  --secondary: #18191d;
+  --secondary-foreground: #ededed;
+  --muted: #121316;
+  --muted-foreground: #84878f;
+  --accent: #18191d;
+  --accent-foreground: #ededed;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1d1e22;
+  --input: #1d1e22;
+  --ring: #3f4148;
+  --radius: 0.5rem;
+  --sidebar-background: #0d0e10;
+  --sidebar-foreground: #ededed;
+  --sidebar-border: #18191c;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #08090a;
+  --sidebar-accent: #18191d;
+  --sidebar-accent-foreground: #ededed;
+  --chart-1: #ededed;
+  --chart-2: #71737a;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #8b5cf6;
+  /* Semantic surface & text tokens */
+  --surface-hover: #f1f5f9;
+  --surface-active: #e2e8f0;
+  --surface-subtle: #f8fafc;
+  --border-subtle: #e2e8f0;
+  --border-hover: #cbd5e1;
+  --text-label: #64748b;
+  --text-icon: #94a3b8;
+}
+
+.dark {
+  --background: #08090a;
+  --foreground: #ededed;
+  --card: #151619;
+  --card-foreground: #ededed;
+  --popover: #18191d;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #08090a;
+  --secondary: #18191d;
+  --secondary-foreground: #ededed;
+  --muted: #121316;
+  --muted-foreground: #84878f;
+  --accent: #18191d;
+  --accent-foreground: #ededed;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1d1e22;
+  --input: #1d1e22;
+  --ring: #3f4148;
+  --sidebar-background: #0d0e10;
+  --sidebar-foreground: #ededed;
+  --sidebar-border: #18191c;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #08090a;
+  --sidebar-accent: #18191d;
+  --sidebar-accent-foreground: #ededed;
+  --chart-1: #ededed;
+  --chart-2: #71737a;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #8b5cf6;
+
+  /* Surface & text tokens for dark mode */
+  --surface-hover: #1a1b1f;
+  --surface-active: #222429;
+  --surface-subtle: #141518;
+  --border-subtle: #202125;
+  --border-hover: #3c3f46;
+  --text-label: #8c8f96;
+  --text-icon: #7a7d85;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Semantic surface & text tokens */
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-hover: var(--border-hover);
+  --color-text-label: var(--text-label);
+  --color-text-icon: var(--text-icon);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Scrollbar discreto e refinado */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ring);
+}
+
+/* Barra superior e sidebar sólidas quando a opção do seletor estiver ativada.
+   O conteúdo (Kanban, cards, modais) mantém os tokens originais do tema. */
+html[data-colored-chrome="true"] .planw-theme-sidebar {
+  --foreground: var(--chrome-foreground);
+  --muted-foreground: var(--chrome-muted);
+  --secondary: var(--chrome-highlight);
+  --secondary-foreground: var(--chrome-foreground);
+  --card: var(--chrome-highlight);
+  --card-foreground: var(--chrome-foreground);
+  --border: var(--chrome-border);
+  color: var(--chrome-foreground);
+}
+html[data-colored-chrome="true"] .planw-app-header {
+  --background: var(--chrome-background);
+  --foreground: var(--chrome-foreground);
+  --muted-foreground: var(--chrome-muted);
+  --secondary: var(--chrome-highlight);
+  --secondary-foreground: var(--chrome-foreground);
+  --primary: var(--chrome-foreground);
+  --primary-foreground: var(--chrome-background);
+  --border: var(--chrome-border);
+  background-color: var(--chrome-background);
+  color: var(--chrome-foreground);
+  border-color: var(--chrome-border);
+}

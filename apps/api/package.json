@@ -1,0 +1,16 @@
+{
+  "name": "@gestor-ide/api",
+  "version": "0.1.0",
+  "devDependencies": {
+    "bun-types": "^1.4.2",
+    "typescript": "^5.9.2"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "elysia": "^1.4.30"
+  }
+}

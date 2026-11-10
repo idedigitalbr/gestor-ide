@@ -1,0 +1,13 @@
+{
+  "name": "@gestor-ide/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.2",
+    "typescript": "^5.9.2"
+  }
+}

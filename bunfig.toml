@@ -1,0 +1,4 @@
+# Configuração do Bun para o @planw
+# Força o runtime do Bun em todos os scripts executados via `bun run`
+[run]
+bun = true

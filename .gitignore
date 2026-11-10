@@ -1,0 +1,17 @@
+# Dependências e artefatos de build
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
+.turbo/
+.vercel/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# Segredos locais (permitir apenas exemplos sem credenciais)
+.env*
+!.env.example
+*.pem

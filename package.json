@@ -1,0 +1,23 @@
+{
+  "name": "gestor-ide",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.4.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --filter=web",
+    "dev:web": "turbo dev --filter=web",
+    "dev:api": "bun run --cwd apps/api dev",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test:themes": "bun run --cwd apps/web test:themes"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.9.2"
+  }
+}
