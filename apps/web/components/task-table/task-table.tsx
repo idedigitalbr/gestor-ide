@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import type { CrmProjectMember } from "@gestor-ide/core";
 import type {
   Subtask,
   Task,
@@ -98,6 +99,8 @@ interface TaskTableProps {
   subtaskMode?: "collapsed" | "expanded" | "separate";
   showClosedSubtasks?: boolean;
   projectId?: string | null;
+  projectMembers?: CrmProjectMember[];
+  membersLoaded?: boolean;
 }
 
 const TABLE_GROUPS: CanonicalTaskStatus[] = ALL_CANONICAL_STATUSES;
@@ -168,6 +171,8 @@ export function TaskTable({
   subtaskMode = "collapsed",
   showClosedSubtasks = true,
   projectId,
+  projectMembers = [],
+  membersLoaded = false,
 }: TaskTableProps) {
   // Controle de colunas e ordenação rápida
   const [columns, setColumns] = useState<TableColumnConfig[]>(DEFAULT_COLUMNS);
@@ -796,11 +801,21 @@ export function TaskTable({
     title: string;
     itemType: ProjectTaskItemType;
     status: TaskStatus;
+    startDate?: string;
+    dueDate?: string;
+    assigneeId?: string;
+    assignee?: string;
+    assigneeAvatar?: string;
   }, parentTaskId?: string) {
     onAddTask({
       title: data.title,
       itemType: data.itemType,
       status: data.status,
+      startDate: data.startDate,
+      dueDate: data.dueDate,
+      assigneeId: data.assigneeId,
+      assignee: data.assignee,
+      assigneeAvatar: data.assigneeAvatar,
       priority: "Normal",
       description: "",
       parentTaskId,
@@ -1002,7 +1017,7 @@ export function TaskTable({
                 {/* Botões Rápidos Inline no Hover (+ Subtarefa, Tag, Lápis) */}
                 <div className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 flex items-center gap-1 ml-1 transition-opacity shrink-0">
                   {getAllowedGroupTypes(normalizeItemType(task.itemType)).length > 0 && (
-                    <CreateGroupPopover compact parentType={normalizeItemType(task.itemType)} onCreateSpecialGroup={(data) => handleCreateSpecialGroup(data, task.id)} />
+                    <CreateGroupPopover compact parentType={normalizeItemType(task.itemType)} members={projectMembers} membersLoaded={membersLoaded} onCreateSpecialGroup={(data) => handleCreateSpecialGroup(data, task.id)} />
                   )}
                   <button
                     type="button"
@@ -1964,6 +1979,8 @@ export function TaskTable({
       {/* --------------------------------------------------------------------- */}
       <div className="pt-2">
         <CreateGroupPopover
+          members={projectMembers}
+          membersLoaded={membersLoaded}
           onCreateFreeGroup={handleCreateFreeGroup}
           onCreateSpecialGroup={handleCreateSpecialGroup}
         />

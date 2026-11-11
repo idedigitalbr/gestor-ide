@@ -686,7 +686,12 @@ export function TaskApp() {
             const synced = mapCrmTaskToGestorTask(res.task, 0);
             const presentation = { itemType: newTask.itemType, customGroup: newTask.customGroup };
             setLocalTaskPresentation(synced.id, presentation);
-            const finalTask = { ...synced, ...presentation, code: newTask.code };
+            const finalTask = {
+              ...synced,
+              ...presentation,
+              ...(res.task.assignees === undefined ? { assigneeId: newTask.assigneeId, assignee: newTask.assignee, assigneeAvatar: newTask.assigneeAvatar } : {}),
+              code: newTask.code,
+            };
             setTasks((prev) =>
               prev.map((t) =>
                 t.id === tempId ? finalTask : t
@@ -1087,6 +1092,8 @@ export function TaskApp() {
             <TaskTable
               key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
               projectId={selectedProjectId}
+              projectMembers={projectMembers?.projectId === selectedProjectId ? projectMembers?.members ?? [] : []}
+              membersLoaded={Boolean(selectedProjectId && projectMembers?.projectId === selectedProjectId)}
               tasks={filteredTasks}
               groupBy={groupBy}
               groupOrder={groupOrder}

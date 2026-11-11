@@ -533,6 +533,7 @@ export function mapGestorTaskToCrmCreateInput(
   return {
     projectId,
     ...(task.parentTaskId ? { parentTaskId: task.parentTaskId } : {}),
+    ...(task.assigneeId ? { assigneeIds: [task.assigneeId] } : {}),
     title: task.title.trim(),
     description: task.description?.trim() || null,
     status: mapGestorStatusToCrm(task.status),

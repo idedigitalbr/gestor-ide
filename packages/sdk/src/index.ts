@@ -173,6 +173,7 @@ export class IdeCrmClient {
   async createTask(input: {
     projectId: string;
     parentTaskId?: string;
+    assigneeIds?: string[];
     title: string;
     description?: string | null;
     status?: string;

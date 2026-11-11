@@ -301,6 +301,7 @@ export function NotionDatePicker({
   };
 
   const handleManualInputCommit = () => {
+    if (manualDraft === null) return;
     const trimmed = manualInput.trim();
     if (!trimmed) {
       handleClear();
