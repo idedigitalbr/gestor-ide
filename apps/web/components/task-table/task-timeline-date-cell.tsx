@@ -85,13 +85,13 @@ export function TaskTimelineDateCell({
   }
 
   // Cor da barra de tempo consumido
-  let timelineBarColor = "bg-[#3b82f6]"; // Azul sutil padrão
+  let timelineBarColor = "bg-blue-500/25"; // Azul sutil padrão
   if (isCompleted) {
-    timelineBarColor = "bg-[#10b981]"; // Verde se concluído no prazo
+    timelineBarColor = "bg-emerald-500/25"; // Verde se concluído no prazo
   } else if (isOverdue) {
-    timelineBarColor = "bg-[#ef4444]"; // Vermelho se vencido
+    timelineBarColor = "bg-destructive/25"; // Vermelho se vencido
   } else if (isNearDue || isUrgent) {
-    timelineBarColor = "bg-[#f59e0b]"; // Laranja se próximo ou urgente
+    timelineBarColor = "bg-amber-500/25"; // Laranja se próximo ou urgente
   }
 
   // Texto formatado de exibição
@@ -135,10 +135,10 @@ export function TaskTimelineDateCell({
               <button
                 type="button"
                 onClick={open}
-                className="opacity-40 hover:opacity-100 inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-dashed border-[#2b2e40] text-[11px] text-muted-foreground hover:text-white transition-opacity cursor-pointer"
+                className="opacity-60 hover:opacity-100 inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-dashed border-border text-[11px] text-muted-foreground hover:text-foreground transition-opacity cursor-pointer"
                 title="Definir data / prazo"
               >
-                <Calendar className="w-3 h-3 text-muted-foreground/60" />
+                <Calendar className="w-3 h-3 text-muted-foreground/70" />
                 <span>+ Prazo</span>
               </button>
             );
@@ -151,8 +151,8 @@ export function TaskTimelineDateCell({
               className={cn(
                 "group/datepill relative h-[25px] rounded-full border overflow-hidden inline-flex items-center px-2.5 text-[11px] font-medium transition-all cursor-pointer max-w-full",
                 isOverdue
-                  ? "border-[#ef4444]/60 bg-[#1e1315] text-[#fca5a5] hover:border-[#ef4444]"
-                  : "border-[#252838] bg-[#12141f] text-[#d6d9ea] hover:border-[#3b82f6]"
+                  ? "border-destructive/60 bg-destructive/10 text-destructive hover:border-destructive"
+                  : "border-border bg-secondary text-secondary-foreground hover:border-primary/60"
               )}
               title={
                 hasTimeline
@@ -164,7 +164,7 @@ export function TaskTimelineDateCell({
               {hasTimeline && (
                 <div
                   className={cn(
-                    "absolute left-0 top-0 bottom-0 rounded-l-full transition-all duration-300 opacity-75",
+                    "absolute left-0 top-0 bottom-0 rounded-l-full transition-all duration-300",
                     timelineBarColor
                   )}
                   style={{ width: `${elapsedPercent}%` }}
@@ -174,11 +174,11 @@ export function TaskTimelineDateCell({
               {/* Conteúdo textual sobreposto */}
               <div className="relative z-10 flex items-center gap-1.5 truncate">
                 {isOverdue ? (
-                  <span className="text-[#ef4444] font-bold text-xs shrink-0 leading-none">
+                  <span className="text-destructive font-bold text-xs shrink-0 leading-none">
                     !
                   </span>
                 ) : (
-                  <Calendar className="w-3 h-3 text-muted-foreground/80 shrink-0" />
+                  <Calendar className="w-3 h-3 text-muted-foreground shrink-0" />
                 )}
                 <span className="truncate">{displayLabel}</span>
               </div>

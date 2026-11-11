@@ -37,7 +37,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "FileText",
     color: "#84878f",
     badgeBg: "bg-slate-500/10 dark:bg-slate-500/20",
-    badgeText: "text-slate-400",
+    badgeText: "text-slate-600 dark:text-slate-400",
   },
   STAGE: {
     type: "STAGE",
@@ -47,7 +47,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "Layers",
     color: "#8b5cf6",
     badgeBg: "bg-purple-500/10 dark:bg-purple-500/20",
-    badgeText: "text-purple-400",
+    badgeText: "text-purple-600 dark:text-purple-400",
   },
   PAGE: {
     type: "PAGE",
@@ -57,7 +57,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "FileText",
     color: "#3b82f6",
     badgeBg: "bg-blue-500/10 dark:bg-blue-500/20",
-    badgeText: "text-blue-400",
+    badgeText: "text-blue-600 dark:text-blue-400",
   },
   MODULE: {
     type: "MODULE",
@@ -67,7 +67,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "LayoutGrid",
     color: "#06b6d4",
     badgeBg: "bg-cyan-500/10 dark:bg-cyan-500/20",
-    badgeText: "text-cyan-400",
+    badgeText: "text-cyan-700 dark:text-cyan-400",
   },
   SECTION: {
     type: "SECTION",
@@ -77,7 +77,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "PanelTop",
     color: "#f59e0b",
     badgeBg: "bg-amber-500/10 dark:bg-amber-500/20",
-    badgeText: "text-amber-400",
+    badgeText: "text-amber-600 dark:text-amber-400",
   },
   ITEM: {
     type: "ITEM",
@@ -87,7 +87,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "ListChecks",
     color: "#10b981",
     badgeBg: "bg-emerald-500/10 dark:bg-emerald-500/20",
-    badgeText: "text-emerald-400",
+    badgeText: "text-emerald-600 dark:text-emerald-400",
   },
   MILESTONE: {
     type: "MILESTONE",
@@ -97,7 +97,7 @@ export const TASK_ITEM_TYPE_DEFINITIONS: Record<ProjectTaskItemType, TaskItemTyp
     iconName: "Diamond",
     color: "#ec4899",
     badgeBg: "bg-pink-500/10 dark:bg-pink-500/20",
-    badgeText: "text-pink-400",
+    badgeText: "text-pink-600 dark:text-pink-400",
   },
 };
 

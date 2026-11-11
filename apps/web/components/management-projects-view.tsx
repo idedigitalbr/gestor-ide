@@ -9,12 +9,17 @@ import {
   Calendar,
   Users,
   Shield,
+  ArrowLeft,
   ArrowRight,
-  ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
-import { PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
+import {
+  MANAGEMENT_VISIBILITY_LABELS,
+  PROJECT_STATUS_LABELS,
+  type ListDisplayMode,
+} from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
 
 interface ManagementProjectsViewProps {
@@ -101,6 +106,20 @@ export function ManagementProjectsView({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
+      {onBack && (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Todas as gestões</span>
+          </Button>
+        </div>
+      )}
       {/* Cartão de Apresentação da Gestão (Hero Card) */}
       <div className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm">
         <div className="grid grid-cols-1 lg:grid-cols-3">
@@ -110,7 +129,7 @@ export function ManagementProjectsView({
             style={
               management.coverPath
                 ? {
-                    backgroundImage: `url(${management.coverPath})`,
+                    backgroundImage: `url("${encodeURI(management.coverPath)}")`,
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                   }
@@ -171,9 +190,13 @@ export function ManagementProjectsView({
                 <Folder className="w-3 h-3 text-muted-foreground/70" />
                 <span>Geral</span>
               </span>
-              <span className="flex items-center gap-1 capitalize">
+              <span className="flex items-center gap-1">
                 <Shield className="w-3 h-3 text-muted-foreground/70" />
-                <span>{management.visibility || "company"}</span>
+                <span>
+                  {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] ||
+                    management.visibility ||
+                    "Empresa"}
+                </span>
               </span>
             </div>
           </div>
@@ -318,7 +341,7 @@ export function ManagementProjectsView({
                 PRIORITY_TONES[project.priority || "medium"] || PRIORITY_TONES.medium;
 
               const formattedDueDate = project.dueDate
-                ? new Date(project.dueDate).toLocaleDateString("pt-BR")
+                ? new Date(`${project.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR")
                 : null;
 
               return (
@@ -341,7 +364,7 @@ export function ManagementProjectsView({
                     style={
                       project.coverPath
                         ? {
-                            backgroundImage: `url(${project.coverPath})`,
+                            backgroundImage: `url("${encodeURI(project.coverPath)}")`,
                             backgroundSize: "cover",
                             backgroundPosition: "center",
                           }
@@ -488,7 +511,9 @@ export function ManagementProjectsView({
                   <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0 ml-3">
                     <span className="flex items-center gap-1">
                       <ListTodo className="w-3.5 h-3.5" />
-                      <span>{taskCount} tarefas</span>
+                      <span>
+                        {taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}
+                      </span>
                     </span>
                     <span className="flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />

@@ -3,7 +3,7 @@
 import React from "react";
 import type { TaskStatus, CanonicalTaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
-import { Check, Clock, Play, Hourglass, Ban } from "lucide-react";
+import { Check, Play, Hourglass, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenuItem,
@@ -32,7 +32,7 @@ export const STATUS_DEFINITIONS: Record<CanonicalTaskStatus, StatusDefinition> =
     color: "#94a3b8",
     bgColor: "bg-slate-500/15",
     borderColor: "border-slate-500/30",
-    textColor: "text-slate-300",
+    textColor: "text-slate-600 dark:text-slate-300",
   },
   "FAZENDO AGORA": {
     id: "FAZENDO AGORA",
@@ -42,7 +42,7 @@ export const STATUS_DEFINITIONS: Record<CanonicalTaskStatus, StatusDefinition> =
     color: "#3b82f6",
     bgColor: "bg-blue-500/15",
     borderColor: "border-blue-500/35",
-    textColor: "text-blue-400",
+    textColor: "text-blue-600 dark:text-blue-400",
   },
   "AGUARDANDO FEEDBACK": {
     id: "AGUARDANDO FEEDBACK",
@@ -52,7 +52,7 @@ export const STATUS_DEFINITIONS: Record<CanonicalTaskStatus, StatusDefinition> =
     color: "#f97316",
     bgColor: "bg-orange-500/15",
     borderColor: "border-orange-500/35",
-    textColor: "text-orange-400",
+    textColor: "text-orange-600 dark:text-orange-400",
   },
   BLOQUEADO: {
     id: "BLOQUEADO",
@@ -62,7 +62,7 @@ export const STATUS_DEFINITIONS: Record<CanonicalTaskStatus, StatusDefinition> =
     color: "#ef4444",
     bgColor: "bg-red-500/15",
     borderColor: "border-red-500/35",
-    textColor: "text-red-400",
+    textColor: "text-red-600 dark:text-red-400",
   },
   CONCLUÍDO: {
     id: "CONCLUÍDO",
@@ -72,7 +72,7 @@ export const STATUS_DEFINITIONS: Record<CanonicalTaskStatus, StatusDefinition> =
     color: "#10b981",
     bgColor: "bg-emerald-500/15",
     borderColor: "border-emerald-500/35",
-    textColor: "text-emerald-400",
+    textColor: "text-emerald-600 dark:text-emerald-400",
   },
 };
 
@@ -160,13 +160,13 @@ export function StatusIcon({
       return (
         <span
           className={cn(
-            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-blue-500 bg-blue-500/20 flex items-center justify-center text-blue-400 select-none shadow-[0_0_6px_rgba(59,130,246,0.3)]",
+            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-blue-500 bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 select-none shadow-[0_0_6px_rgba(59,130,246,0.3)]",
             className
           )}
           title="FAZENDO AGORA"
           aria-hidden="true"
         >
-          <Play className="w-2 h-2 fill-blue-400 text-blue-400 translate-x-[0.5px]" />
+          <Play className="w-2 h-2 fill-current text-current translate-x-[0.5px]" />
         </span>
       );
 
@@ -174,7 +174,7 @@ export function StatusIcon({
       return (
         <span
           className={cn(
-            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-orange-500 bg-orange-500/20 flex items-center justify-center text-orange-400 select-none shadow-[0_0_6px_rgba(249,115,22,0.3)]",
+            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-orange-500 bg-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400 select-none shadow-[0_0_6px_rgba(249,115,22,0.3)]",
             className
           )}
           title="AGUARDANDO FEEDBACK"
@@ -188,7 +188,7 @@ export function StatusIcon({
       return (
         <span
           className={cn(
-            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-red-500 bg-red-500/20 flex items-center justify-center text-red-400 select-none shadow-[0_0_6px_rgba(239,68,68,0.3)]",
+            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-red-500 bg-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400 select-none shadow-[0_0_6px_rgba(239,68,68,0.3)]",
             className
           )}
           title="BLOQUEADO"
@@ -202,7 +202,7 @@ export function StatusIcon({
       return (
         <span
           className={cn(
-            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-emerald-500 bg-emerald-500/25 flex items-center justify-center text-emerald-400 select-none shadow-[0_0_6px_rgba(16,185,129,0.3)]",
+            "w-[18px] h-[18px] shrink-0 rounded-full border-[1.5px] border-emerald-500 bg-emerald-500/25 flex items-center justify-center text-emerald-600 dark:text-emerald-400 select-none shadow-[0_0_6px_rgba(16,185,129,0.3)]",
             className
           )}
           title="CONCLUÍDO"
@@ -276,14 +276,14 @@ export function StatusDropdownContent({
   return (
     <div
       className={cn(
-        "py-1 text-white bg-[#1a1c2d] border border-[#2c2f48] rounded-xl shadow-xl min-w-[210px]",
+        "py-1 text-popover-foreground bg-popover border border-border rounded-xl shadow-xl min-w-[210px]",
         className
       )}
     >
       {STATUS_CATEGORIES.map((cat, idx) => (
         <div key={cat.category}>
-          {idx > 0 && <DropdownMenuSeparator className="bg-[#2c2f48]/70 my-1" />}
-          <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-[#8e92ab] uppercase tracking-wider">
+          {idx > 0 && <DropdownMenuSeparator className="my-1" />}
+          <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             {cat.category}
           </div>
           <div className="space-y-0.5 px-1 pb-1">
@@ -301,8 +301,8 @@ export function StatusDropdownContent({
                   className={cn(
                     "flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors outline-none",
                     isSelected
-                      ? "bg-[#252840] text-white"
-                      : "text-[#d1d5db] hover:bg-[#202336] hover:text-white"
+                      ? "bg-accent text-accent-foreground"
+                      : "text-popover-foreground/80 hover:bg-accent/60 hover:text-accent-foreground"
                   )}
                 >
                   <span className="flex items-center gap-2 truncate">
@@ -310,7 +310,7 @@ export function StatusDropdownContent({
                     <span className="truncate tracking-wide">{def.label}</span>
                   </span>
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-white shrink-0 ml-2" />
+                    <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-2" />
                   )}
                 </DropdownMenuItem>
               );

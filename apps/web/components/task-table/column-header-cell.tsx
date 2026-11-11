@@ -39,8 +39,6 @@ export interface ColumnHeaderCellProps {
   onSetSort: (columnId: string, direction: "asc" | "desc" | null) => void;
   onMoveToStart?: (columnId: string) => void;
   onMoveToEnd?: (columnId: string) => void;
-  onMoveLeft?: (columnId: string) => void;
-  onMoveRight?: (columnId: string) => void;
   onHideColumn?: (columnId: string) => void;
   onDragStart?: (columnId: string, e: React.DragEvent) => void;
   onDragOver?: (columnId: string, e: React.DragEvent) => void;
@@ -62,8 +60,6 @@ export function ColumnHeaderCell({
   onSetSort,
   onMoveToStart,
   onMoveToEnd,
-  onMoveLeft,
-  onMoveRight,
   onHideColumn,
   onDragStart,
   onDragOver,

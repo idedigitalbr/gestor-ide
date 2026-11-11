@@ -197,12 +197,11 @@ export function EnterpriseModulesView({
 }: EnterpriseModulesViewProps) {
   const [search, setSearch] = useState("");
 
-  const activeContacts = isConnected && contacts.length > 0 ? contacts : DEMO_CONTACTS;
-  const activeCompanies = isConnected && companies.length > 0 ? companies : DEMO_COMPANIES;
-  const activeLeads = isConnected && leads.length > 0 ? leads : DEMO_LEADS;
-  const activeEntries =
-    isConnected && financeEntries.length > 0 ? financeEntries : DEMO_FINANCE_ENTRIES;
-  const activeMembers = isConnected && members.length > 0 ? members : DEMO_MEMBERS;
+  const activeContacts = isConnected ? contacts : DEMO_CONTACTS;
+  const activeCompanies = isConnected ? companies : DEMO_COMPANIES;
+  const activeLeads = isConnected ? leads : DEMO_LEADS;
+  const activeEntries = isConnected ? financeEntries : DEMO_FINANCE_ENTRIES;
+  const activeMembers = isConnected ? members : DEMO_MEMBERS;
 
   const filteredContacts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -353,25 +352,33 @@ export function EnterpriseModulesView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredContacts.map((contact) => (
-                  <TableRow key={contact.id} className="border-border">
-                    <TableCell className="font-medium text-foreground">
-                      {contact.fullName}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {contact.company?.name ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {contact.jobTitle ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {contact.email ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {contact.phone ?? "—"}
+                {filteredContacts.length === 0 ? (
+                  <TableRow className="border-border">
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Nenhum contato encontrado.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredContacts.map((contact) => (
+                    <TableRow key={contact.id} className="border-border">
+                      <TableCell className="font-medium text-foreground">
+                        {contact.fullName}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {contact.company?.name ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {contact.jobTitle ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {contact.email ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {contact.phone ?? "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -422,32 +429,40 @@ export function EnterpriseModulesView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLeads.map((lead) => (
-                  <TableRow key={lead.id} className="border-border">
-                    <TableCell className="font-medium text-foreground">
-                      {lead.title}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {lead.company?.name || lead.contact?.fullName || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] border-border">
-                        {lead.stage?.name ?? "Qualificação"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={lead.temperature === "quente" ? "default" : "secondary"}
-                        className="text-[10px] uppercase"
-                      >
-                        {lead.temperature ?? "normal"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-foreground">
-                      {formatCurrencyBRL(lead.value)}
+                {filteredLeads.length === 0 ? (
+                  <TableRow className="border-border">
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Nenhuma oportunidade encontrada.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredLeads.map((lead) => (
+                    <TableRow key={lead.id} className="border-border">
+                      <TableCell className="font-medium text-foreground">
+                        {lead.title}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {lead.company?.name || lead.contact?.fullName || "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px] border-border">
+                          {lead.stage?.name ?? "Qualificação"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={lead.temperature === "quente" ? "default" : "secondary"}
+                          className="text-[10px] uppercase"
+                        >
+                          {lead.temperature ?? "normal"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-foreground">
+                        {formatCurrencyBRL(lead.value)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -508,40 +523,59 @@ export function EnterpriseModulesView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredEntries.map((entry) => (
-                  <TableRow key={entry.id} className="border-border">
-                    <TableCell className="font-medium text-foreground">
-                      {entry.description}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {typeof entry.category === "string"
-                        ? entry.category
-                        : entry.category?.name ??
-                          entry.categoryName ??
-                          entry.financialCategory?.name ??
-                          "Geral"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={entry.type === "RECEIVABLE" ? "default" : "secondary"}
-                        className="text-[10px]"
-                      >
-                        {entry.type === "RECEIVABLE" ? "Receita" : "Despesa"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-[10px] border-border">
-                        {entry.status === "PAID" ? "Liquidado" : "Pendente"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground font-mono">
-                      {entry.dueDate.slice(0, 10)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-foreground">
-                      {formatCurrencyBRL(entry.amount)}
+                {filteredEntries.length === 0 ? (
+                  <TableRow className="border-border">
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      Nenhum lançamento financeiro encontrado.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredEntries.map((entry) => {
+                    const statusLabel =
+                      entry.status === "PAID"
+                        ? "Liquidado"
+                        : entry.status === "PARTIALLY_PAID"
+                          ? "Parcial"
+                          : entry.status === "CANCELLED"
+                            ? "Cancelado"
+                            : "Pendente";
+
+                    return (
+                      <TableRow key={entry.id} className="border-border">
+                        <TableCell className="font-medium text-foreground">
+                          {entry.description}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {typeof entry.category === "string"
+                            ? entry.category
+                            : entry.category?.name ??
+                              entry.categoryName ??
+                              entry.financialCategory?.name ??
+                              "Geral"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={entry.type === "RECEIVABLE" ? "default" : "secondary"}
+                            className="text-[10px]"
+                          >
+                            {entry.type === "RECEIVABLE" ? "Receita" : "Despesa"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] border-border">
+                            {statusLabel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono">
+                          {entry.dueDate ? entry.dueDate.slice(0, 10) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-foreground">
+                          {formatCurrencyBRL(entry.amount)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
@@ -561,24 +595,32 @@ export function EnterpriseModulesView({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMembers.map((member) => (
-                <TableRow key={member.id} className="border-border">
-                  <TableCell className="font-medium text-foreground">
-                    {member.user.name || "Membro IDE"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {member.user.email}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {member.project?.name ?? "Acesso Global"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] uppercase border-border">
-                      {member.role}
-                    </Badge>
+              {filteredMembers.length === 0 ? (
+                <TableRow className="border-border">
+                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                    Nenhum membro encontrado.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredMembers.map((member) => (
+                  <TableRow key={member.id} className="border-border">
+                    <TableCell className="font-medium text-foreground">
+                      {member.user.name || "Membro IDE"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {member.user.email}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {member.project?.name ?? "Acesso Global"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] uppercase border-border">
+                        {member.role}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

@@ -35,7 +35,7 @@ export function TaskKanban({
 
   function handleDropTask(taskId: string, targetStatus: TaskStatus) {
     const task = tasks.find((t) => t.id === taskId);
-    if (task && task.status !== targetStatus) {
+    if (task && normalizeTaskStatus(task.status) !== normalizeTaskStatus(targetStatus)) {
       onUpdateTask({ ...task, status: targetStatus });
     }
   }

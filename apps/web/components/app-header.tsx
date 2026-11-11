@@ -1,20 +1,16 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import type {
   CrmProject,
   CrmProjectManagement,
-  CrmProjectMember,
   CrmUserProfile,
 } from "@gestor-ide/core";
 import type {
-  AppModuleSection,
   ViewMode,
   TaskFilter,
-  TaskStatus,
-  TaskPriority,
   TaskGroupBy,
-  GroupOrder,
   Task,
 } from "@/types/task";
 import {
@@ -62,6 +58,7 @@ import { GROUP_OPTIONS, getGroupByLabel } from "./task-table/task-grouping-menu"
 import { TaskFilterMenu } from "./task-table/task-filter-menu";
 import { HeaderWorkspaceSelector } from "./header-workspace-selector";
 import { HeaderNotifications } from "./header-notifications";
+import { MemberAvatarContent } from "./member-avatar-content";
 import { cn } from "@/lib/utils";
 
 // Ícone ClickUp de Subtarefas (Ramificação com dois nós conectados)
@@ -142,8 +139,6 @@ interface AppHeaderProps {
   onOpenNewEvent?: () => void;
   canCreateCalendarEvent?: boolean;
   onHome?: () => void;
-  isSidebarOpen?: boolean;
-  onToggleSidebar?: () => void;
   managements?: CrmProjectManagement[];
   projects?: CrmProject[];
   selectableProjects?: CrmProject[];
@@ -157,8 +152,6 @@ interface AppHeaderProps {
   selectedProjectId?: string | null;
   onSelectManagement?: (managementId: string | null) => void;
   onSelectProject?: (projectId: string | null) => void;
-  activeModule: AppModuleSection;
-  onModuleChange: (module: AppModuleSection) => void;
   viewMode?: ViewMode;
   onViewModeChange?: (mode: ViewMode) => void;
   filters: TaskFilter;
@@ -172,21 +165,15 @@ interface AppHeaderProps {
   onListFilterChange: (value: string) => void;
   onOpenNewProject: () => void;
   onOpenNewManagement: () => void;
-  totalTasks: number;
   groupBy?: TaskGroupBy;
-  groupOrder?: GroupOrder;
   onGroupByChange?: (groupBy: TaskGroupBy) => void;
-  onGroupOrderChange?: (order: GroupOrder) => void;
   tasks?: Task[];
   currentUser?: CrmUserProfile | null;
-  members?: CrmProjectMember[];
   onOpenFieldsModal?: () => void;
   subtaskMode?: SubtaskDisplayMode;
   onSubtaskModeChange?: (mode: SubtaskDisplayMode) => void;
   showClosedTasks?: boolean;
   onToggleShowClosedTasks?: (show: boolean) => void;
-  showClosedSubtasks?: boolean;
-  onToggleShowClosedSubtasks?: (show: boolean) => void;
   visibleColumnsCount?: number;
   onLogout?: () => void;
 }
@@ -197,8 +184,6 @@ export function AppHeader({
   onOpenNewEvent,
   canCreateCalendarEvent = false,
   onHome,
-  isSidebarOpen,
-  onToggleSidebar,
   managements = [],
   projects = [],
   selectableProjects,
@@ -212,8 +197,6 @@ export function AppHeader({
   selectedProjectId,
   onSelectManagement,
   onSelectProject,
-  activeModule,
-  onModuleChange,
   viewMode = "table",
   onViewModeChange,
   filters,
@@ -227,21 +210,15 @@ export function AppHeader({
   onListFilterChange,
   onOpenNewProject,
   onOpenNewManagement,
-  totalTasks,
   groupBy = "none",
-  groupOrder = "asc",
   onGroupByChange,
-  onGroupOrderChange,
   tasks = [],
   currentUser = null,
-  members = [],
   onOpenFieldsModal,
   subtaskMode = "collapsed",
   onSubtaskModeChange,
   showClosedTasks = true,
   onToggleShowClosedTasks,
-  showClosedSubtasks = true,
-  onToggleShowClosedSubtasks,
   visibleColumnsCount = 5,
   onLogout,
 }: AppHeaderProps) {
@@ -252,7 +229,6 @@ export function AppHeader({
   const [activeSubView, setActiveSubView] = useState<
     "main" | "grupo" | "subtarefas" | "filtro"
   >("main");
-  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
 
   // Quantidade de filtros ativos
   const activeFiltersCount = useMemo(() => {
@@ -276,13 +252,6 @@ export function AppHeader({
       : "Separar";
 
   const displayName = currentUser?.name || currentUser?.email || "Usuário";
-  const initials = (displayName || "U")
-    .split(" ")
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 
   return (
     <header className="planw-app-header min-h-12 px-3 py-1 border-b border-border/60 bg-background/95 backdrop-blur-xs flex flex-wrap items-center justify-between gap-y-1 select-none text-xs shrink-0 relative z-50 text-foreground">
@@ -307,7 +276,7 @@ export function AppHeader({
           </Button>
         </HeaderTooltip>
 
-        <HeaderTooltip label="Dashboard de projetos"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><a href="/projects/dashboard" aria-label="Dashboard de projetos"><LayoutDashboard className="size-4" /></a></Button></HeaderTooltip>
+        <HeaderTooltip label="Dashboard de projetos"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><Link href="/projects/dashboard" aria-label="Dashboard de projetos"><LayoutDashboard className="size-4" /></Link></Button></HeaderTooltip>
         <HeaderWorkspaceSelector
           key={currentUser?.id ?? "anonymous"}
           managements={managements}
@@ -320,7 +289,7 @@ export function AppHeader({
           currentProjectName={currentProjectName}
           selectableProjects={selectableProjects}
         />
-        <HeaderTooltip label="Calendário"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><a href="/projects/calendar" aria-label="Calendário"><CalendarDays className="size-4" /></a></Button></HeaderTooltip>
+        <HeaderTooltip label="Calendário"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><Link href="/projects/calendar" aria-label="Calendário"><CalendarDays className="size-4" /></Link></Button></HeaderTooltip>
       </div>
 
       {/* ========================================================= */}
@@ -379,14 +348,14 @@ export function AppHeader({
                 {activeSubView === "main" && (
                   <>
                     {/* Header com X */}
-                    <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#25283a]">
-                      <span className="text-xs font-bold text-white">
+                    <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
+                      <span className="text-xs font-bold text-foreground">
                         Personalizar visualização
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsSettingsPopoverOpen(false)}
-                        className="text-muted-foreground hover:text-white cursor-pointer p-0.5 rounded"
+                        className="text-muted-foreground hover:text-foreground cursor-pointer p-0.5 rounded"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -412,7 +381,7 @@ export function AppHeader({
                           setIsSettingsPopoverOpen(false);
                           onOpenFieldsModal?.();
                         }}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <Columns3 className="w-3.5 h-3.5 text-muted-foreground" />
@@ -427,7 +396,7 @@ export function AppHeader({
                       <button
                         type="button"
                         onClick={() => setActiveSubView("filtro")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <Filter className="w-3.5 h-3.5 text-muted-foreground" />
@@ -445,7 +414,7 @@ export function AppHeader({
                       <button
                         type="button"
                         onClick={() => setActiveSubView("grupo")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <Layers className="w-3.5 h-3.5 text-muted-foreground" />
@@ -460,7 +429,7 @@ export function AppHeader({
                       <button
                         type="button"
                         onClick={() => setActiveSubView("subtarefas")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
                           <SubtaskBranchIcon />
@@ -472,7 +441,7 @@ export function AppHeader({
                       </button>
 
                       {/* 5. Tarefas Concluídas / Fechadas */}
-                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-[#c9cddf]">
+                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-foreground">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
                           <span>Tarefas concluídas</span>
@@ -487,7 +456,7 @@ export function AppHeader({
                     </div>
 
                     {/* Ações Inferiores */}
-                    <div className="border-t border-[#25283a] pt-1 mt-1 space-y-0.5">
+                    <div className="border-t border-border pt-1 mt-1 space-y-0.5">
                       {/* Copiar link */}
                       <button
                         type="button"
@@ -499,7 +468,7 @@ export function AppHeader({
                           }
                           setIsSettingsPopoverOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                         <span>Copiar link da visualização</span>
@@ -512,7 +481,7 @@ export function AppHeader({
                           exportTasksToCsv(tasks);
                           setIsSettingsPopoverOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-[#1f2130] text-[#c9cddf] transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5 text-muted-foreground" />
                         <span>Exportar visualização</span>
@@ -524,15 +493,15 @@ export function AppHeader({
                 {/* Sub-view: Grupo */}
                 {activeSubView === "grupo" && (
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-[#25283a]">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
                       <button
                         type="button"
                         onClick={() => setActiveSubView("main")}
-                        className="p-1 rounded hover:bg-[#1f2130] text-muted-foreground hover:text-white cursor-pointer"
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-xs font-bold text-white">
+                      <span className="text-xs font-bold text-foreground">
                         Agrupar tarefas por
                       </span>
                     </div>
@@ -548,8 +517,8 @@ export function AppHeader({
                           className={cn(
                             "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
                             groupBy === opt.id
-                              ? "bg-[#25283a] text-white font-semibold"
-                              : "hover:bg-[#1f2130] text-[#c9cddf]"
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -557,7 +526,7 @@ export function AppHeader({
                             <span>{opt.label}</span>
                           </div>
                           {groupBy === opt.id && (
-                            <Check className="w-3.5 h-3.5 text-[#a78bfa]" />
+                            <Check className="w-3.5 h-3.5 text-primary" />
                           )}
                         </button>
                       ))}
@@ -570,13 +539,13 @@ export function AppHeader({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
                           groupBy === "none"
-                            ? "bg-[#25283a] text-white font-semibold"
-                            : "hover:bg-[#1f2130] text-[#c9cddf]"
+                            ? "bg-accent text-accent-foreground font-semibold"
+                            : "hover:bg-accent text-foreground"
                         )}
                       >
                         <span>Sem agrupamento (Nenhum)</span>
                         {groupBy === "none" && (
-                          <Check className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Check className="w-3.5 h-3.5 text-primary" />
                         )}
                       </button>
                     </div>
@@ -586,15 +555,15 @@ export function AppHeader({
                 {/* Sub-view: Subtarefas */}
                 {activeSubView === "subtarefas" && (
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-[#25283a]">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
                       <button
                         type="button"
                         onClick={() => setActiveSubView("main")}
-                        className="p-1 rounded hover:bg-[#1f2130] text-muted-foreground hover:text-white cursor-pointer"
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-xs font-bold text-white">
+                      <span className="text-xs font-bold text-foreground">
                         Mostrar subtarefas
                       </span>
                     </div>
@@ -608,8 +577,8 @@ export function AppHeader({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
                           subtaskMode === "collapsed"
-                            ? "bg-[#25283a] text-white font-semibold"
-                            : "hover:bg-[#1f2130] text-[#c9cddf]"
+                            ? "bg-accent text-accent-foreground font-semibold"
+                            : "hover:bg-accent text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-1.5">
@@ -619,7 +588,7 @@ export function AppHeader({
                           </span>
                         </div>
                         {subtaskMode === "collapsed" && (
-                          <Check className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Check className="w-3.5 h-3.5 text-primary" />
                         )}
                       </button>
                       <button
@@ -631,13 +600,13 @@ export function AppHeader({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
                           subtaskMode === "expanded"
-                            ? "bg-[#25283a] text-white font-semibold"
-                            : "hover:bg-[#1f2130] text-[#c9cddf]"
+                            ? "bg-accent text-accent-foreground font-semibold"
+                            : "hover:bg-accent text-foreground"
                         )}
                       >
                         <span>Expandidas</span>
                         {subtaskMode === "expanded" && (
-                          <Check className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Check className="w-3.5 h-3.5 text-primary" />
                         )}
                       </button>
                       <button
@@ -649,18 +618,18 @@ export function AppHeader({
                         className={cn(
                           "w-full flex items-start justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
                           subtaskMode === "separate"
-                            ? "bg-[#25283a] text-white font-semibold"
-                            : "hover:bg-[#1f2130] text-[#c9cddf]"
+                            ? "bg-accent text-accent-foreground font-semibold"
+                            : "hover:bg-accent text-foreground"
                         )}
                       >
                         <div>
-                          <p className="font-semibold text-white">Separar</p>
+                          <p className="font-semibold text-foreground">Separar</p>
                           <p className="text-[10px] text-muted-foreground">
                             Usar isto para filtrar subtarefas
                           </p>
                         </div>
                         {subtaskMode === "separate" && (
-                          <Check className="w-3.5 h-3.5 text-[#a78bfa] mt-0.5" />
+                          <Check className="w-3.5 h-3.5 text-primary mt-0.5" />
                         )}
                       </button>
                     </div>
@@ -670,15 +639,15 @@ export function AppHeader({
                 {/* Sub-view: Filtro */}
                 {activeSubView === "filtro" && (
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-[#25283a]">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
                       <button
                         type="button"
                         onClick={() => setActiveSubView("main")}
-                        className="p-1 rounded hover:bg-[#1f2130] text-muted-foreground hover:text-white cursor-pointer"
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
                       >
                         <ArrowLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="text-xs font-bold text-white">Filtros</span>
+                      <span className="text-xs font-bold text-foreground">Filtros</span>
                     </div>
                     <div className="p-1">
                       <TaskFilterMenu
@@ -767,16 +736,12 @@ export function AppHeader({
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="relative h-8 w-8 shrink-0 rounded-full" aria-label="Abrir menu da conta">
               <span className="h-7 w-7 rounded-full bg-primary border border-border/80 flex items-center justify-center text-[10px] font-bold text-primary-foreground overflow-hidden shadow-xs">
-                {currentUser?.avatarUrl && currentUser.avatarUrl !== failedAvatar ? (
-                  <img
-                    src={currentUser.avatarUrl}
-                    alt={displayName}
-                    className="h-full w-full object-cover"
-                    onError={() => setFailedAvatar(currentUser.avatarUrl)}
-                  />
-                ) : (
-                  <span>{initials}</span>
-                )}
+                <MemberAvatarContent
+                  key={currentUser?.avatarUrl ?? "no-avatar"}
+                  name={displayName}
+                  src={currentUser?.avatarUrl}
+                  initialsLength={2}
+                />
               </span>
               <span
                 className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-primary ring-2 ring-background"
@@ -802,18 +767,18 @@ export function AppHeader({
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Conta</div>
               <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
-                <a href="/settings/account">
+                <Link href="/settings/account">
                   <UserRound className="size-4 shrink-0" />
                   <span className="min-w-0 whitespace-normal"><span className="block font-medium">Configurações da conta</span><span className="block text-xs text-muted-foreground">Nome, email, foto e senha</span></span>
-                </a>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Sistema</div>
               <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
-                <a href="/settings">
+                <Link href="/settings">
                   <Settings className="size-4 shrink-0" />
                   <span className="min-w-0 whitespace-normal"><span className="block font-medium">Administração</span><span className="block text-xs text-muted-foreground">Configurações, usuários e permissões</span></span>
-                </a>
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="m-2 cursor-pointer" onSelect={onLogout} disabled={!currentUser}>

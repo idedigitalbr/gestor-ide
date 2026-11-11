@@ -240,6 +240,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const forwardedProto = request.headers.get("x-forwarded-proto");
+    const isHttps =
+      forwardedProto?.split(",")[0]?.trim() === "https" ||
+      new URL(request.url).protocol === "https:";
+
     const cookieStore = await cookies();
     cookieStore.set(
       GESTOR_CRM_COOKIE_NAME,
@@ -248,6 +253,7 @@ export async function POST(request: Request) {
         httpOnly: true,
         path: "/",
         sameSite: "lax",
+        secure: isHttps,
         maxAge: 8 * 60 * 60,
       }
     );
@@ -281,7 +287,25 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  const bearer = extractBearerFromRequest(request);
+  const crmBaseUrl = getCrmBaseUrl();
+
+  if (bearer) {
+    try {
+      await fetch(`${crmBaseUrl}/api/auth/token`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${bearer}`,
+          Origin: crmBaseUrl,
+        },
+        cache: "no-store",
+      });
+    } catch {
+      // Best-effort remote token revocation
+    }
+  }
+
   try {
     const cookieStore = await cookies();
     cookieStore.delete(GESTOR_CRM_COOKIE_NAME);

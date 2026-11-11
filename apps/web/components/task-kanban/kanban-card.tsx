@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { Task, TaskPriority, TaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
 import {
@@ -14,6 +14,7 @@ import {
   PriorityIcon,
   ALL_CANONICAL_PRIORITIES,
 } from "../task-priority-icon";
+import { MemberAvatarContent } from "@/components/member-avatar-content";
 import { formatDateDeterministic } from "@/lib/initial-data";
 import {
   Clock,
@@ -25,6 +26,7 @@ import {
   Timer,
   CheckSquare,
   Check,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +39,14 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 interface KanbanCardProps {
@@ -57,6 +67,7 @@ export function KanbanCard({
   onOpenDetails,
   onDragStart,
 }: KanbanCardProps) {
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const normStatus = normalizeTaskStatus(task.status);
   const currentIndex = STATUS_ORDER.indexOf(normStatus);
   const canMoveLeft = currentIndex > 0;
@@ -88,9 +99,7 @@ export function KanbanCard({
 
   function handleDeleteFromMenu(e: React.MouseEvent | React.KeyboardEvent) {
     e.stopPropagation();
-    if (window.confirm(`Tem certeza que deseja excluir a tarefa "${task.title}"?`)) {
-      onDeleteTask(task.id);
-    }
+    setIsDeleteConfirmOpen(true);
   }
 
   function handleCardKeyDown(e: React.KeyboardEvent) {
@@ -116,13 +125,10 @@ export function KanbanCard({
     return "bg-neutral-500";
   }
 
-  // Assignee initials & color (faithful to It's a Plan avatars)
-  const assigneeInitials = task.tag?.includes("agent") ? "AI" : "W";
-  const avatarStyle = task.tag?.includes("agent")
-    ? "bg-teal-500/20 text-teal-400 border-teal-500/30"
-    : "bg-violet-500/20 text-violet-400 border-violet-500/30";
+  const isAgentTask = !task.assignee && Boolean(task.tag?.includes("agent"));
 
   return (
+    <>
     <div
       role="button"
       tabIndex={0}
@@ -323,17 +329,62 @@ export function KanbanCard({
             </button>
           )}
 
-          <div
-            className={cn(
-              "w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-semibold ml-0.5",
-              avatarStyle
-            )}
-            title={task.tag?.includes("agent") ? "Atribuído a Agente AI" : "Atribuído a Will"}
-          >
-            {assigneeInitials}
-          </div>
+          {task.assignee ? (
+            <div
+              className="w-5 h-5 rounded-full border border-border bg-secondary text-secondary-foreground overflow-hidden flex items-center justify-center text-[10px] font-semibold ml-0.5 shrink-0"
+              title={`Atribuído a ${task.assignee}`}
+            >
+              <MemberAvatarContent
+                name={task.assignee}
+                src={task.assigneeAvatar}
+                initialsLength={1}
+              />
+            </div>
+          ) : isAgentTask ? (
+            <div
+              className="w-5 h-5 rounded-full border border-teal-500/30 bg-teal-500/15 text-teal-700 dark:text-teal-400 flex items-center justify-center text-[10px] font-semibold ml-0.5 shrink-0"
+              title="Atribuído a Agente AI"
+            >
+              AI
+            </div>
+          ) : (
+            <div
+              className="w-5 h-5 rounded-full border border-border bg-muted text-muted-foreground flex items-center justify-center ml-0.5 shrink-0"
+              title="Sem responsável"
+            >
+              <User className="w-3 h-3" />
+            </div>
+          )}
         </div>
       </div>
     </div>
+
+    <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+      <DialogContent className="sm:max-w-[400px]" onClick={(e) => e.stopPropagation()}>
+        <DialogHeader>
+          <DialogTitle>Excluir tarefa</DialogTitle>
+          <DialogDescription>
+            Tem certeza que deseja excluir &ldquo;{task.title}&rdquo;? Essa ação não pode ser desfeita.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" size="sm" onClick={() => setIsDeleteConfirmOpen(false)}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              setIsDeleteConfirmOpen(false);
+              onDeleteTask(task.id);
+            }}
+          >
+            Excluir tarefa
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

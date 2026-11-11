@@ -107,7 +107,7 @@ export function ManagementsGridView({
                   style={
                     mgmt.coverPath
                       ? {
-                          backgroundImage: `url(${mgmt.coverPath})`,
+                          backgroundImage: `url("${encodeURI(mgmt.coverPath)}")`,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
                         }

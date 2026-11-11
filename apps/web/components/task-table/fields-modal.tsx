@@ -8,7 +8,6 @@ import {
   ChevronDownSquare,
   Hash,
   Plus,
-  Search,
   Settings,
   Sparkles,
   Tag,
@@ -19,7 +18,6 @@ import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -180,7 +178,7 @@ export function FieldsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-[460px] p-0 overflow-hidden bg-[#161822] border-border text-foreground shadow-2xl rounded-2xl">
+      <DialogContent className="max-w-[460px] p-0 overflow-hidden bg-card border-border text-foreground shadow-2xl rounded-2xl">
         {/* Header (Anexo 3: Campos + Gear + Close) */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <DialogTitle className="text-base font-semibold text-foreground">Campos</DialogTitle>
@@ -213,7 +211,7 @@ export function FieldsModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Pesquisar campos de tarefa"
-              className="h-10 w-full pl-3 pr-8 rounded-lg bg-[#0e1017] border-[#2a2d3d] text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary/60"
+              className="h-10 w-full pl-3 pr-8 rounded-lg bg-background border-border text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-1 focus-visible:ring-primary/60"
             />
             {searchQuery && (
               <button
@@ -228,7 +226,7 @@ export function FieldsModal({
         </div>
 
         {/* Tabs: Criar novo | Adicionar um existente (Anexo 3) */}
-        <div className="flex items-center gap-6 px-5 border-b border-[#242738] text-xs font-medium">
+        <div className="flex items-center gap-6 px-5 border-b border-border text-xs font-medium">
           <button
             type="button"
             onClick={() => {
@@ -287,7 +285,7 @@ export function FieldsModal({
                     value={newFieldName}
                     onChange={(e) => setNewFieldName(e.target.value)}
                     placeholder="Ex: Responsável técnico, Observações..."
-                    className="h-8 text-xs bg-[#0e1017] border-[#2a2d3d]"
+                    className="h-8 text-xs bg-background border-border"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleFinishCreate();
                     }}
@@ -303,7 +301,7 @@ export function FieldsModal({
                       value={dropdownOptionsText}
                       onChange={(e) => setDropdownOptionsText(e.target.value)}
                       placeholder="Opção 1, Opção 2, Opção 3"
-                      className="h-8 text-xs bg-[#0e1017] border-[#2a2d3d]"
+                      className="h-8 text-xs bg-background border-border"
                     />
                   </div>
                 )}
@@ -343,7 +341,7 @@ export function FieldsModal({
                         key={item.type}
                         onMouseEnter={() => setHoveredType(item.type)}
                         onMouseLeave={() => setHoveredType(null)}
-                        className="group flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#202330] transition-colors cursor-pointer"
+                        className="group flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors cursor-pointer"
                         onClick={() => handleStartCreate(item.type, item.label)}
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -393,7 +391,7 @@ export function FieldsModal({
                     }}
                     className={cn(
                       "flex items-center justify-between px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                      col.isVisible ? "opacity-50 cursor-default" : "hover:bg-[#202330]"
+                      col.isVisible ? "opacity-50 cursor-default" : "hover:bg-accent"
                     )}
                   >
                     <span className="text-xs font-medium text-foreground">{col.label}</span>

@@ -11,9 +11,22 @@ type RouteContext = {
 
 async function forwardToIdeCrm(request: Request, context: RouteContext) {
   const { path } = await context.params;
+  if (
+    path.some(
+      (segment) =>
+        segment === "." ||
+        segment === ".." ||
+        segment.includes("/") ||
+        segment.includes("\\")
+    )
+  ) {
+    return NextResponse.json({ error: "Caminho inválido." }, { status: 400 });
+  }
+
   const crmBaseUrl = getCrmBaseUrl();
   const reqUrl = new URL(request.url);
-  const targetUrl = `${crmBaseUrl}/api/${path.join("/")}${reqUrl.search}`;
+  const encodedPath = path.map((segment) => encodeURIComponent(segment)).join("/");
+  const targetUrl = `${crmBaseUrl}/api/${encodedPath}${reqUrl.search}`;
 
   const headers = new Headers();
   headers.set("Origin", crmBaseUrl);
@@ -49,15 +62,27 @@ async function forwardToIdeCrm(request: Request, context: RouteContext) {
       keepalive: true,
     });
 
-    const responseText = await upstreamRes.text();
-    const resContentType =
-      upstreamRes.headers.get("content-type") || "application/json";
+    const responseHeaders = new Headers();
+    const resContentType = upstreamRes.headers.get("content-type");
+    if (resContentType) {
+      responseHeaders.set("Content-Type", resContentType);
+    }
 
-    return new NextResponse(responseText, {
+    if ([204, 205, 304].includes(upstreamRes.status)) {
+      return new NextResponse(null, {
+        status: upstreamRes.status,
+        headers: responseHeaders,
+      });
+    }
+
+    const responseBuffer = await upstreamRes.arrayBuffer();
+    if (!resContentType && responseBuffer.byteLength > 0) {
+      responseHeaders.set("Content-Type", "application/json");
+    }
+
+    return new NextResponse(responseBuffer, {
       status: upstreamRes.status,
-      headers: {
-        "Content-Type": resContentType,
-      },
+      headers: responseHeaders,
     });
   } catch {
     return NextResponse.json(

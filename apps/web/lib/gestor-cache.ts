@@ -67,7 +67,7 @@ function safeSetItem(key: string, value: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(key, value);
-  } catch (e) {
+  } catch {
     // Se o quota exceder, podemos limpar chaves antigas de tarefas
     try {
       const keysToRemove: string[] = [];
@@ -210,7 +210,6 @@ export function updateCachedTask(task: Task): void {
 
   // Se tiver projectId, garante que a chave específica do projeto também contenha a tarefa atualizada
   if (task.projectId) {
-    const key = getTaskKey(task.projectId);
     const existing = getCachedTasks(task.projectId);
     if (existing) {
       const index = existing.findIndex((t) => t.id === task.id);

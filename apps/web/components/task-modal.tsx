@@ -6,42 +6,40 @@ import React, {
   forwardRef,
   useImperativeHandle,
   useRef,
-  useEffect,
 } from "react";
+import Image from "next/image";
 import type {
   Task,
   TaskPriority,
   TaskStatus,
   Subtask,
   TaskComment,
-  CanonicalTaskStatus,
-  CanonicalTaskPriority,
 } from "@/types/task";
-import type { CrmProjectMember } from "@gestor-ide/core";
+import type { CrmProjectMember, CrmUserProfile } from "@gestor-ide/core";
 import {
   normalizeTaskStatus,
   normalizeTaskPriority,
 } from "@/types/task";
 import {
   StatusIcon,
-  StatusBadge,
   StatusDropdownContent,
   getStatusDefinition,
-  STATUS_DEFINITIONS,
-  ALL_CANONICAL_STATUSES,
 } from "@/components/task-status-icon";
 import {
   PriorityIcon,
   ALL_CANONICAL_PRIORITIES,
   getPriorityPillStyle,
 } from "@/components/task-priority-icon";
+import { MemberAvatarContent } from "@/components/member-avatar-content";
 import { NotionDatePicker } from "@/components/ui/notion-date-picker";
 import { formatNotionDate } from "@/lib/notion-date";
 import {
   Dialog,
   DialogContent,
-  DialogTitle,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -75,12 +73,9 @@ import {
   Flame,
   Image as ImageIcon,
   Layers,
-  Maximize2,
-  Minimize2,
   MessageSquareMore,
   MoreHorizontal,
   Paperclip,
-  Pencil,
   Plus,
   SendHorizontal,
   Share2,
@@ -90,7 +85,6 @@ import {
   Trash2,
   Upload,
   User,
-  Users,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -104,6 +98,7 @@ interface TaskModalProps {
   onClose: () => void;
   task: Task | null;
   syncError?: string | null;
+  currentUser?: CrmUserProfile | null;
   members?: CrmProjectMember[];
   onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   initialStatus?: TaskStatus;
@@ -124,6 +119,7 @@ interface TaskModalProps {
 interface TaskModalContentProps {
   task: Task | null;
   syncError?: string | null;
+  currentUser?: CrmUserProfile | null;
   members?: CrmProjectMember[];
   onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   initialStatus?: TaskStatus;
@@ -146,18 +142,6 @@ const DEFAULT_GROUPS_ORDER = [
   "Planejamento e organização",
   "Execução e configuração",
   "Materiais de apoio",
-];
-
-const TEAM_MEMBERS = [
-  { name: "Sem responsável", value: "", avatar: "" },
-  { name: "Will", value: "Will", avatar: "/avatars/will.png" },
-];
-
-const PROJECT_OPTIONS = [
-  "Site – Graci (Power RH)",
-  "IDE Gestor – Core UI",
-  "CRM Comercial & Pipeline",
-  "ERP Financeiro",
 ];
 
 // Cores e Gradientes estilo Notion fiéis ao Print 2
@@ -251,60 +235,11 @@ const NOTION_EMOJIS = [
   "🏆",
 ];
 
-function formatDueDateBr(dateStr?: string): string {
-  if (!dateStr) return "20/11/2026";
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
-  const clean = dateStr.slice(0, 10);
-  const parts = clean.split("-");
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+function generateLocalId(prefix: string): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
   }
-  return dateStr;
-}
-
-function formatPillDate(dateStr?: string): string {
-  if (!dateStr) return "Definir prazo";
-  const daysOfWeek = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-  const months = [
-    "jan", "fev", "mar", "abr", "mai", "jun",
-    "jul", "ago", "set", "out", "nov", "dez",
-  ];
-
-  try {
-    let day: number | undefined;
-    let monthIdx: number | undefined;
-    let year: number | undefined;
-
-    if (dateStr.includes("/")) {
-      const parts = dateStr.split("/");
-      day = parseInt(parts[0], 10);
-      monthIdx = parseInt(parts[1], 10) - 1;
-      year = parseInt(parts[2], 10);
-    } else if (dateStr.includes("-")) {
-      const parts = dateStr.slice(0, 10).split("-");
-      year = parseInt(parts[0], 10);
-      monthIdx = parseInt(parts[1], 10) - 1;
-      day = parseInt(parts[2], 10);
-    }
-
-    if (
-      day !== undefined &&
-      monthIdx !== undefined &&
-      year !== undefined &&
-      !isNaN(day) &&
-      !isNaN(monthIdx) &&
-      !isNaN(year)
-    ) {
-      const d = new Date(year, monthIdx, day);
-      const dow = daysOfWeek[d.getDay()] || "sex";
-      const mStr = months[monthIdx] || "nov";
-      return `${dow} (${day}/${mStr})`;
-    }
-  } catch {
-    // fallback
-  }
-
-  return dateStr;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function ensureGroupedSubtasks(rawSubtasks?: Subtask[]): Subtask[] {
@@ -350,25 +285,6 @@ function SignalBarsIcon({ className }: { className?: string }) {
   );
 }
 
-function NotionStatusTypeIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      className={cn("w-3.5 h-3.5", className)}
-      aria-hidden="true"
-    >
-      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M8 1.5V3.5M8 12.5V14.5M1.5 8H3.5M12.5 8H14.5M3.4 3.4L4.8 4.8M11.2 11.2L12.6 12.6M3.4 12.6L4.8 11.2M11.2 4.8L12.6 3.4"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function PurpleBoardIcon() {
   return (
     <div className="w-[34px] h-[34px] rounded-[8px] bg-gradient-to-b from-[#7c5dfa] to-[#5938e8] shadow-[0_2px_12px_rgba(110,81,249,0.5)] flex items-center justify-center shrink-0 border border-white/15">
@@ -387,9 +303,10 @@ const TaskModalContent = forwardRef<
   {
     task,
     syncError,
+    currentUser = null,
     members = [],
     onChangeAssignee,
-    initialStatus = "A Fazer",
+    initialStatus = "PENDENTE",
     onClose,
     onSave,
     onUpdateTask,
@@ -406,13 +323,13 @@ const TaskModalContent = forwardRef<
   const defaultDescription = task?.description ?? "";
 
   const [title, setTitle] = useState(defaultTitle);
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(!task);
+  const [titleError, setTitleError] = useState<string | null>(null);
 
   const [subtitle, setSubtitle] = useState(defaultSubtitle);
   const [isEditingSubtitle, setIsEditingSubtitle] = useState(false);
 
   const [description, setDescription] = useState(defaultDescription);
-  const [isEditingDesc, setIsEditingDesc] = useState(false);
 
   const [status, setStatus] = useState<TaskStatus>(() =>
     normalizeTaskStatus(task?.status ?? initialStatus ?? "PENDENTE")
@@ -422,15 +339,9 @@ const TaskModalContent = forwardRef<
   );
   const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
   const [startDate, setStartDate] = useState(task?.startDate ?? "");
-  const [projectName, setProjectName] = useState(
-    task?.projectName || ""
-  );
-  const [assignee, setAssignee] = useState(
-    task?.assignee || ""
-  );
-  const [assigneeAvatar, setAssigneeAvatar] = useState(
-    task?.assigneeAvatar || ""
-  );
+  const projectName = task?.projectName || "";
+  const [assignee, setAssignee] = useState(task?.assignee || "");
+  const [assigneeAvatar, setAssigneeAvatar] = useState(task?.assigneeAvatar || "");
   const [assigneeId, setAssigneeId] = useState(task?.assigneeId ?? "");
   const [isSavingAssignee, setIsSavingAssignee] = useState(false);
   const [tags, setTags] = useState<string[]>(
@@ -443,9 +354,7 @@ const TaskModalContent = forwardRef<
   const [newTagInput, setNewTagInput] = useState("");
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
 
-  const [estimate, setEstimate] = useState(
-    task?.estimate ?? ""
-  );
+  const [estimate, setEstimate] = useState(task?.estimate ?? "");
 
   // Capa & Ícone estilo Notion
   // Toda tarefa vem sem ícone e sem capa por padrão
@@ -461,9 +370,12 @@ const TaskModalContent = forwardRef<
   const [coverPosition, setCoverPosition] = useState<"center" | "top" | "bottom">("center");
   const [coverTab, setCoverTab] = useState<"gallery" | "upload" | "link" | "unsplash">("gallery");
   const [linkInput, setLinkInput] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isIconPopoverOpen, setIsIconPopoverOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [sharedFeedback, setSharedFeedback] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const didSaveRef = useRef(false);
 
   // Subtasks & Checklist state
   const hasSubtasks = Boolean(task?.subtasks && task.subtasks.length > 0);
@@ -511,6 +423,10 @@ const TaskModalContent = forwardRef<
 
   const [newCommentText, setNewCommentText] = useState("");
 
+  const actorName = currentUser?.name || currentUser?.email || "Você";
+  const mentionTargetName =
+    members[0]?.user.name || members[0]?.user.email || currentUser?.name || "equipe";
+
   function syncTaskField(patch: Partial<Task>) {
     if (!task) return;
     const updated: Task = {
@@ -523,6 +439,7 @@ const TaskModalContent = forwardRef<
       startDate,
       dueDate,
       projectName,
+      assigneeId: assigneeId || undefined,
       assignee,
       assigneeAvatar,
       tags,
@@ -538,27 +455,46 @@ const TaskModalContent = forwardRef<
     onUpdateTask?.(updated);
   }
 
+  function buildNewTaskPayload() {
+    return {
+      title: title.trim(),
+      subtitle: subtitle.trim(),
+      description: description.trim(),
+      status,
+      priority,
+      startDate: startDate || undefined,
+      dueDate: dueDate || undefined,
+      projectName: projectName || undefined,
+      assigneeId: assigneeId || undefined,
+      assignee: assignee || undefined,
+      assigneeAvatar: assigneeAvatar || undefined,
+      tags,
+      tag: tags[0],
+      estimate,
+      coverUrl,
+      icon,
+      subtasks: activeSubtasks,
+      comments: activeComments,
+    };
+  }
+
+  function handleCreateTaskSubmit() {
+    if (!title.trim()) {
+      setTitleError("Informe um título para criar a tarefa.");
+      setIsEditingTitle(true);
+      return;
+    }
+    if (!task && !didSaveRef.current) {
+      didSaveRef.current = true;
+      onSave(buildNewTaskPayload());
+    }
+    onClose();
+  }
+
   function handleClose() {
-    if (!task && title.trim()) {
-      onSave({
-        title: title.trim(),
-        subtitle: subtitle.trim(),
-        description: description.trim(),
-        status,
-        priority,
-        startDate,
-        dueDate,
-        projectName,
-        assignee,
-        assigneeAvatar,
-        tags,
-        tag: tags[0],
-        estimate,
-        coverUrl,
-        icon,
-        subtasks: activeSubtasks,
-        comments: activeComments,
-      });
+    if (!task && title.trim() && !didSaveRef.current) {
+      didSaveRef.current = true;
+      onSave(buildNewTaskPayload());
     }
     onClose();
   }
@@ -569,17 +505,18 @@ const TaskModalContent = forwardRef<
 
   // Botão Compartilhar: copia o link da tarefa e dá feedback visual
   function handleShare() {
-    const code = task?.code || "IDE-104";
-    const shareUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/?modal=${code}`
-        : `https://ide-gestor.local/?modal=${code}`;
-
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      void navigator.clipboard.writeText(shareUrl);
-      setSharedFeedback(true);
-      setTimeout(() => setSharedFeedback(false), 2000);
+    const shareParam = task?.code || task?.id;
+    if (!shareParam || typeof window === "undefined" || !navigator.clipboard) {
+      return;
     }
+    const shareUrl = `${window.location.origin}/?modal=${encodeURIComponent(shareParam)}`;
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => {
+        setSharedFeedback(true);
+        window.setTimeout(() => setSharedFeedback(false), 2000);
+      })
+      .catch(() => {});
   }
 
   function handleSelectCover(value?: string) {
@@ -590,7 +527,17 @@ const TaskModalContent = forwardRef<
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Selecione um arquivo de imagem válido (JPG, PNG, GIF ou WebP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("A imagem deve ter no máximo 5 MB.");
+      return;
+    }
+    setUploadError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
@@ -620,7 +567,13 @@ const TaskModalContent = forwardRef<
   }
 
   async function handleSelectAssignee(member: CrmProjectMember | null) {
-    if (!task || !onChangeAssignee || isSavingAssignee) return;
+    if (!task) {
+      setAssigneeId(member?.userId ?? "");
+      setAssignee(member?.user.name || member?.user.email || "");
+      setAssigneeAvatar(member?.user.avatarUrl ?? "");
+      return;
+    }
+    if (!onChangeAssignee || isSavingAssignee) return;
     setIsSavingAssignee(true);
     try {
       if (await onChangeAssignee(task.id, member)) {
@@ -697,7 +650,7 @@ const TaskModalContent = forwardRef<
 
   function handleAddChildSubtaskItem(parentId: string, group?: string) {
     const newChild: Subtask = {
-      id: `st-${crypto.randomUUID()}`,
+      id: generateLocalId("st"),
       parentId,
       title: "Novo item de checklist",
       completed: false,
@@ -715,7 +668,7 @@ const TaskModalContent = forwardRef<
     const trimmed = newChecklistTitle.trim();
     if (!trimmed) return;
     const newSt: Subtask = {
-      id: `st-${Date.now()}`,
+      id: generateLocalId("st"),
       title: trimmed,
       completed: false,
       group: newChecklistGroup,
@@ -779,8 +732,9 @@ const TaskModalContent = forwardRef<
     const trimmed = newCommentText.trim();
     if (!trimmed) return;
     const newComment: TaskComment = {
-      id: `c-${Date.now()}`,
-      author: "Você",
+      id: generateLocalId("c"),
+      author: actorName,
+      avatar: currentUser?.avatarUrl ?? undefined,
       timeAgo: "agora mesmo",
       content: trimmed,
       createdAt: new Date().toISOString(),
@@ -796,19 +750,9 @@ const TaskModalContent = forwardRef<
   function getTagChipStyle(tagName: string, index: number) {
     const lower = tagName.toLowerCase();
     if (lower.includes("ui") || lower.includes("ux") || index === 0) {
-      return "bg-[#1d3458] border-[#2c4e82] text-[#93c5fd]";
+      return "bg-blue-500/15 border-blue-500/30 text-blue-700 dark:text-blue-300";
     }
-    return "bg-[#352259] border-[#4e3280] text-[#d8b4fe]";
-  }
-
-  function getPriorityPillStyle(prio: TaskPriority) {
-    if (prio === "Alta" || prio === "Urgente") {
-      return "bg-[#3a1d28] border-[#592838] text-[#fda4af]";
-    }
-    if (prio === "Média") {
-      return "bg-[#382c1a] border-[#574324] text-[#fcd34d]";
-    }
-    return "bg-[#1b2c3b] border-[#294359] text-[#93c5fd]";
+    return "bg-purple-500/15 border-purple-500/30 text-purple-700 dark:text-purple-300";
   }
 
   // Estilo da capa Notion
@@ -816,7 +760,7 @@ const TaskModalContent = forwardRef<
     if (!coverUrl) return {};
     if (coverUrl.startsWith("http") || coverUrl.startsWith("data:image")) {
       return {
-        backgroundImage: `url(${coverUrl})`,
+        backgroundImage: `url("${coverUrl.replace(/"/g, "%22")}")`,
         backgroundSize: "cover",
         backgroundPosition: coverPosition,
       };
@@ -827,40 +771,54 @@ const TaskModalContent = forwardRef<
   }, [coverUrl, coverPosition]);
 
   return (
-    <div className="flex flex-col w-full bg-[#141522] text-[#f3f4f8] select-none">
-      <DialogTitle className="sr-only">{title}</DialogTitle>
-      <DialogDescription className="sr-only">{subtitle}</DialogDescription>
+    <div className="flex flex-col w-full bg-card text-card-foreground select-none">
+      <DialogTitle className="sr-only">{title.trim() || "Nova tarefa"}</DialogTitle>
+      <DialogDescription className="sr-only">
+        {subtitle.trim() || "Detalhes e configurações da tarefa"}
+      </DialogDescription>
       {syncError && <div role="alert" className="m-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">{syncError}</div>}
 
       {/* =================================================================== */}
       {/* 1. TOP HEADER BAR                                                   */}
       {/* =================================================================== */}
-      <div className="h-[38px] px-4 bg-[#181928] border-b border-[#232538] flex items-center justify-between shrink-0">
-        {/* Esquerda: apenas — IDE-104 (sem ícone de link solto) */}
+      <div className="h-[38px] px-4 bg-muted/50 border-b border-border flex items-center justify-between shrink-0">
+        {/* Esquerda: código real da tarefa ou "Nova tarefa" */}
         <div className="flex items-center gap-2">
-          <span className="w-4 h-[1.5px] bg-[#5e627d] rounded-full inline-block" />
-          <span className="text-[12.5px] font-medium text-[#9498b3] tracking-wide">
-            {task?.code || "IDE-104"}
+          <span className="w-4 h-[1.5px] bg-muted-foreground/50 rounded-full inline-block" />
+          <span className="text-[12.5px] font-medium text-muted-foreground tracking-wide">
+            {task?.code || "Nova tarefa"}
           </span>
         </div>
 
-        {/* Direita: Compartilhar + ... + Fechar (sem ícones avulsos de link) */}
-        <div className="flex items-center gap-2 text-[#9498b3]">
+        {/* Direita: Criar tarefa (quando nova) + Compartilhar + ... + Fechar */}
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {!task && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleCreateTaskSubmit}
+              className="h-[26px] px-2.5 text-[12px] font-semibold cursor-pointer"
+            >
+              Criar tarefa
+            </Button>
+          )}
+
           {/* Botão Compartilhar com cópia inteligente de link */}
           <button
             type="button"
+            disabled={!task}
             onClick={handleShare}
-            title="Copiar link e compartilhar"
+            title={task ? "Copiar link e compartilhar" : "Crie a tarefa antes de compartilhar"}
             className={cn(
-              "h-[26px] px-2.5 rounded-[6px] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer outline-none",
+              "h-[26px] px-2.5 rounded-[6px] text-[12px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer outline-none disabled:opacity-40 disabled:cursor-not-allowed",
               sharedFeedback
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "text-[#9498b3] hover:text-white hover:bg-white/[0.06]"
+                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
             )}
           >
             {sharedFeedback ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Link copiado!</span>
               </>
             ) : (
@@ -877,37 +835,29 @@ const TaskModalContent = forwardRef<
               <button
                 type="button"
                 title="Mais opções"
-                className="h-7 w-7 rounded-[6px] flex items-center justify-center hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer outline-none"
+                className="h-7 w-7 rounded-[6px] flex items-center justify-center hover:text-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-48 bg-[#1a1c2d] border-[#2c2f48] text-[#f3f4f8]"
+              className="w-48 bg-popover border-border text-popover-foreground"
             >
               <DropdownMenuItem
+                disabled={!task}
                 onClick={handleShare}
                 className="text-xs gap-2 cursor-pointer"
               >
-                <Copy className="w-3.5 h-3.5 text-[#9498b3]" />
+                <Copy className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>Copiar link da tarefa</span>
               </DropdownMenuItem>
               {task && onDelete && (
                 <>
-                  <DropdownMenuSeparator className="bg-[#282b40]" />
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Tem certeza que deseja excluir "${title}"?`
-                        )
-                      ) {
-                        onDelete(task.id);
-                        onClose();
-                      }
-                    }}
-                    className="text-xs text-rose-400 focus:text-rose-300 gap-2 cursor-pointer"
+                    onClick={() => setIsDeleteConfirmOpen(true)}
+                    className="text-xs text-destructive focus:text-destructive gap-2 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Excluir tarefa</span>
@@ -923,7 +873,7 @@ const TaskModalContent = forwardRef<
             onClick={handleClose}
             aria-label="Fechar modal"
             title="Fechar"
-            className="h-7 w-7 rounded-[6px] flex items-center justify-center hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer outline-none"
+            className="h-7 w-7 rounded-[6px] flex items-center justify-center hover:text-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
           >
             <X className="w-4 h-4" />
           </button>
@@ -931,7 +881,7 @@ const TaskModalContent = forwardRef<
       </div>
 
       {/* =================================================================== */}
-      {/* 2. CAPA NOTION STYLE (ANEXOS 2 E 3)                                 */}
+      {/* 2. CAPA NOTION STYLE                                                */}
       {/* =================================================================== */}
       {coverUrl ? (
         <div
@@ -954,13 +904,13 @@ const TaskModalContent = forwardRef<
                 </button>
               </PopoverTrigger>
 
-              {/* Popover Notion Style de Capa (Idêntico ao Print 2!) */}
+              {/* Popover Notion Style de Capa */}
               <PopoverContent
                 align="end"
-                className="w-[380px] p-0 bg-[#1c1d24] border-[#2c2e3d] text-[#f3f4f8] shadow-2xl rounded-[12px] overflow-hidden"
+                className="w-[380px] p-0 bg-popover border-border text-popover-foreground shadow-2xl rounded-[12px] overflow-hidden"
               >
                 {/* Abas Superiores do Popover */}
-                <div className="flex items-center justify-between border-b border-[#282a38] px-3 pt-2">
+                <div className="flex items-center justify-between border-b border-border px-3 pt-2">
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -968,13 +918,13 @@ const TaskModalContent = forwardRef<
                       className={cn(
                         "px-2.5 pb-2 text-[12.5px] font-medium transition-colors relative cursor-pointer",
                         coverTab === "gallery"
-                          ? "text-white font-semibold"
-                          : "text-[#8e92ab] hover:text-white"
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       Galeria
                       {coverTab === "gallery" && (
-                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a9fe8] rounded-full" />
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
                       )}
                     </button>
                     <button
@@ -983,13 +933,13 @@ const TaskModalContent = forwardRef<
                       className={cn(
                         "px-2.5 pb-2 text-[12.5px] font-medium transition-colors relative cursor-pointer",
                         coverTab === "upload"
-                          ? "text-white font-semibold"
-                          : "text-[#8e92ab] hover:text-white"
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       Carregar
                       {coverTab === "upload" && (
-                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a9fe8] rounded-full" />
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
                       )}
                     </button>
                     <button
@@ -998,13 +948,13 @@ const TaskModalContent = forwardRef<
                       className={cn(
                         "px-2.5 pb-2 text-[12.5px] font-medium transition-colors relative cursor-pointer",
                         coverTab === "link"
-                          ? "text-white font-semibold"
-                          : "text-[#8e92ab] hover:text-white"
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       Link
                       {coverTab === "link" && (
-                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a9fe8] rounded-full" />
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
                       )}
                     </button>
                     <button
@@ -1013,13 +963,13 @@ const TaskModalContent = forwardRef<
                       className={cn(
                         "px-2.5 pb-2 text-[12.5px] font-medium transition-colors relative cursor-pointer",
                         coverTab === "unsplash"
-                          ? "text-white font-semibold"
-                          : "text-[#8e92ab] hover:text-white"
+                          ? "text-foreground font-semibold"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       Unsplash
                       {coverTab === "unsplash" && (
-                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#1a9fe8] rounded-full" />
+                        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary rounded-full" />
                       )}
                     </button>
                   </div>
@@ -1028,16 +978,16 @@ const TaskModalContent = forwardRef<
                   <button
                     type="button"
                     onClick={() => handleSelectCover(undefined)}
-                    className="text-[12px] text-[#989cb3] hover:text-rose-400 pb-2 transition-colors cursor-pointer"
+                    className="text-[12px] text-muted-foreground hover:text-destructive pb-2 transition-colors cursor-pointer"
                   >
                     Remover
                   </button>
                 </div>
 
-                {/* Conteúdo da Aba: Galeria (Cores e Gradientes do Print 2) */}
+                {/* Conteúdo da Aba: Galeria */}
                 {coverTab === "gallery" && (
                   <div className="p-3.5 space-y-2.5">
-                    <span className="text-[11.5px] font-medium text-[#8e92ab] block">
+                    <span className="text-[11.5px] font-medium text-muted-foreground block">
                       Cor e Gradiente
                     </span>
                     <div className="grid grid-cols-4 gap-2">
@@ -1048,8 +998,8 @@ const TaskModalContent = forwardRef<
                           title={item.label}
                           onClick={() => handleSelectCover(item.value)}
                           className={cn(
-                            "h-[38px] rounded-[7px] border border-white/10 hover:scale-[1.04] transition-all cursor-pointer relative shadow-sm",
-                            coverUrl === item.value && "ring-2 ring-white"
+                            "h-[38px] rounded-[7px] border border-border hover:scale-[1.04] transition-all cursor-pointer relative shadow-sm",
+                            coverUrl === item.value && "ring-2 ring-primary"
                           )}
                           style={{
                             background: item.value,
@@ -1076,23 +1026,28 @@ const TaskModalContent = forwardRef<
                     />
                     <div
                       onClick={() => fileInputRef.current?.click()}
-                      className="border border-dashed border-[#3a3d52] hover:border-[#5e43d8] rounded-[10px] p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-[#15161e]"
+                      className="border border-dashed border-border hover:border-primary rounded-[10px] p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-muted/40"
                     >
-                      <Upload className="w-6 h-6 text-[#8e92ab]" />
-                      <span className="text-[12.5px] font-medium text-white">
+                      <Upload className="w-6 h-6 text-muted-foreground" />
+                      <span className="text-[12.5px] font-medium text-foreground">
                         Escolher uma imagem
                       </span>
-                      <span className="text-[11px] text-[#7c809a]">
-                        JPG, PNG ou GIF (máx. 5MB)
+                      <span className="text-[11px] text-muted-foreground">
+                        JPG, PNG, GIF ou WebP (máx. 5 MB)
                       </span>
                     </div>
+                    {uploadError && (
+                      <p role="alert" className="text-xs text-destructive">
+                        {uploadError}
+                      </p>
+                    )}
                   </div>
                 )}
 
                 {/* Conteúdo da Aba: Link */}
                 {coverTab === "link" && (
                   <div className="p-4 space-y-3">
-                    <span className="text-[11.5px] font-medium text-[#8e92ab] block">
+                    <span className="text-[11.5px] font-medium text-muted-foreground block">
                       Link da imagem
                     </span>
                     <form
@@ -1109,12 +1064,12 @@ const TaskModalContent = forwardRef<
                         placeholder="Cole o link da imagem..."
                         value={linkInput}
                         onChange={(e) => setLinkInput(e.target.value)}
-                        className="h-8 text-xs bg-[#131520] border-[#2c2f48] text-white"
+                        className="h-8 text-xs bg-background border-border text-foreground"
                       />
                       <Button
                         type="submit"
                         size="sm"
-                        className="h-8 px-3 bg-[#1a9fe8] hover:bg-[#1688c7] text-white text-xs cursor-pointer"
+                        className="h-8 px-3 text-xs cursor-pointer"
                       >
                         Aplicar
                       </Button>
@@ -1125,7 +1080,7 @@ const TaskModalContent = forwardRef<
                 {/* Conteúdo da Aba: Unsplash */}
                 {coverTab === "unsplash" && (
                   <div className="p-3.5 space-y-2">
-                    <span className="text-[11.5px] font-medium text-[#8e92ab] block">
+                    <span className="text-[11.5px] font-medium text-muted-foreground block">
                       Fotos populares
                     </span>
                     <div className="grid grid-cols-3 gap-2">
@@ -1134,11 +1089,14 @@ const TaskModalContent = forwardRef<
                           key={p.label}
                           type="button"
                           onClick={() => handleSelectCover(p.url)}
-                          className="h-[52px] rounded-[7px] overflow-hidden border border-white/10 hover:scale-[1.03] transition-transform cursor-pointer relative"
+                          className="h-[52px] rounded-[7px] overflow-hidden border border-border hover:scale-[1.03] transition-transform cursor-pointer relative"
                         >
-                          <img
+                          <Image
                             src={p.url}
                             alt={p.label}
+                            width={120}
+                            height={52}
+                            unoptimized
                             className="w-full h-full object-cover"
                           />
                         </button>
@@ -1166,7 +1124,7 @@ const TaskModalContent = forwardRef<
               type="button"
               onClick={() => handleSelectCover(undefined)}
               title="Remover capa"
-              className="h-7 px-2 rounded-[6px] bg-black/60 hover:bg-black/85 backdrop-blur-md text-[12px] font-medium text-[#c4c8de] hover:text-rose-300 border border-white/10 shadow-sm flex items-center gap-1 transition-all cursor-pointer outline-none"
+              className="h-7 px-2 rounded-[6px] bg-black/60 hover:bg-black/85 backdrop-blur-md text-[12px] font-medium text-white/80 hover:text-rose-300 border border-white/10 shadow-sm flex items-center gap-1 transition-all cursor-pointer outline-none"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -1178,13 +1136,12 @@ const TaskModalContent = forwardRef<
       {/* 3. NOTION QUICK ACTIONS & TITLE AREA                                */}
       {/* =================================================================== */}
       <div className="group/notion-top px-6 pt-3 pb-1">
-        {/* Botões Notion de Adicionar ícone / Adicionar capa (Aparecem SOMENTE no hover!) */}
+        {/* Botões Notion de Adicionar ícone / Adicionar capa (Aparecem no hover) */}
         {(!coverUrl || !icon) && (
           <div
             className={cn(
               "flex items-center gap-1.5 transition-all duration-200",
-              // Só aparece se passar o hover aí próximo (igual como é no Notion!)
-              "opacity-0 group-hover/notion-top:opacity-100 pointer-events-none group-hover/notion-top:pointer-events-auto",
+              "opacity-0 group-hover/notion-top:opacity-100 pointer-events-none group-hover/notion-top:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto",
               icon ? "mb-1" : "mb-2 min-h-[28px]"
             )}
           >
@@ -1195,9 +1152,9 @@ const TaskModalContent = forwardRef<
                   handleSelectIcon("😍");
                   setIsIconPopoverOpen(true);
                 }}
-                className="h-[28px] px-2.5 rounded-[6px] hover:bg-white/[0.06] hover:text-white text-[#8e92ab] text-[12.5px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-[28px] px-2.5 rounded-[6px] hover:bg-accent hover:text-foreground text-muted-foreground text-[12.5px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Smile className="w-4 h-4 text-[#8e92ab]" />
+                <Smile className="w-4 h-4 text-muted-foreground" />
                 <span>Adicionar ícone</span>
               </button>
             )}
@@ -1210,9 +1167,9 @@ const TaskModalContent = forwardRef<
                   syncTaskField({ coverUrl: "#1a9fe8" });
                   setIsCoverPopoverOpen(true);
                 }}
-                className="h-[28px] px-2.5 rounded-[6px] hover:bg-white/[0.06] hover:text-white text-[#8e92ab] text-[12.5px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-[28px] px-2.5 rounded-[6px] hover:bg-accent hover:text-foreground text-muted-foreground text-[12.5px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <ImageIcon className="w-4 h-4 text-[#8e92ab]" />
+                <ImageIcon className="w-4 h-4 text-muted-foreground" />
                 <span>Adicionar capa</span>
               </button>
             )}
@@ -1235,7 +1192,7 @@ const TaskModalContent = forwardRef<
                 <button
                   type="button"
                   title="Clique para alterar ou remover ícone"
-                  className="rounded-[10px] p-1 bg-[#141522] border border-[#2a2c42] hover:border-[#5e43d8] transition-colors cursor-pointer shadow-md flex items-center justify-center outline-none"
+                  className="rounded-[10px] p-1 bg-card border border-border hover:border-primary transition-colors cursor-pointer shadow-md flex items-center justify-center outline-none"
                 >
                   {icon === "board" ? (
                     <PurpleBoardIcon />
@@ -1250,16 +1207,16 @@ const TaskModalContent = forwardRef<
               {/* Popover Notion Style de Ícone */}
               <PopoverContent
                 align="start"
-                className="w-[280px] p-3 bg-[#1c1d24] border-[#2c2e3d] text-white shadow-2xl rounded-[12px] space-y-2.5"
+                className="w-[280px] p-3 bg-popover border-border text-popover-foreground shadow-2xl rounded-[12px] space-y-2.5"
               >
-                <div className="flex items-center justify-between border-b border-[#2a2d3e] pb-2">
-                  <span className="text-[12px] font-semibold text-white">
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <span className="text-[12px] font-semibold text-foreground">
                     Escolher Ícone
                   </span>
                   <button
                     type="button"
                     onClick={() => handleSelectIcon(undefined)}
-                    className="text-[11.5px] text-[#989cb3] hover:text-rose-400 transition-colors cursor-pointer"
+                    className="text-[11.5px] text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                   >
                     Remover
                   </button>
@@ -1272,8 +1229,8 @@ const TaskModalContent = forwardRef<
                       type="button"
                       onClick={() => handleSelectIcon(emoji)}
                       className={cn(
-                        "h-8 rounded-[6px] hover:bg-white/[0.08] text-[20px] flex items-center justify-center transition-colors cursor-pointer",
-                        icon === emoji && "bg-white/[0.12] ring-1 ring-[#7c5dfa]"
+                        "h-8 rounded-[6px] hover:bg-accent text-[20px] flex items-center justify-center transition-colors cursor-pointer",
+                        icon === emoji && "bg-accent ring-1 ring-primary"
                       )}
                     >
                       {emoji}
@@ -1281,11 +1238,11 @@ const TaskModalContent = forwardRef<
                   ))}
                 </div>
 
-                <div className="border-t border-[#2a2d3e] pt-2">
+                <div className="border-t border-border pt-2">
                   <button
                     type="button"
                     onClick={() => handleSelectIcon("board")}
-                    className="w-full h-8 px-2.5 rounded-[6px] hover:bg-white/[0.06] flex items-center gap-2 text-[12px] text-[#d8dbe8] transition-colors cursor-pointer"
+                    className="w-full h-8 px-2.5 rounded-[6px] hover:bg-accent flex items-center gap-2 text-[12px] text-foreground transition-colors cursor-pointer"
                   >
                     <PurpleBoardIcon />
                     <span>Ícone Padrão IDE Gestor</span>
@@ -1302,33 +1259,53 @@ const TaskModalContent = forwardRef<
             {isEditingTitle ? (
               <Input
                 autoFocus
+                placeholder="Título da nova tarefa..."
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (titleError && e.target.value.trim()) setTitleError(null);
+                }}
                 onBlur={() => {
-                  setIsEditingTitle(false);
-                  syncTaskField({ title: title.trim() || defaultTitle });
+                  if (task) {
+                    setIsEditingTitle(false);
+                    syncTaskField({ title: title.trim() || defaultTitle });
+                  }
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "Enter" && !task) {
+                    e.preventDefault();
+                    handleCreateTaskSubmit();
+                    return;
+                  }
                   if (e.key === "Enter" || e.key === "Escape") {
                     setIsEditingTitle(false);
                     syncTaskField({ title: title.trim() || defaultTitle });
                   }
                 }}
-                className="h-8 text-[20px] font-bold bg-[#1a1c2d] border-[#5e43d8] text-white px-2"
+                className="h-9 text-[20px] font-bold bg-background border-primary text-foreground px-2.5"
               />
             ) : (
               <h2
                 onClick={() => setIsEditingTitle(true)}
-                className="text-[21px] font-bold text-white leading-[1.2] tracking-[-0.01em] cursor-text hover:text-white/90 transition-colors"
+                className={cn(
+                  "text-[21px] font-bold leading-[1.2] tracking-[-0.01em] cursor-text transition-colors",
+                  title ? "text-foreground hover:text-foreground/85" : "text-muted-foreground/60"
+                )}
                 title="Clique para editar o título"
               >
-                {title}
+                {title || "Clique para definir o título"}
               </h2>
+            )}
+            {titleError && (
+              <p role="alert" className="mt-1 text-xs text-destructive">
+                {titleError}
+              </p>
             )}
 
             {isEditingSubtitle ? (
               <Input
                 autoFocus
+                placeholder="Subtítulo ou resumo curto..."
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
                 onBlur={() => {
@@ -1341,15 +1318,20 @@ const TaskModalContent = forwardRef<
                     syncTaskField({ subtitle });
                   }
                 }}
-                className="h-7 mt-1 text-[12.5px] bg-[#1a1c2d] border-[#5e43d8] text-[#c8cce0] px-2"
+                className="h-7 mt-1 text-[12.5px] bg-background border-primary text-foreground px-2"
               />
             ) : (
               <p
                 onClick={() => setIsEditingSubtitle(true)}
-                className="text-[12.5px] text-[#989cb3] mt-0.5 leading-snug cursor-text hover:text-[#c8cce0] transition-colors"
+                className={cn(
+                  "text-[12.5px] mt-0.5 leading-snug cursor-text transition-colors",
+                  subtitle
+                    ? "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
                 title="Clique para editar o subtítulo"
               >
-                {subtitle}
+                {subtitle || "Adicionar subtítulo..."}
               </p>
             )}
           </div>
@@ -1360,18 +1342,18 @@ const TaskModalContent = forwardRef<
         {/* ================================================================= */}
         <div className="mt-3.5">
           {!isPropertiesExpanded ? (
-            /* Versão minimalista em 1 linha com os mesmos pills funcionais e bonitos de Anexo 2 */
+            /* Versão minimalista em 1 linha */
             <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
               {/* 1. Status Pill */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="h-[26px] rounded-full border border-[#23263a] bg-[#131520] hover:bg-[#181a28] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#d8dbe8] transition-all cursor-pointer outline-none shrink-0"
+                    className="h-[26px] rounded-full border border-border bg-secondary hover:bg-accent px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground transition-all cursor-pointer outline-none shrink-0"
                   >
                     <StatusIcon status={status} className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{getStatusDefinition(status).label}</span>
-                    <ChevronDown className="w-3 h-3 text-[#8e92ab] shrink-0 opacity-70" />
+                    <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0 opacity-70" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -1391,7 +1373,7 @@ const TaskModalContent = forwardRef<
                   <button
                     type="button"
                     className={cn(
-                      "h-[26px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-all hover:brightness-110 cursor-pointer outline-none shrink-0",
+                      "h-[26px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-all hover:brightness-105 cursor-pointer outline-none shrink-0",
                       getPriorityPillStyle(priority)
                     )}
                   >
@@ -1401,12 +1383,12 @@ const TaskModalContent = forwardRef<
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="w-40 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
+                  className="w-40 bg-popover border-border text-popover-foreground p-1"
                 >
-                  <DropdownMenuLabel className="text-[11px] font-semibold text-[#8e92ab] uppercase px-2 py-1">
+                  <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase px-2 py-1">
                     Prioridade
                   </DropdownMenuLabel>
-                  <DropdownMenuSeparator className="bg-[#2c2f48]/70 my-1" />
+                  <DropdownMenuSeparator className="my-1" />
                   {ALL_CANONICAL_PRIORITIES.map((p) => {
                     const isSel = normalizeTaskPriority(priority) === p;
                     return (
@@ -1416,15 +1398,15 @@ const TaskModalContent = forwardRef<
                         className={cn(
                           "text-xs justify-between cursor-pointer rounded-md px-2 py-1.5",
                           isSel
-                            ? "bg-[#252840] text-white font-semibold"
-                            : "hover:bg-[#202336] text-[#d1d5db]"
+                            ? "bg-accent text-accent-foreground font-semibold"
+                            : "hover:bg-accent/60 text-popover-foreground/85"
                         )}
                       >
                         <span className="flex items-center gap-2">
                           <PriorityIcon priority={p} />
                           <span>{p}</span>
                         </span>
-                        {isSel && <Check className="w-3.5 h-3.5 text-white" />}
+                        {isSel && <Check className="w-3.5 h-3.5 text-primary" />}
                       </DropdownMenuItem>
                     );
                   })}
@@ -1450,105 +1432,87 @@ const TaskModalContent = forwardRef<
                   setDueDate(nextDue);
                   syncTaskField({ startDate: nextStart, dueDate: nextDue });
                 }}
-                triggerClassName="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
+                triggerClassName="h-[26px] rounded-full border border-border bg-secondary hover:bg-accent px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground transition-colors cursor-pointer outline-none shrink-0"
                 renderTrigger={({ open }) => (
                   <button
                     type="button"
                     onClick={open}
-                    className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
+                    className="h-[26px] rounded-full border border-border bg-secondary hover:bg-accent px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground transition-colors cursor-pointer outline-none shrink-0"
                   >
-                    <Calendar className="w-3.5 h-3.5 text-[#8e92ab]" />
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>{formatNotionDate(startDate || dueDate, startDate ? dueDate : undefined) || "Definir prazo"}</span>
                   </button>
                 )}
               />
 
-              {/* 4. Projeto / Módulo Pill */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    disabled
-                    title="Alteração de projeto ainda não disponível"
-                    className="h-[26px] rounded-full border border-[#3e2e6e] bg-[#241b42] hover:brightness-110 px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#e9d5ff] transition-all cursor-pointer outline-none shrink-0"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-[#8b5cf6] shrink-0" />
-                    <span className="truncate max-w-[150px]">
-                      {projectName || "Projeto atual"}
-                    </span>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="w-56 bg-[#1a1c2d] border-[#2c2f48] text-white"
-                >
-                  {PROJECT_OPTIONS.map((proj) => (
-                    <DropdownMenuItem
-                      key={proj}
-                      onClick={() => {
-                        setProjectName(proj);
-                        syncTaskField({ projectName: proj });
-                      }}
-                      className="text-xs justify-between cursor-pointer"
-                    >
-                      <span className="truncate">{proj}</span>
-                      {projectName === proj && (
-                        <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {/* 4. Projeto / Módulo Pill (somente leitura) */}
+              <span
+                title={projectName || "Projeto atual"}
+                className="h-[26px] rounded-full border border-primary/30 bg-primary/10 px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-primary shrink-0"
+              >
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate max-w-[150px]">
+                  {projectName || "Projeto atual"}
+                </span>
+              </span>
 
-              {/* 5. Responsável Pill com avatar do Will integrado */}
+              {/* 5. Responsável Pill */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled={!task || !onChangeAssignee || isSavingAssignee}
-                    title={!task ? "Salve a tarefa antes de atribuir" : "Alterar responsável"}
-                    className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] pl-1 pr-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
+                    disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && members.length === 0)}
+                    title={
+                      Boolean(task) && !onChangeAssignee
+                        ? "Membros do projeto indisponíveis"
+                        : members.length === 0
+                          ? "Nenhum membro disponível neste projeto"
+                          : "Alterar responsável"
+                    }
+                    className="h-[26px] rounded-full border border-border bg-secondary hover:bg-accent pl-1.5 pr-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground transition-colors cursor-pointer outline-none shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {assigneeAvatar ? <img
-                      src={assigneeAvatar}
-                      alt={assignee}
-                      className="w-[20px] h-[20px] rounded-full object-cover border border-[#2e324a] shrink-0"
-                    /> : <User className="w-4 h-4" />}
+                    {assignee ? (
+                      <span className="w-[18px] h-[18px] rounded-full overflow-hidden border border-border bg-background inline-flex items-center justify-center text-[9px] shrink-0">
+                        <MemberAvatarContent name={assignee} src={assigneeAvatar} initialsLength={1} />
+                      </span>
+                    ) : (
+                      <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
                     <span>{assignee || "Sem responsável"}</span>
-                    <ChevronDown className="w-3 h-3 text-[#8e92ab]" />
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="w-44 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
+                  className="w-48 bg-popover border-border text-popover-foreground p-1"
                 >
                   {assigneeMenuItems}
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Angle/Chevron padrão no canto direito para expandir */}
+              {/* Angle/Chevron no canto direito para expandir */}
               <button
                 type="button"
                 onClick={() => setIsPropertiesExpanded(true)}
-                className="h-6 w-6 rounded-[6px] hover:bg-white/[0.06] text-[#8e92ab] hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-auto"
+                className="h-6 w-6 rounded-[6px] hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer shrink-0 ml-auto"
                 title="Expandir propriedades"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           ) : (
-            /* Versão expandida com os 7 metadata cards completos (Anexo 2) */
+            /* Versão expandida com os 7 metadata cards completos */
             <div className="space-y-2">
-              {/* Header com o angle padrão no canto direito para recolher */}
+              {/* Header para recolher */}
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-[#8e92ab]" />
-                  <span className="text-[13px] font-bold text-white">Propriedades</span>
+                  <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-[13px] font-bold text-foreground">Propriedades</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsPropertiesExpanded(false)}
-                  className="h-6 w-6 rounded-[6px] hover:bg-white/[0.06] text-[#8e92ab] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  className="h-6 w-6 rounded-[6px] hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                   title="Recolher propriedades"
                 >
                   <ChevronDown className="w-4 h-4" />
@@ -1558,9 +1522,9 @@ const TaskModalContent = forwardRef<
               {/* Row 1: Status | Prioridade | Prazo | Projeto / Módulo */}
               <div className="grid grid-cols-2 sm:grid-cols-[1.05fr_0.95fr_1fr_1.2fr] gap-2">
                 {/* Card 1: Status */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <StatusHexagonIcon className="text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <StatusHexagonIcon className="text-muted-foreground" />
                     <span>Status</span>
                   </div>
                   <div className="mt-1.5">
@@ -1569,7 +1533,7 @@ const TaskModalContent = forwardRef<
                         <button
                           type="button"
                           className={cn(
-                            "w-full h-[26px] rounded-full border px-2.5 flex items-center justify-between text-[11.5px] font-semibold transition-all hover:brightness-110 cursor-pointer outline-none",
+                            "w-full h-[26px] rounded-full border px-2.5 flex items-center justify-between text-[11.5px] font-semibold transition-all hover:brightness-105 cursor-pointer outline-none",
                             getStatusDefinition(status).bgColor,
                             getStatusDefinition(status).borderColor,
                             getStatusDefinition(status).textColor
@@ -1596,9 +1560,9 @@ const TaskModalContent = forwardRef<
                 </div>
 
                 {/* Card 2: Prioridade */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <SignalBarsIcon className="text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <SignalBarsIcon className="text-muted-foreground" />
                     <span>Prioridade</span>
                   </div>
                   <div className="mt-1.5">
@@ -1607,7 +1571,7 @@ const TaskModalContent = forwardRef<
                         <button
                           type="button"
                           className={cn(
-                            "h-[26px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-all hover:brightness-110 cursor-pointer outline-none",
+                            "h-[26px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-all hover:brightness-105 cursor-pointer outline-none",
                             getPriorityPillStyle(priority)
                           )}
                         >
@@ -1617,12 +1581,12 @@ const TaskModalContent = forwardRef<
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="start"
-                        className="w-40 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
+                        className="w-40 bg-popover border-border text-popover-foreground p-1"
                       >
-                        <DropdownMenuLabel className="text-[11px] font-semibold text-[#8e92ab] uppercase px-2 py-1">
+                        <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase px-2 py-1">
                           Prioridade
                         </DropdownMenuLabel>
-                        <DropdownMenuSeparator className="bg-[#2c2f48]/70 my-1" />
+                        <DropdownMenuSeparator className="my-1" />
                         {ALL_CANONICAL_PRIORITIES.map((p) => {
                           const isSel = normalizeTaskPriority(priority) === p;
                           return (
@@ -1632,8 +1596,8 @@ const TaskModalContent = forwardRef<
                               className={cn(
                                 "text-xs justify-between cursor-pointer rounded-md px-2 py-1.5",
                                 isSel
-                                  ? "bg-[#252840] text-white font-semibold"
-                                  : "hover:bg-[#202336] text-[#d1d5db]"
+                                  ? "bg-accent text-accent-foreground font-semibold"
+                                  : "hover:bg-accent/60 text-popover-foreground/85"
                               )}
                             >
                               <span className="flex items-center gap-2">
@@ -1641,7 +1605,7 @@ const TaskModalContent = forwardRef<
                                 <span>{p}</span>
                               </span>
                               {isSel && (
-                                <Check className="w-3.5 h-3.5 text-white" />
+                                <Check className="w-3.5 h-3.5 text-primary" />
                               )}
                             </DropdownMenuItem>
                           );
@@ -1652,9 +1616,9 @@ const TaskModalContent = forwardRef<
                 </div>
 
                 {/* Card 3: Prazo */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <Calendar className="w-3.5 h-3.5 text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Prazo</span>
                   </div>
                   <div className="mt-1.5">
@@ -1676,14 +1640,14 @@ const TaskModalContent = forwardRef<
                         setDueDate(nextDue);
                         syncTaskField({ startDate: nextStart, dueDate: nextDue });
                       }}
-                      triggerClassName="h-[26px] rounded-full border border-[#292c42] bg-[#161826] px-3 inline-flex items-center text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
+                      triggerClassName="h-[26px] rounded-full border border-border bg-secondary px-3 inline-flex items-center text-[11.5px] font-semibold text-secondary-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
                       renderTrigger={({ open }) => (
                         <button
                           type="button"
                           onClick={open}
-                          className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
+                          className="h-[26px] rounded-full border border-border bg-secondary px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
                         >
-                          <Calendar className="w-3.5 h-3.5 text-[#8e92ab]" />
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                           <span>{formatNotionDate(startDate || dueDate, startDate ? dueDate : undefined) || "Definir prazo"}</span>
                         </button>
                       )}
@@ -1692,45 +1656,19 @@ const TaskModalContent = forwardRef<
                 </div>
 
                 {/* Card 4: Projeto / Módulo */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <Layers className="w-3.5 h-3.5 text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Layers className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Projeto / Módulo</span>
                   </div>
                   <div className="mt-1.5">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          disabled
-                          title="Alteração de projeto ainda não disponível"
-                          className="h-[26px] max-w-full rounded-full border border-[#3e2e6e] bg-[#241b42] px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#e9d5ff] hover:brightness-110 transition-all truncate cursor-pointer outline-none"
-                        >
-                          <Layers className="w-3.5 h-3.5 text-[#8b5cf6] shrink-0" />
-                          <span className="truncate">{projectName || "Selecionar projeto"}</span>
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className="w-56 bg-[#1a1c2d] border-[#2c2f48] text-white"
-                      >
-                        {PROJECT_OPTIONS.map((proj) => (
-                          <DropdownMenuItem
-                            key={proj}
-                            onClick={() => {
-                              setProjectName(proj);
-                              syncTaskField({ projectName: proj });
-                            }}
-                            className="text-xs justify-between cursor-pointer"
-                          >
-                            <span className="truncate">{proj}</span>
-                            {projectName === proj && (
-                              <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                            )}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <span
+                      title={projectName || "Projeto atual"}
+                      className="h-[26px] max-w-full rounded-full border border-primary/30 bg-primary/10 px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-primary truncate"
+                    >
+                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{projectName || "Projeto atual"}</span>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1738,9 +1676,9 @@ const TaskModalContent = forwardRef<
               {/* Row 2: Responsável | Etiquetas | Estimativa */}
               <div className="grid grid-cols-1 sm:grid-cols-[1.18fr_1.68fr_1fr] gap-2">
                 {/* Card 5: Responsável */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <User className="w-3.5 h-3.5 text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Responsável</span>
                   </div>
                   <div className="mt-1.5">
@@ -1748,24 +1686,32 @@ const TaskModalContent = forwardRef<
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          disabled={!task || !onChangeAssignee || isSavingAssignee}
-                          title={!task ? "Salve a tarefa antes de atribuir" : "Alterar responsável"}
-                          className="w-full h-[28px] rounded-full border border-[#292c42] bg-[#161826] pl-1.5 pr-3 flex items-center justify-between text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
+                          disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && members.length === 0)}
+                          title={
+                            Boolean(task) && !onChangeAssignee
+                              ? "Membros do projeto indisponíveis"
+                              : members.length === 0
+                                ? "Nenhum membro disponível neste projeto"
+                                : "Alterar responsável"
+                          }
+                          className="w-full h-[28px] rounded-full border border-border bg-secondary pl-1.5 pr-3 flex items-center justify-between text-[11.5px] font-semibold text-secondary-foreground hover:bg-accent transition-colors cursor-pointer outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <div className="flex items-center gap-2 truncate">
-                            {assigneeAvatar ? <img
-                              src={assigneeAvatar}
-                              alt={assignee}
-                              className="w-[20px] h-[20px] rounded-full object-cover border border-[#2e324a] shrink-0"
-                            /> : <User className="w-4 h-4" />}
+                            {assignee ? (
+                              <span className="w-[20px] h-[20px] rounded-full overflow-hidden border border-border bg-background inline-flex items-center justify-center text-[10px] shrink-0">
+                                <MemberAvatarContent name={assignee} src={assigneeAvatar} initialsLength={1} />
+                              </span>
+                            ) : (
+                              <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            )}
                             <span className="truncate">{assignee || "Sem responsável"}</span>
                           </div>
-                          <ChevronDown className="w-3.5 h-3.5 text-[#8e92ab] shrink-0 ml-1" />
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1" />
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="start"
-                        className="w-48 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
+                        className="w-48 bg-popover border-border text-popover-foreground p-1"
                       >
                         {assigneeMenuItems}
                       </DropdownMenuContent>
@@ -1774,9 +1720,9 @@ const TaskModalContent = forwardRef<
                 </div>
 
                 {/* Card 6: Etiquetas */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <Tag className="w-3.5 h-3.5 text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Tag className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Etiquetas</span>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -1808,14 +1754,14 @@ const TaskModalContent = forwardRef<
                         <button
                           type="button"
                           aria-label="Adicionar etiqueta"
-                          className="h-[25px] w-[25px] rounded-[7px] border border-[#2c2f44] bg-[#202232] inline-flex items-center justify-center text-[#989cb3] hover:text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
+                          className="h-[25px] w-[25px] rounded-[7px] border border-border bg-secondary inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       </PopoverTrigger>
                       <PopoverContent
                         align="start"
-                        className="w-48 p-2.5 bg-[#1a1c2d] border-[#2c2f48] text-white"
+                        className="w-48 p-2.5 bg-popover border-border text-popover-foreground"
                       >
                         <form onSubmit={handleAddTag} className="flex gap-1.5">
                           <Input
@@ -1823,12 +1769,12 @@ const TaskModalContent = forwardRef<
                             placeholder="Nova etiqueta..."
                             value={newTagInput}
                             onChange={(e) => setNewTagInput(e.target.value)}
-                            className="h-7 text-xs bg-[#131520] border-[#2c2f48] text-white"
+                            className="h-7 text-xs bg-background border-border text-foreground"
                           />
                           <Button
                             type="submit"
                             size="sm"
-                            className="h-7 px-2 bg-[#7c5dfa] hover:bg-[#6e51f9] text-white text-xs cursor-pointer"
+                            className="h-7 px-2 text-xs cursor-pointer"
                           >
                             OK
                           </Button>
@@ -1839,9 +1785,9 @@ const TaskModalContent = forwardRef<
                 </div>
 
                 {/* Card 7: Estimativa */}
-                <div className="rounded-[11px] border border-[#23263a] bg-[#131520] px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#8e92ab]">
-                    <Clock className="w-3.5 h-3.5 text-[#8e92ab]" />
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Estimativa</span>
                   </div>
                   <div className="mt-1.5">
@@ -1849,17 +1795,17 @@ const TaskModalContent = forwardRef<
                       <PopoverTrigger asChild>
                         <button
                           type="button"
-                          className="h-[26px] rounded-[7px] border border-[#2a2c3e] bg-[#202232] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
+                          className="h-[26px] rounded-[7px] border border-border bg-secondary px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
                         >
-                          <Flame className="w-3 h-3 text-[#989cb3]" />
+                          <Flame className="w-3 h-3 text-muted-foreground" />
                           <span>{estimate || "Definir"}</span>
                         </button>
                       </PopoverTrigger>
                       <PopoverContent
                         align="end"
-                        className="w-44 p-2.5 bg-[#1a1c2d] border-[#2c2f48] text-white space-y-1.5"
+                        className="w-44 p-2.5 bg-popover border-border text-popover-foreground space-y-1.5"
                       >
-                        <span className="text-[11px] text-[#989cb3] font-medium block">
+                        <span className="text-[11px] text-muted-foreground font-medium block">
                           Tempo estimado
                         </span>
                         <Input
@@ -1868,7 +1814,7 @@ const TaskModalContent = forwardRef<
                             setEstimate(e.target.value);
                             syncTaskField({ estimate: e.target.value });
                           }}
-                          className="h-7 text-xs bg-[#131520] border-[#2c2f48] text-white"
+                          className="h-7 text-xs bg-background border-border text-foreground"
                         />
                       </PopoverContent>
                     </Popover>
@@ -1884,22 +1830,22 @@ const TaskModalContent = forwardRef<
       {/* =================================================================== */}
       {/* 5. DESCRIÇÃO SECTION                                                */}
       {/* =================================================================== */}
-      <div className="px-6 pt-3 pb-3.5 border-b border-[#242638]">
-        {/* Cabeçalho da descrição com angle padronizado */}
+      <div className="px-6 pt-3 pb-3.5 border-b border-border">
+        {/* Cabeçalho da descrição */}
         <div className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => setIsDescOpen((prev) => !prev)}
             className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer text-left"
           >
-            <AlignLeft className="w-4 h-4 text-[#8e92ab]" />
-            <h3 className="text-[14px] font-bold text-white">Descrição</h3>
+            <AlignLeft className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-[14px] font-bold text-foreground">Descrição</h3>
           </button>
 
           <button
             type="button"
             onClick={() => setIsDescOpen((prev) => !prev)}
-            className="h-6 w-6 rounded-[6px] hover:bg-white/[0.06] text-[#8e92ab] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="h-6 w-6 rounded-[6px] hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
             title={isDescOpen ? "Recolher descrição" : "Expandir descrição"}
           >
             {isDescOpen ? (
@@ -1910,16 +1856,16 @@ const TaskModalContent = forwardRef<
           </button>
         </div>
 
-        {/* Caixa de descrição (visível apenas quando descolapsada) */}
+        {/* Caixa de descrição */}
         {isDescOpen && (
-          <div className="mt-2.5 rounded-[11px] border border-[#282b3e] bg-[#1c1e2b] px-3.5 py-2.5 text-[13px] leading-[1.55] transition-colors focus-within:border-[#5e43d8]">
+          <div className="mt-2.5 rounded-[11px] border border-border bg-background/70 px-3.5 py-2.5 text-[13px] leading-[1.55] transition-colors focus-within:border-primary">
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               onBlur={() => syncTaskField({ description })}
               placeholder="Adicione uma descrição detalhada da tarefa..."
               rows={4}
-              className="w-full bg-transparent border-0 p-0 text-[13px] leading-[1.55] text-[#d8dbe8] placeholder:text-[#6e728c] focus-visible:ring-0 resize-none shadow-none"
+              className="w-full bg-transparent border-0 p-0 text-[13px] leading-[1.55] text-foreground placeholder:text-muted-foreground focus-visible:ring-0 resize-none shadow-none"
             />
           </div>
         )}
@@ -1928,27 +1874,27 @@ const TaskModalContent = forwardRef<
       {/* =================================================================== */}
       {/* 6. CHECKLIST & SUBTAREFAS SECTION                                   */}
       {/* =================================================================== */}
-      <div className="px-6 pt-3.5 pb-4 border-b border-[#242638]">
-        {/* Section Title + Progress Counter + Arrow > / v */}
+      <div className="px-6 pt-3.5 pb-4 border-b border-border">
+        {/* Section Title + Progress Counter */}
         <div className="flex items-center justify-between mb-2">
           <button
             type="button"
             onClick={() => setIsChecklistOpen((prev) => !prev)}
             className="flex items-center gap-2 hover:opacity-85 transition-opacity cursor-pointer group text-left"
           >
-            <CheckSquare className="w-4 h-4 text-[#8e92ab]" />
-            <h3 className="text-[14px] font-bold text-white">
+            <CheckSquare className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-[14px] font-bold text-foreground">
               Checklist & Subtarefas
             </h3>
           </button>
           <div className="flex items-center gap-2.5">
-            <span className="text-[12px] font-medium text-[#8e92ab]">
+            <span className="text-[12px] font-medium text-muted-foreground">
               {completedSubtasksCount} de {totalSubtasksCount} concluídas ({progressPercent}%)
             </span>
             <button
               type="button"
               onClick={() => setIsChecklistOpen((prev) => !prev)}
-              className="h-6 w-6 rounded-[6px] hover:bg-white/[0.06] text-[#8e92ab] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              className="h-6 w-6 rounded-[6px] hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
               title={isChecklistOpen ? "Recolher checklist" : "Expandir checklist"}
             >
               {isChecklistOpen ? (
@@ -1960,323 +1906,402 @@ const TaskModalContent = forwardRef<
           </div>
         </div>
 
-        {/* Purple Progress Bar */}
-        <div className="h-[9px] w-full rounded-full bg-[#3b3d4e] overflow-hidden mb-3">
+        {/* Progress Bar */}
+        <div className="h-[9px] w-full rounded-full bg-secondary overflow-hidden mb-3">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-[#7c5dfa] to-[#9476ff] transition-all duration-300"
+            className="h-full rounded-full bg-primary transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
 
-        {/* Conteúdo colapsável com isChecklistOpen */}
+        {/* Conteúdo colapsável */}
         {isChecklistOpen && (
           <>
             <div className="space-y-2">
-            {groupedSubtasks.map(([groupName, groupItems]) => {
-            const isCollapsed = Boolean(collapsedGroups[groupName]);
-            const groupDone = groupItems.filter((i) => i.completed).length;
-            const groupTotal = groupItems.length;
+              {groupedSubtasks.map(([groupName, groupItems]) => {
+                const isCollapsed = Boolean(collapsedGroups[groupName]);
+                const groupDone = groupItems.filter((i) => i.completed).length;
+                const groupTotal = groupItems.length;
 
-            return (
-              <div
-                key={groupName}
-                className="rounded-[11px] border border-[#282b3e] bg-[#1a1c28] overflow-hidden"
-              >
-                {/* Group Header */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroupCollapse(groupName)}
-                  className="w-full px-3.5 py-2 flex items-center justify-between hover:bg-white/[0.02] transition-colors cursor-pointer text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    {isCollapsed ? (
-                      <ChevronRight className="w-3.5 h-3.5 text-[#989cb3]" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-[#989cb3]" />
-                    )}
-                    <span className="text-[13px] font-bold text-white">
-                      {groupName}
-                    </span>
-                  </div>
+                return (
+                  <div
+                    key={groupName}
+                    className="rounded-[11px] border border-border bg-background/70 overflow-hidden"
+                  >
+                    {/* Group Header */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroupCollapse(groupName)}
+                      className="w-full px-3.5 py-2 flex items-center justify-between hover:bg-accent/40 transition-colors cursor-pointer text-left"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isCollapsed ? (
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
+                        <span className="text-[13px] font-bold text-foreground">
+                          {groupName}
+                        </span>
+                      </div>
 
-                  <span className="rounded-full bg-[#2a2d3e] px-2.5 py-0.2 text-[11px] font-bold text-[#d8dbe8]">
-                    {groupDone}/{groupTotal}
-                  </span>
-                </button>
+                      <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-bold text-secondary-foreground">
+                        {groupDone}/{groupTotal}
+                      </span>
+                    </button>
 
-                {/* Group Items */}
-                {!isCollapsed && (
-                  <div>
-                    {(() => {
-                      const rootItems = groupItems.filter((i) => !i.parentId);
-                      return rootItems.map((item) => {
-                        const childItems = groupItems.filter((ch) => ch.parentId === item.id);
-                        const hasSubtaskMeta = Boolean(
-                          (item.dueDate && item.dueDate.trim() !== "") ||
-                          (item.assignee && item.assignee.trim() !== "") ||
-                          item.inProgress ||
-                          childItems.length > 0
-                        );
+                    {/* Group Items */}
+                    {!isCollapsed && (
+                      <div>
+                        {(() => {
+                          const rootItems = groupItems.filter((i) => !i.parentId);
+                          return rootItems.map((item) => {
+                            const childItems = groupItems.filter((ch) => ch.parentId === item.id);
+                            const hasSubtaskMeta = Boolean(
+                              (item.dueDate && item.dueDate.trim() !== "") ||
+                                (item.assignee && item.assignee.trim() !== "") ||
+                                item.inProgress ||
+                                childItems.length > 0
+                            );
 
-                        return (
-                          <React.Fragment key={item.id}>
-                            <div className="px-3.5 py-1.5 border-t border-[#242736] flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors group/mitem">
-                              <label className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={item.completed}
-                                  onChange={() => handleToggleSubtask(item.id)}
-                                  className="sr-only"
-                                />
-                                {hasSubtaskMeta ? (
-                                  item.completed ? (
-                                    <CheckCircle2 className="w-4 h-4 text-[#7c5dfa] shrink-0" />
-                                  ) : (
-                                    <CircleDashed className="w-4 h-4 text-[#8e92ab] shrink-0" />
-                                  )
-                                ) : item.completed ? (
-                                  <span className="w-4 h-4 rounded-[4px] bg-[#7c5dfa] border border-[#8e73ff] flex items-center justify-center text-white shrink-0 shadow-[0_1px_6px_rgba(124,93,250,0.4)]">
-                                    <Check className="w-3 h-3 stroke-[3]" />
-                                  </span>
-                                ) : (
-                                  <span className="w-4 h-4 rounded-[4px] border-[1.5px] border-[#8e92ab] hover:border-white bg-transparent shrink-0 transition-colors" />
-                                )}
+                            return (
+                              <React.Fragment key={item.id}>
+                                <div className="px-3.5 py-1.5 border-t border-border/60 flex items-center justify-between gap-3 hover:bg-accent/40 transition-colors group/mitem">
+                                  <label className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.completed}
+                                      onChange={() => handleToggleSubtask(item.id)}
+                                      className="sr-only"
+                                    />
+                                    {hasSubtaskMeta ? (
+                                      item.completed ? (
+                                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                                      ) : (
+                                        <CircleDashed className="w-4 h-4 text-muted-foreground shrink-0" />
+                                      )
+                                    ) : item.completed ? (
+                                      <span className="w-4 h-4 rounded-[4px] bg-primary border border-primary flex items-center justify-center text-primary-foreground shrink-0 shadow-xs">
+                                        <Check className="w-3 h-3 stroke-[3]" />
+                                      </span>
+                                    ) : (
+                                      <span className="w-4 h-4 rounded-[4px] border-[1.5px] border-muted-foreground/70 hover:border-foreground bg-transparent shrink-0 transition-colors" />
+                                    )}
 
-                                <span
-                                  className={cn(
-                                    "text-[12.5px] truncate transition-colors",
-                                    item.completed
-                                      ? "line-through decoration-[#8e92ab]/75 text-[#8e92ab]"
-                                      : "text-[#e4e6f2] font-medium"
-                                  )}
-                                >
-                                  {item.title}
-                                </span>
-                              </label>
+                                    <span
+                                      className={cn(
+                                        "text-[12.5px] truncate transition-colors",
+                                        item.completed
+                                          ? "line-through text-muted-foreground"
+                                          : "text-foreground font-medium"
+                                      )}
+                                    >
+                                      {item.title}
+                                    </span>
+                                  </label>
 
-                              {/* Ações / Metadados à Direita */}
-                              <div className="flex items-center gap-2 shrink-0">
-                                {hasSubtaskMeta ? (
-                                  <div className="rounded-[5px] bg-[#111218] border border-[#232534] px-2 py-0.5 flex flex-col min-w-[148px] -my-0.5">
-                                    <div className="flex items-center justify-between gap-2.5 text-[8.5px] text-[#7c809a] pb-0.5 border-b border-[#222432]">
-                                      <span>Data de vencimento</span>
-                                      <span className="flex items-center gap-1">
-                                        <span>Respons...</span>
+                                  {/* Ações / Metadados à Direita */}
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {hasSubtaskMeta ? (
+                                      <div className="rounded-[5px] bg-muted/60 border border-border px-2 py-0.5 flex flex-col min-w-[148px] -my-0.5">
+                                        <div className="flex items-center justify-between gap-2.5 text-[8.5px] text-muted-foreground pb-0.5 border-b border-border/70">
+                                          <span>Data de vencimento</span>
+                                          <span className="flex items-center gap-1">
+                                            <span>Respons...</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleAddChildSubtaskItem(item.id, groupName)}
+                                              className="w-2.5 h-2.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground inline-flex items-center justify-center text-[7.5px] font-bold cursor-pointer"
+                                              title="Adicionar sub-item"
+                                            >
+                                              +
+                                            </button>
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center justify-between gap-2.5 pt-0.5">
+                                          <NotionDatePicker
+                                            startDate={item.dueDate}
+                                            allowRange
+                                            placeholder="Definir data"
+                                            onChange={({ startDate: pickedDate }) =>
+                                              handleUpdateSubtaskMeta(item.id, {
+                                                dueDate: pickedDate || undefined,
+                                              })
+                                            }
+                                            renderTrigger={({ open }) => (
+                                              <button
+                                                type="button"
+                                                onClick={open}
+                                                className="text-[10px] font-semibold text-primary hover:underline cursor-pointer"
+                                              >
+                                                {formatNotionDate(item.dueDate) || "Definir data"}
+                                              </button>
+                                            )}
+                                          />
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <button
+                                                type="button"
+                                                className="p-0 border-0 bg-transparent cursor-pointer"
+                                                title={item.assignee || "Sem responsável"}
+                                              >
+                                                <span className="w-4 h-4 rounded-full overflow-hidden border border-border bg-secondary inline-flex items-center justify-center text-[8px] font-semibold">
+                                                  {item.assignee ? (
+                                                    <MemberAvatarContent
+                                                      name={item.assignee}
+                                                      src={item.assigneeAvatar}
+                                                      initialsLength={1}
+                                                    />
+                                                  ) : (
+                                                    <User className="w-2.5 h-2.5 text-muted-foreground" />
+                                                  )}
+                                                </span>
+                                              </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                              align="end"
+                                              className="w-44 bg-popover border-border text-popover-foreground p-1"
+                                            >
+                                              {members.length === 0 ? (
+                                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                                  Nenhum membro disponível
+                                                </div>
+                                              ) : (
+                                                members.map((member) => {
+                                                  const memberName =
+                                                    member.user.name || member.user.email;
+                                                  return (
+                                                    <DropdownMenuItem
+                                                      key={member.userId}
+                                                      onClick={() =>
+                                                        handleUpdateSubtaskMeta(item.id, {
+                                                          assignee: memberName,
+                                                          assigneeAvatar:
+                                                            member.user.avatarUrl || undefined,
+                                                        })
+                                                      }
+                                                      className="text-xs gap-1.5 cursor-pointer"
+                                                    >
+                                                      <span className="w-4 h-4 rounded-full overflow-hidden bg-secondary inline-flex items-center justify-center text-[9px] shrink-0">
+                                                        <MemberAvatarContent
+                                                          name={memberName}
+                                                          src={member.user.avatarUrl}
+                                                          initialsLength={1}
+                                                        />
+                                                      </span>
+                                                      <span className="truncate">{memberName}</span>
+                                                    </DropdownMenuItem>
+                                                  );
+                                                })
+                                              )}
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  handleUpdateSubtaskMeta(item.id, {
+                                                    assignee: undefined,
+                                                    assigneeAvatar: undefined,
+                                                  })
+                                                }
+                                                className="text-xs text-muted-foreground cursor-pointer"
+                                              >
+                                                <User className="w-3.5 h-3.5" />
+                                                <span>Limpar</span>
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="opacity-0 group-hover/mitem:opacity-100 focus-within:opacity-100 flex items-center gap-1.5 transition-opacity">
+                                        <NotionDatePicker
+                                          startDate={item.dueDate}
+                                          allowRange
+                                          placeholder="+ Prazo"
+                                          onChange={({ startDate: pickedDate }) =>
+                                            handleUpdateSubtaskMeta(item.id, {
+                                              dueDate: pickedDate || undefined,
+                                            })
+                                          }
+                                          renderTrigger={({ open }) => (
+                                            <button
+                                              type="button"
+                                              onClick={open}
+                                              className="h-[20px] rounded border border-border bg-secondary px-1.5 inline-flex items-center gap-1 text-[9.5px] text-muted-foreground hover:text-foreground hover:border-primary cursor-pointer"
+                                            >
+                                              <Calendar className="w-2.5 h-2.5" />
+                                              <span>+ Prazo</span>
+                                            </button>
+                                          )}
+                                        />
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="h-[20px] rounded border border-border bg-secondary px-1.5 inline-flex items-center gap-1 text-[9.5px] text-muted-foreground hover:text-foreground hover:border-primary cursor-pointer"
+                                            >
+                                              <User className="w-2.5 h-2.5" />
+                                              <span>+ Resp</span>
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent
+                                            align="end"
+                                            className="w-44 bg-popover border-border text-popover-foreground p-1"
+                                          >
+                                            {members.length === 0 ? (
+                                              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                                Nenhum membro disponível
+                                              </div>
+                                            ) : (
+                                              members.map((member) => {
+                                                const memberName =
+                                                  member.user.name || member.user.email;
+                                                return (
+                                                  <DropdownMenuItem
+                                                    key={member.userId}
+                                                    onClick={() =>
+                                                      handleUpdateSubtaskMeta(item.id, {
+                                                        assignee: memberName,
+                                                        assigneeAvatar:
+                                                          member.user.avatarUrl || undefined,
+                                                      })
+                                                    }
+                                                    className="text-xs gap-1.5 cursor-pointer"
+                                                  >
+                                                    <span className="w-4 h-4 rounded-full overflow-hidden bg-secondary inline-flex items-center justify-center text-[9px] shrink-0">
+                                                      <MemberAvatarContent
+                                                        name={memberName}
+                                                        src={member.user.avatarUrl}
+                                                        initialsLength={1}
+                                                      />
+                                                    </span>
+                                                    <span className="truncate">{memberName}</span>
+                                                  </DropdownMenuItem>
+                                                );
+                                              })
+                                            )}
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
                                         <button
                                           type="button"
                                           onClick={() => handleAddChildSubtaskItem(item.id, groupName)}
-                                          className="w-2.5 h-2.5 rounded-full bg-[#7c5dfa] hover:bg-[#6c4ded] text-white inline-flex items-center justify-center text-[7.5px] font-bold cursor-pointer"
-                                          title="Adicionar sub-item"
+                                          className="h-[20px] rounded border border-border bg-secondary px-1.5 inline-flex items-center text-[9.5px] text-muted-foreground hover:text-foreground hover:border-primary cursor-pointer"
                                         >
-                                          +
+                                          + Sub
                                         </button>
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between gap-2.5 pt-0.5">
-                                      <NotionDatePicker
-                                        startDate={item.dueDate}
-                                        allowRange
-                                        placeholder="Definir data"
-                                        onChange={({ startDate }) =>
-                                          handleUpdateSubtaskMeta(item.id, {
-                                            dueDate: startDate || undefined,
-                                          })
-                                        }
-                                        renderTrigger={({ open }) => (
-                                          <button
-                                            type="button"
-                                            onClick={open}
-                                            className="text-[10px] font-semibold text-[#82b4ff] hover:underline cursor-pointer"
-                                          >
-                                            {item.dueDate || "25/11/26"}
-                                          </button>
-                                        )}
-                                      />
-                                      <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                          <button
-                                            type="button"
-                                            className="p-0 border-0 bg-transparent cursor-pointer"
-                                            title={item.assignee || "Will"}
-                                          >
-                                            <img
-                                              src="/avatars/will.png"
-                                              alt={item.assignee || "Will"}
-                                              className="w-4 h-4 rounded-full object-cover border border-[#2e324a]"
-                                            />
-                                          </button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" className="w-36 bg-[#1a1c2d] border-[#2c2f48] text-white p-1">
-                                          <DropdownMenuItem
-                                            onClick={() => handleUpdateSubtaskMeta(item.id, { assignee: "Will", assigneeAvatar: "/avatars/will.png" })}
-                                            className="text-xs gap-1.5 cursor-pointer"
-                                          >
-                                            <img src="/avatars/will.png" alt="Will" className="w-3.5 h-3.5 rounded-full" />
-                                            <span>Will</span>
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            onClick={() => handleUpdateSubtaskMeta(item.id, { assignee: undefined, assigneeAvatar: undefined })}
-                                            className="text-xs text-muted-foreground cursor-pointer"
-                                          >
-                                            <User className="w-3.5 h-3.5" />
-                                            <span>Limpar</span>
-                                          </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                      </DropdownMenu>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="opacity-0 group-hover/mitem:opacity-100 flex items-center gap-1.5 transition-opacity">
-                                    <NotionDatePicker
-                                      startDate={item.dueDate}
-                                      allowRange
-                                      placeholder="+ Prazo"
-                                      onChange={({ startDate }) =>
-                                        handleUpdateSubtaskMeta(item.id, {
-                                          dueDate: startDate || undefined,
-                                        })
-                                      }
-                                      renderTrigger={({ open }) => (
                                         <button
                                           type="button"
-                                          onClick={open}
-                                          className="h-[20px] rounded border border-[#2b2e44] bg-[#161826] px-1.5 inline-flex items-center gap-1 text-[9.5px] text-[#8e92ab] hover:text-white hover:border-[#3b82f6] cursor-pointer"
+                                          onClick={() => handleDeleteSubtaskItem(item.id)}
+                                          className="p-1 text-muted-foreground hover:text-destructive cursor-pointer"
                                         >
-                                          <Calendar className="w-2.5 h-2.5" />
-                                          <span>+ Prazo</span>
+                                          <Trash2 className="w-3 h-3" />
                                         </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Sub-itens Filhos */}
+                                {childItems.map((ch) => (
+                                  <div
+                                    key={ch.id}
+                                    className="pl-9 pr-3.5 py-1.5 border-t border-border/50 bg-muted/30 flex items-center justify-between gap-2.5 hover:bg-accent/40 transition-colors group/mchild relative"
+                                  >
+                                    <div className="absolute left-[20px] top-1/2 -translate-y-1/2 w-[14px] h-[14px] border-b-[2px] border-l-[2px] border-primary/50 rounded-bl-[4px] pointer-events-none" />
+                                    <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={ch.completed}
+                                        onChange={() => handleToggleSubtask(ch.id)}
+                                        className="sr-only"
+                                      />
+                                      {ch.completed ? (
+                                        <span className="w-3.5 h-3.5 rounded-[3px] bg-primary border border-primary flex items-center justify-center text-primary-foreground shadow-xs">
+                                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                        </span>
+                                      ) : (
+                                        <span className="w-3.5 h-3.5 rounded-[3px] border-[1.5px] border-muted-foreground/70 hover:border-foreground bg-transparent shrink-0 transition-colors" />
                                       )}
-                                    />
+                                      <span
+                                        className={cn(
+                                          "text-[12px] truncate",
+                                          ch.completed
+                                            ? "line-through text-muted-foreground"
+                                            : "text-foreground"
+                                        )}
+                                      >
+                                        {ch.title}
+                                      </span>
+                                    </label>
                                     <button
                                       type="button"
-                                      onClick={() => handleUpdateSubtaskMeta(item.id, { assignee: "Will", assigneeAvatar: "/avatars/will.png" })}
-                                      className="h-[20px] rounded border border-[#2b2e44] bg-[#161826] px-1.5 inline-flex items-center gap-1 text-[9.5px] text-[#8e92ab] hover:text-white hover:border-[#3b82f6] cursor-pointer"
-                                    >
-                                      <User className="w-2.5 h-2.5" />
-                                      <span>+ Resp</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleAddChildSubtaskItem(item.id, groupName)}
-                                      className="h-[20px] rounded border border-[#2b2e44] bg-[#161826] px-1.5 inline-flex items-center text-[9.5px] text-[#8e92ab] hover:text-white hover:border-[#3b82f6] cursor-pointer"
-                                    >
-                                      + Sub
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSubtaskItem(item.id)}
-                                      className="p-1 text-[#8e92ab] hover:text-destructive cursor-pointer"
+                                      onClick={() => handleDeleteSubtaskItem(ch.id)}
+                                      className="opacity-0 group-hover/mchild:opacity-100 p-1 text-muted-foreground hover:text-destructive cursor-pointer"
                                     >
                                       <Trash2 className="w-3 h-3" />
                                     </button>
                                   </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Sub-itens Filhos (Aninhados abaixo do item pai) */}
-                            {childItems.map((ch) => (
-                              <div
-                                key={ch.id}
-                                className="pl-9 pr-3.5 py-1.5 border-t border-[#202332] bg-[#141520]/60 flex items-center justify-between gap-2.5 hover:bg-white/[0.02] transition-colors group/mchild relative"
-                              >
-                                <div className="absolute left-[20px] top-1/2 -translate-y-1/2 w-[14px] h-[14px] border-b-[2px] border-l-[2px] border-[#7c5dfa]/60 rounded-bl-[4px] pointer-events-none" />
-                                <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={ch.completed}
-                                    onChange={() => handleToggleSubtask(ch.id)}
-                                    className="sr-only"
-                                  />
-                                  {ch.completed ? (
-                                    <span className="w-3.5 h-3.5 rounded-[3px] bg-[#7c5dfa] border border-[#8e73ff] flex items-center justify-center text-white shadow-xs">
-                                      <Check className="w-2.5 h-2.5 stroke-[3]" />
-                                    </span>
-                                  ) : (
-                                    <span className="w-3.5 h-3.5 rounded-[3px] border-[1.5px] border-[#8e92ab] hover:border-white bg-transparent shrink-0 transition-colors" />
-                                  )}
-                                  <span
-                                    className={cn(
-                                      "text-[12px] truncate",
-                                      ch.completed
-                                        ? "line-through text-[#8e92ab]"
-                                        : "text-[#d1d5db]"
-                                    )}
-                                  >
-                                    {ch.title}
-                                  </span>
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSubtaskItem(ch.id)}
-                                  className="opacity-0 group-hover/mchild:opacity-100 p-1 text-[#8e92ab] hover:text-destructive cursor-pointer"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </React.Fragment>
-                        );
-                      });
-                    })()}
+                                ))}
+                              </React.Fragment>
+                            );
+                          });
+                        })()}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
 
-        {/* Quick Add Checklist Form */}
-        {showAddChecklistItem && (
-          <form
-            onSubmit={handleAddChecklistSubtask}
-            className="mt-2.5 rounded-[10px] border border-[#5e43d8] bg-[#1a1c28] p-2.5 flex flex-wrap items-center gap-2"
-          >
-            <Input
-              autoFocus
-              placeholder="Digite o título do item..."
-              value={newChecklistTitle}
-              onChange={(e) => setNewChecklistTitle(e.target.value)}
-              className="flex-1 min-w-[200px] h-8 text-xs bg-[#131520] border-[#2c2f48] text-white"
-            />
-            <select
-              value={newChecklistGroup}
-              onChange={(e) => setNewChecklistGroup(e.target.value)}
-              className="h-8 rounded-md border border-[#2c2f48] bg-[#131520] px-2 text-xs text-[#d8dbe8] outline-none"
-            >
-              {DEFAULT_GROUPS_ORDER.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
-              ))}
-            </select>
-            <Button
-              type="submit"
-              size="sm"
-              className="h-8 px-3 bg-[#7c5dfa] hover:bg-[#6e51f9] text-white text-xs cursor-pointer"
-            >
-              Adicionar
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowAddChecklistItem(false)}
-              className="h-8 px-2 text-xs text-[#989cb3] hover:text-white cursor-pointer"
-            >
-              Cancelar
-            </Button>
-          </form>
-        )}
+            {/* Quick Add Checklist Form */}
+            {showAddChecklistItem && (
+              <form
+                onSubmit={handleAddChecklistSubtask}
+                className="mt-2.5 rounded-[10px] border border-primary/60 bg-background/70 p-2.5 flex flex-wrap items-center gap-2"
+              >
+                <Input
+                  autoFocus
+                  placeholder="Digite o título do item..."
+                  value={newChecklistTitle}
+                  onChange={(e) => setNewChecklistTitle(e.target.value)}
+                  className="flex-1 min-w-[200px] h-8 text-xs bg-background border-border text-foreground"
+                />
+                <select
+                  value={newChecklistGroup}
+                  onChange={(e) => setNewChecklistGroup(e.target.value)}
+                  className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground outline-none"
+                >
+                  {DEFAULT_GROUPS_ORDER.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-8 px-3 text-xs cursor-pointer"
+                >
+                  Adicionar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddChecklistItem(false)}
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+              </form>
+            )}
 
             {/* Footer Buttons: + Adicionar item | ^ Recolher tudo */}
             <div className="mt-2.5 flex items-center justify-between">
               <button
                 type="button"
                 disabled={!task}
-                title={!task ? "Feche e salve a tarefa antes de adicionar itens" : undefined}
+                title={!task ? "Crie a tarefa antes de adicionar itens" : undefined}
                 onClick={() => setShowAddChecklistItem((prev) => !prev)}
-                className="h-[30px] px-3 rounded-[9px] border border-[#5e43d8] bg-[#1e1938] hover:bg-[#28214a] text-[#c4b5fd] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-[30px] px-3 rounded-[9px] border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Adicionar item</span>
@@ -2285,7 +2310,7 @@ const TaskModalContent = forwardRef<
               <button
                 type="button"
                 onClick={handleCollapseOrExpandAll}
-                className="h-[30px] px-3 rounded-[9px] border border-[#2a2d3e] bg-[#1a1c28] hover:bg-[#222536] text-[#c4c8de] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="h-[30px] px-3 rounded-[9px] border border-border bg-secondary hover:bg-accent text-secondary-foreground text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 {allGroupsCollapsed ? (
                   <>
@@ -2307,9 +2332,9 @@ const TaskModalContent = forwardRef<
       {/* =================================================================== */}
       {/* 7. ATIVIDADES | COMENTÁRIOS | ANEXOS SECTION                         */}
       {/* =================================================================== */}
-      <div className="px-6 pt-3 pb-4 bg-[#11121d]">
-        {/* Tabs Header + Arrow > / v */}
-        <div className="flex items-center justify-between border-b border-[#232538] pb-1">
+      <div className="px-6 pt-3 pb-4 bg-muted/30">
+        {/* Tabs Header */}
+        <div className="flex items-center justify-between border-b border-border pb-1">
           <div className="flex items-center gap-6">
             {/* Aba 1: Atividades */}
             <button
@@ -2321,14 +2346,14 @@ const TaskModalContent = forwardRef<
               className={cn(
                 "pb-2 flex items-center gap-2 text-[12.5px] font-semibold transition-colors relative cursor-pointer",
                 bottomTab === "activities"
-                  ? "text-white"
-                  : "text-[#8e92ab] hover:text-white"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Clock className="w-3.5 h-3.5 text-[#9476ff]" />
+              <Clock className="w-3.5 h-3.5 text-primary" />
               <span>Atividades</span>
               {bottomTab === "activities" && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[#7c5dfa]" />
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-primary" />
               )}
             </button>
 
@@ -2342,17 +2367,17 @@ const TaskModalContent = forwardRef<
               className={cn(
                 "pb-2 flex items-center gap-2 text-[12.5px] font-semibold transition-colors relative cursor-pointer",
                 bottomTab === "comments"
-                  ? "text-white"
-                  : "text-[#8e92ab] hover:text-white"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <MessageSquareMore className="w-3.5 h-3.5 text-[#9476ff]" />
+              <MessageSquareMore className="w-3.5 h-3.5 text-primary" />
               <span>Comentários</span>
-              <span className="rounded-full bg-[#2a244d] text-[#c4b5fd] px-1.5 py-0.2 text-[10.5px] font-bold">
+              <span className="rounded-full bg-primary/15 text-primary px-1.5 py-0.5 text-[10.5px] font-bold">
                 {activeComments.length}
               </span>
               {bottomTab === "comments" && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[#7c5dfa]" />
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-primary" />
               )}
             </button>
 
@@ -2366,26 +2391,25 @@ const TaskModalContent = forwardRef<
               className={cn(
                 "pb-2 flex items-center gap-2 text-[12.5px] font-semibold transition-colors relative cursor-pointer",
                 bottomTab === "attachments"
-                  ? "text-white"
-                  : "text-[#8e92ab] hover:text-white"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Paperclip className="w-3.5 h-3.5 text-[#9476ff]" />
+              <Paperclip className="w-3.5 h-3.5 text-primary" />
               <span>Anexos</span>
-              <span className="rounded-full bg-[#2a244d] text-[#c4b5fd] px-1.5 py-0.2 text-[10.5px] font-bold">
+              <span className="rounded-full bg-primary/15 text-primary px-1.5 py-0.5 text-[10.5px] font-bold">
                 0
               </span>
               {bottomTab === "attachments" && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-[#7c5dfa]" />
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-primary" />
               )}
             </button>
           </div>
 
-          {/* Botão arrow > / v no canto superior direito */}
           <button
             type="button"
             onClick={() => setIsBottomOpen((prev) => !prev)}
-            className="h-6 w-6 rounded-[6px] hover:bg-white/[0.06] text-[#8e92ab] hover:text-white flex items-center justify-center transition-colors cursor-pointer mb-1"
+            className="h-6 w-6 rounded-[6px] hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer mb-1"
             title={isBottomOpen ? "Recolher seção" : "Expandir seção"}
           >
             {isBottomOpen ? (
@@ -2396,7 +2420,7 @@ const TaskModalContent = forwardRef<
           </button>
         </div>
 
-        {/* Conteúdo da seção inferior (Renderizado quando isBottomOpen === true) */}
+        {/* Conteúdo da seção inferior */}
         {isBottomOpen && (
           <div className="mt-3">
             {bottomTab === "activities" && (
@@ -2412,45 +2436,40 @@ const TaskModalContent = forwardRef<
                   onSubmit={handleSubmitComment}
                   className="flex items-center gap-2.5"
                 >
-                  <img
-                    src="/avatars/will.png"
-                    alt="Will"
-                    className="w-7 h-7 rounded-full object-cover border border-[#2a2d3e] shrink-0"
-                  />
+                  <span className="w-7 h-7 rounded-full overflow-hidden border border-border bg-secondary flex items-center justify-center text-[11px] font-semibold text-foreground shrink-0">
+                    <MemberAvatarContent
+                      name={actorName}
+                      src={currentUser?.avatarUrl}
+                    />
+                  </span>
 
-                  <div className="flex-1 flex items-center rounded-[10px] border border-[#282b3e] bg-[#181a28] pl-3 pr-1.5 py-1 focus-within:border-[#5e43d8] transition-colors">
+                  <div className="flex-1 flex items-center rounded-[10px] border border-border bg-background pl-3 pr-1.5 py-1 focus-within:border-primary transition-colors">
                     <input
                       type="text"
                       disabled={!task}
-                      placeholder={task ? "Adicionar um comentário..." : "Salve a tarefa antes de comentar"}
+                      placeholder={task ? "Adicionar um comentário..." : "Crie a tarefa antes de comentar"}
                       value={newCommentText}
                       onChange={(e) => setNewCommentText(e.target.value)}
-                      className="flex-1 bg-transparent text-[12.5px] text-white placeholder:text-[#7c809a] outline-none"
+                      className="flex-1 bg-transparent text-[12.5px] text-foreground placeholder:text-muted-foreground outline-none"
                     />
 
                     <div className="flex items-center gap-0.5">
                       <button
                         type="button"
+                        disabled={!task}
                         title="Mencionar (@)"
                         onClick={() =>
-                          setNewCommentText((prev) => `${prev}@Will `)
+                          setNewCommentText((prev) => `${prev}@${mentionTargetName} `)
                         }
-                        className="p-1 text-[#8e92ab] hover:text-white transition-colors cursor-pointer"
+                        className="p-1 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:opacity-40"
                       >
                         <AtSign className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        type="button"
-                        title="Anexar arquivo"
-                        className="p-1 text-[#8e92ab] hover:text-white transition-colors cursor-pointer"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                      </button>
-                      <button
                         type="submit"
-                        disabled={!task}
+                        disabled={!task || !newCommentText.trim()}
                         aria-label="Enviar comentário"
-                        className="w-6 h-6 rounded-[7px] bg-[#6e51f9] hover:bg-[#7c5dfa] text-white flex items-center justify-center shadow-sm ml-1 transition-colors cursor-pointer"
+                        className="w-6 h-6 rounded-[7px] bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center shadow-sm ml-1 transition-colors cursor-pointer disabled:opacity-40"
                       >
                         <SendHorizontal className="w-3 h-3" />
                       </button>
@@ -2463,35 +2482,34 @@ const TaskModalContent = forwardRef<
                   {activeComments.map((comment) => (
                     <div
                       key={comment.id}
-                      className="flex items-start justify-between gap-2.5"
+                      className="flex items-start gap-2.5"
                     >
-                      <img
-                        src="/avatars/will.png"
-                        alt={comment.author}
-                        className="w-7 h-7 rounded-full object-cover border border-[#2a2d3e] shrink-0 mt-0.5"
-                      />
+                      <span className="w-7 h-7 rounded-full overflow-hidden border border-border bg-secondary flex items-center justify-center text-[11px] font-semibold text-foreground shrink-0 mt-0.5">
+                        <MemberAvatarContent
+                          name={comment.author}
+                          src={comment.avatar}
+                        />
+                      </span>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[12.5px] font-bold text-white">
+                          <span className="text-[12.5px] font-bold text-foreground">
                             {comment.author}
                           </span>
-                          <span className="text-[11px] text-[#7c809a]">
-                            {comment.timeAgo || "há 2 horas"}
+                          <span className="text-[11px] text-muted-foreground">
+                            {comment.timeAgo ||
+                              (comment.createdAt
+                                ? new Date(comment.createdAt).toLocaleString("pt-BR", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })
+                                : "agora")}
                           </span>
                         </div>
-                        <p className="text-[12.5px] text-[#c8cce0] mt-0.5 leading-snug">
+                        <p className="text-[12.5px] text-muted-foreground mt-0.5 leading-snug">
                           {comment.content}
                         </p>
                       </div>
-
-                      <button
-                        type="button"
-                        aria-label="Opções do comentário"
-                        className="p-1 text-[#7c809a] hover:text-white transition-colors cursor-pointer"
-                      >
-                        <MoreHorizontal className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -2499,19 +2517,53 @@ const TaskModalContent = forwardRef<
             )}
 
             {bottomTab === "attachments" && (
-              <div className="border border-dashed border-[#282b3e] rounded-[10px] p-6 text-center text-[#8e92ab] bg-[#141524]">
-                <Paperclip className="w-6 h-6 mx-auto mb-2 text-[#686c85]" />
-                <p className="text-xs font-medium text-[#d8dbe8]">
+              <div className="border border-dashed border-border rounded-[10px] p-6 text-center text-muted-foreground bg-card/50">
+                <Paperclip className="w-6 h-6 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-xs font-medium text-foreground">
                   Nenhum anexo adicionado ainda
                 </p>
-                <p className="text-[11px] text-[#686c85] mt-1">
-                  Arraste arquivos ou clique para fazer upload
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  O envio de anexos em tarefas ainda não está disponível nesta versão.
                 </p>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Confirmação de Exclusão */}
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir tarefa</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir &quot;{title || "esta tarefa"}&quot;? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteConfirmOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (task && onDelete) {
+                  onDelete(task.id);
+                  setIsDeleteConfirmOpen(false);
+                  onClose();
+                }
+              }}
+            >
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
@@ -2537,7 +2589,7 @@ export function TaskModal(props: TaskModalProps) {
         id="task-modal-content"
         hideCloseButton
         onOpenAutoFocus={(e) => e.preventDefault()}
-        className="w-[800px] max-w-[800px] max-h-[96vh] overflow-y-auto p-0 gap-0 bg-[#141522] border border-[#2a2c42] rounded-[16px] shadow-[0_24px_80px_rgba(0,0,0,0.85)] outline-none"
+        className="w-[800px] max-w-[800px] max-h-[96vh] overflow-y-auto p-0 gap-0 bg-card border border-border rounded-[16px] shadow-2xl outline-none"
         style={{ width: "800px", maxWidth: "min(800px, 96vw)" }}
       >
         {props.isOpen && (
@@ -2547,6 +2599,7 @@ export function TaskModal(props: TaskModalProps) {
             onClose={props.onClose}
             task={props.task}
             syncError={props.syncError}
+            currentUser={props.currentUser}
             members={props.members}
             onChangeAssignee={props.onChangeAssignee}
             initialStatus={props.initialStatus}

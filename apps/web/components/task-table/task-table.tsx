@@ -38,8 +38,6 @@ import {
   ChevronRight,
   CircleDashed,
   GripVertical,
-  Layers,
-  ListTree,
   MoreHorizontal,
   Package,
   Pencil,
@@ -57,12 +55,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { NotionDatePicker } from "@/components/ui/notion-date-picker";
-import { formatNotionDate } from "@/lib/notion-date";
 import { ColumnHeaderCell, type SortDirection } from "./column-header-cell";
 import {
   FieldsModal,
@@ -92,8 +96,6 @@ interface TaskTableProps {
   ) => void;
   groupBy?: TaskGroupBy;
   groupOrder?: GroupOrder;
-  onGroupByChange?: (groupBy: TaskGroupBy) => void;
-  onGroupOrderChange?: (order: GroupOrder) => void;
   isFieldsModalOpen?: boolean;
   onOpenFieldsModal?: () => void;
   onCloseFieldsModal?: () => void;
@@ -130,12 +132,6 @@ const DEFAULT_COLUMNS: TableColumnConfig[] = [
   { id: "assignee", label: "Responsável" },
 ];
 
-function isOverdueDate(dueDate?: string): boolean {
-  if (!dueDate) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return dueDate.slice(0, 10) < today;
-}
-
 function getDueDateBucket(dueDate?: string): string {
   if (!dueDate) return "Sem data";
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -165,8 +161,6 @@ export function TaskTable({
   onReorderTasks,
   groupBy = "none",
   groupOrder = "asc",
-  onGroupByChange,
-  onGroupOrderChange,
   isFieldsModalOpen: externalFieldsModalOpen,
   onOpenFieldsModal,
   onCloseFieldsModal,
@@ -301,8 +295,13 @@ export function TaskTable({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
 
-  // Multi-seleção de linhas
+  // Multi-seleção de linhas e confirmação de exclusão
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteState, setConfirmDeleteState] = useState<
+    | { mode: "single"; task: Task }
+    | { mode: "bulk"; count: number }
+    | null
+  >(null);
 
   // Drag & drop inline
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -387,11 +386,7 @@ export function TaskTable({
     setDragOverGroup(null);
   }
 
-  function handleDragOverRow(
-    e: React.DragEvent,
-    targetTaskId: string,
-    targetStatus: TaskStatus
-  ) {
+  function handleDragOverRow(e: React.DragEvent, targetTaskId: string) {
     e.preventDefault();
     if (draggedTaskId && draggedTaskId !== targetTaskId) {
       setDragOverTaskId(targetTaskId);
@@ -415,8 +410,11 @@ export function TaskTable({
       onReorderTasks(sourceId, targetTask.id, targetStatus);
     } else {
       const sourceTask = tasks.find((t) => t.id === sourceId);
-      if (sourceTask && sourceTask.status !== targetStatus) {
-        onUpdateTask({ ...sourceTask, status: targetStatus });
+      if (
+        sourceTask &&
+        normalizeTaskStatus(sourceTask.status) !== normalizeTaskStatus(targetStatus)
+      ) {
+        onUpdateTask({ ...sourceTask, status: normalizeTaskStatus(targetStatus) });
       }
     }
   }
@@ -434,8 +432,11 @@ export function TaskTable({
       onReorderTasks(sourceId, null, targetStatus);
     } else {
       const sourceTask = tasks.find((t) => t.id === sourceId);
-      if (sourceTask && sourceTask.status !== targetStatus) {
-        onUpdateTask({ ...sourceTask, status: targetStatus });
+      if (
+        sourceTask &&
+        normalizeTaskStatus(sourceTask.status) !== normalizeTaskStatus(targetStatus)
+      ) {
+        onUpdateTask({ ...sourceTask, status: normalizeTaskStatus(targetStatus) });
       }
     }
   }
@@ -497,16 +498,21 @@ export function TaskTable({
   }
 
   function handleBulkDelete() {
-    if (
-      window.confirm(
-        `Tem certeza que deseja excluir as ${selectedIds.size} tarefas selecionadas?`
-      )
-    ) {
+    if (selectedIds.size === 0) return;
+    setConfirmDeleteState({ mode: "bulk", count: selectedIds.size });
+  }
+
+  function handleConfirmDeleteAction() {
+    if (!confirmDeleteState) return;
+    if (confirmDeleteState.mode === "bulk") {
       for (const id of selectedIds) {
         onDeleteTask(id);
       }
       setSelectedIds(new Set());
+    } else {
+      onDeleteTask(confirmDeleteState.task.id);
     }
+    setConfirmDeleteState(null);
   }
 
   // Subtarefas e Checklists Inline
@@ -613,11 +619,7 @@ export function TaskTable({
   }
 
   function handleDeleteWithConfirm(task: Task) {
-    if (
-      window.confirm(`Tem certeza que deseja excluir a tarefa "${task.title}"?`)
-    ) {
-      onDeleteTask(task.id);
-    }
+    setConfirmDeleteState({ mode: "single", task });
   }
 
   // ---------------------------------------------------------------------------
@@ -877,7 +879,7 @@ export function TaskTable({
           draggable={!isEditing}
           onDragStart={(e) => handleDragStart(e, task.id)}
           onDragEnd={handleDragEnd}
-          onDragOver={(e) => handleDragOverRow(e, task.id, task.status)}
+          onDragOver={(e) => handleDragOverRow(e, task.id)}
           onDrop={(e) => handleDropOnRow(e, task, task.status)}
           className={cn(
             "flex items-center justify-between h-[50px] min-h-[50px] pr-3 transition-colors group/row relative border-b border-border/50",
@@ -929,8 +931,8 @@ export function TaskTable({
               className={cn(
                 "w-4 h-4 rounded-xs border flex items-center justify-center transition-all cursor-pointer shrink-0 mr-0.5",
                 isSelected
-                  ? "opacity-100 bg-[#3b82f6] border-[#3b82f6] text-white"
-                  : "opacity-0 group-hover/row:opacity-100 border-[#3a3e55] hover:border-foreground bg-[#10121d]"
+                  ? "opacity-100 bg-primary border-primary text-primary-foreground"
+                  : "opacity-0 group-hover/row:opacity-100 border-border hover:border-foreground bg-background"
               )}
               aria-label={`Selecionar tarefa ${task.title}`}
             >
@@ -944,7 +946,7 @@ export function TaskTable({
                 onClick={() => toggleExpandTask(task.id)}
                 aria-expanded={isTaskExpanded}
                 aria-label={`${isTaskExpanded ? "Recolher" : "Expandir"} ${task.title}`}
-                className="p-1 rounded hover:bg-[#202336] text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
                 title={
                   isTaskExpanded ? "Recolher descendentes" : "Expandir descendentes"
                 }
@@ -982,7 +984,7 @@ export function TaskTable({
                     if (e.key === "Enter") handleSaveInlineTitle(task);
                     else if (e.key === "Escape") setEditingTaskId(null);
                   }}
-                  className="h-7 text-xs bg-[#0e101a] border-[#3b82f6] text-foreground flex-1 max-w-md"
+                  className="h-7 text-xs bg-background border-primary text-foreground flex-1 max-w-md"
                 />
                 <Button
                   type="button"
@@ -997,7 +999,7 @@ export function TaskTable({
                   type="button"
                   size="sm"
                   onClick={() => handleSaveInlineTitle(task)}
-                  className="h-6 px-2.5 text-[11px] bg-[#3b82f6] hover:bg-[#2563eb] text-white cursor-pointer"
+                  className="h-6 px-2.5 text-[11px] cursor-pointer"
                 >
                   Salvar ↵
                 </Button>
@@ -1032,7 +1034,7 @@ export function TaskTable({
                   <button
                     type="button"
                     onClick={() => handleOpenAddSubtask(task)}
-                    className="w-6 h-6 rounded border border-[#2b2e42] bg-[#12141f] hover:bg-[#202336] text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    className="w-6 h-6 rounded border border-border bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                     title="Adicionar subtarefa / checklist"
                     aria-label="Adicionar subtarefa"
                   >
@@ -1043,7 +1045,7 @@ export function TaskTable({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="w-6 h-6 rounded border border-[#2b2e42] bg-[#12141f] hover:bg-[#202336] text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-6 h-6 rounded border border-border bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                         title="Alterar tag"
                         aria-label="Alterar tag"
                       >
@@ -1052,19 +1054,19 @@ export function TaskTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="start"
-                      className="w-36 bg-[#141624] border-[#252838] text-white p-1"
+                      className="w-36 bg-popover border-border text-popover-foreground p-1"
                     >
                       <DropdownMenuLabel className="text-xs text-muted-foreground">
                         Definir Tag
                       </DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-[#202334]" />
+                      <DropdownMenuSeparator />
                       {PRESET_TAGS.map((tagOpt) => (
                         <DropdownMenuItem
                           key={tagOpt}
                           onClick={() =>
                             onUpdateTask({ ...task, tag: tagOpt })
                           }
-                          className="text-xs cursor-pointer hover:bg-[#1f2238]"
+                          className="text-xs cursor-pointer hover:bg-accent"
                         >
                           #{tagOpt}
                         </DropdownMenuItem>
@@ -1075,7 +1077,7 @@ export function TaskTable({
                   <button
                     type="button"
                     onClick={() => handleStartEditing(task)}
-                    className="w-6 h-6 rounded border border-[#2b2e42] bg-[#12141f] hover:bg-[#202336] text-muted-foreground hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    className="w-6 h-6 rounded border border-border bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                     title="Renomear inline"
                     aria-label="Renomear tarefa"
                   >
@@ -1157,7 +1159,7 @@ export function TaskTable({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="opacity-0 group-hover/row:opacity-100 focus:opacity-100 p-1 text-muted-foreground hover:text-white rounded hover:bg-[#202336] transition-opacity cursor-pointer"
+                    className="opacity-0 group-hover/row:opacity-100 focus:opacity-100 p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-opacity cursor-pointer"
                     aria-label={`Mais opções para ${task.title}`}
                   >
                     <MoreHorizontal className="w-3.5 h-3.5" />
@@ -1165,27 +1167,27 @@ export function TaskTable({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-44 bg-[#141624] border-[#252838] text-white p-1 z-50 shadow-xl"
+                  className="w-44 bg-popover border-border text-popover-foreground p-1 z-50 shadow-xl"
                 >
                   <DropdownMenuItem
                     onClick={() => onOpenDetails(task)}
-                    className="text-xs cursor-pointer hover:bg-[#1f2238]"
+                    className="text-xs cursor-pointer hover:bg-accent"
                   >
                     Abrir detalhes
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => handleStartEditing(task)}
-                    className="text-xs cursor-pointer hover:bg-[#1f2238]"
+                    className="text-xs cursor-pointer hover:bg-accent"
                   >
                     Renomear inline
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => handleOpenAddSubtask(task)}
-                    className="text-xs cursor-pointer hover:bg-[#1f2238]"
+                    className="text-xs cursor-pointer hover:bg-accent"
                   >
                     Adicionar subtarefa
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-[#202334]" />
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => handleDeleteWithConfirm(task)}
                     className="text-xs text-destructive hover:bg-destructive/20 focus:text-destructive cursor-pointer"
@@ -1215,7 +1217,7 @@ export function TaskTable({
             {/* 3. Form inline para adicionar subelemento */}
             {addingSubtaskForId === task.id && (
               <div
-                className="py-2 pr-3 bg-[#10121d] flex items-center gap-2 border-b border-[#1c1f2d]/50"
+                className="py-2 pr-3 bg-muted/40 flex items-center gap-2 border-b border-border/50"
                 style={{ paddingLeft: `${(depth + 1) * 36 + 14}px` }}
               >
                 <form
@@ -1231,12 +1233,12 @@ export function TaskTable({
                     onKeyDown={(e) => {
                       if (e.key === "Escape") setAddingSubtaskForId(null);
                     }}
-                    className="flex-1 bg-[#181a28] border border-[#2e324a] rounded-lg px-2.5 py-1 text-xs text-white placeholder:text-[#6e728c] focus:outline-none focus:border-[#3b82f6]"
+                    className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                   />
                   <Button
                     type="submit"
                     size="sm"
-                    className="h-7 px-3 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs cursor-pointer"
+                    className="h-7 px-3 text-xs cursor-pointer"
                   >
                     Adicionar
                   </Button>
@@ -1245,7 +1247,7 @@ export function TaskTable({
                     variant="ghost"
                     size="sm"
                     onClick={() => setAddingSubtaskForId(null)}
-                    className="h-7 px-2 text-xs text-muted-foreground hover:text-white cursor-pointer"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     Cancelar
                   </Button>
@@ -1334,21 +1336,21 @@ export function TaskTable({
               <button
                 type="button"
                 onClick={() => handleToggleSubtask(task, st.id)}
-                className="p-0.5 rounded hover:bg-[#202336] transition-colors cursor-pointer shrink-0"
+                className="p-0.5 rounded hover:bg-accent transition-colors cursor-pointer shrink-0"
                 title={st.completed ? "Marcar como pendente" : "Concluir"}
               >
                 {isSubtask ? (
                   st.completed ? (
-                    <CheckCircle2 className="w-4 h-4 text-[#10b981]" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   ) : (
-                    <CircleDashed className="w-4 h-4 text-[#8e92ab] hover:text-white" />
+                    <CircleDashed className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                   )
                 ) : st.completed ? (
-                  <span className="w-4 h-4 rounded-[4px] bg-[#10b981] border border-[#10b981] flex items-center justify-center text-white shadow-xs">
+                  <span className="w-4 h-4 rounded-[4px] bg-emerald-600 border border-emerald-600 flex items-center justify-center text-white shadow-xs">
                     <Check className="w-3 h-3 stroke-[3]" />
                   </span>
                 ) : (
-                  <span className="w-4 h-4 rounded-[4px] border-[1.5px] border-[#8e92ab] hover:border-white bg-transparent transition-colors block" />
+                  <span className="w-4 h-4 rounded-[4px] border-[1.5px] border-muted-foreground/60 hover:border-foreground bg-transparent transition-colors block" />
                 )}
               </button>
 
@@ -1364,7 +1366,7 @@ export function TaskTable({
                         handleSaveSubtaskTitle(task, st.id);
                       else if (e.key === "Escape") setEditingSubtaskKey(null);
                     }}
-                    className="h-6 text-xs bg-[#181a28] border-[#3b82f6] text-white"
+                    className="h-6 text-xs bg-background border-primary text-foreground"
                   />
                   <Button
                     type="button"
@@ -1379,7 +1381,7 @@ export function TaskTable({
                     type="button"
                     size="sm"
                     onClick={() => handleSaveSubtaskTitle(task, st.id)}
-                    className="h-6 px-2 text-[10px] bg-[#3b82f6] text-white cursor-pointer"
+                    className="h-6 px-2 text-[10px] cursor-pointer"
                   >
                     Salvar ↵
                   </Button>
@@ -1395,18 +1397,18 @@ export function TaskTable({
                       "text-xs truncate cursor-text select-none",
                       st.completed
                         ? "line-through text-muted-foreground/60"
-                        : "text-[#d6d9ea] font-normal"
+                        : "text-foreground font-normal"
                     )}
                   >
                     {st.title}
                   </span>
 
                   {/* Ações no Hover */}
-                  <div className="opacity-0 group-hover/subrow:opacity-100 flex items-center gap-1 transition-opacity">
+                  <div className="opacity-0 group-hover/subrow:opacity-100 group-focus-within/subrow:opacity-100 flex items-center gap-1 transition-opacity">
                     <button
                       type="button"
                       onClick={() => handleAddChildSubtask(task, st.id)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#1d2030] hover:bg-[#282c44] text-[#a5a9c4] hover:text-white transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent text-secondary-foreground hover:text-accent-foreground transition-colors cursor-pointer"
                       title="Adicionar sub-item a este checklist"
                     >
                       + Item
@@ -1469,7 +1471,7 @@ export function TaskTable({
             isDraggable={false}
             onSortToggle={handleSortToggle}
             onSetSort={handleSetSort}
-            className="p-0 hover:bg-transparent text-[#e2e4f0]"
+            className="p-0 hover:bg-transparent text-foreground"
           />
           {summaryRoot && <TaskSegmentedProgress task={summaryRoot} allTasks={summaryTasks} />}
         </div>
@@ -1530,14 +1532,14 @@ export function TaskTable({
               </div>
             ))}
 
-          {/* Botão Roxo "+" para Criar Coluna / Gerenciar Campos */}
+          {/* Botão "+" para Criar Coluna / Gerenciar Campos */}
           <div className="w-8 flex items-center justify-center">
             <button
               type="button"
               onClick={handleOpenFieldsModal}
               title="Adicionar coluna / Gerenciar campos"
               aria-label="Adicionar coluna"
-              className="inline-flex h-5 w-5 items-center justify-center rounded bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition-colors cursor-pointer"
+              className="inline-flex h-5 w-5 items-center justify-center rounded bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-colors cursor-pointer"
             >
               <Plus className="h-3 w-3 stroke-[2.5]" />
             </button>
@@ -1594,8 +1596,6 @@ export function TaskTable({
           {naturalGroups.specialRootTasks.map((rootTask) => {
             const itemDef = getItemTypeDefinition(rootTask.itemType);
             const stripeColor = normalizeItemType(rootTask.itemType) === "TASK" ? "var(--primary)" : itemDef.color;
-            const isCollapsed = Boolean(collapsedGroups[rootTask.id]);
-            const isSelected = selectedIds.has(rootTask.id);
 
             return (
               <div
@@ -1637,13 +1637,13 @@ export function TaskTable({
             return (
               <div
                 key={group.name}
-                className="bg-[#121317] border border-[#1f212a] rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] overflow-hidden relative mb-4"
+                className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4"
               >
-                {/* Faixa Lateral Azul */}
-                <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-[#3b82f6] rounded-l-2xl z-20 pointer-events-none" />
+                {/* Faixa Lateral */}
+                <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-primary rounded-l-2xl z-20 pointer-events-none" />
 
                 {/* Cabeçalho do Grupo Livre */}
-                <div className="flex items-center justify-between h-[50px] px-3.5 bg-[#141622] border-b border-[#1f212a] group/freeheader">
+                <div className="flex items-center justify-between h-[50px] px-3.5 bg-muted/40 border-b border-border group/freeheader">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     {/* Checkbox de Selecionar Grupo Todo */}
                     <button
@@ -1652,8 +1652,8 @@ export function TaskTable({
                       className={cn(
                         "w-4 h-4 rounded-xs border flex items-center justify-center transition-all cursor-pointer shrink-0",
                         isGroupSelected
-                          ? "bg-[#3b82f6] border-[#3b82f6] text-white"
-                          : "opacity-0 group-hover/freeheader:opacity-100 border-[#3a3e55] hover:border-foreground bg-[#10121d]"
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "opacity-0 group-hover/freeheader:opacity-100 group-focus-within/freeheader:opacity-100 border-border hover:border-foreground bg-background"
                       )}
                       title="Selecionar todas as tarefas deste grupo"
                     >
@@ -1667,7 +1667,7 @@ export function TaskTable({
                       onClick={() => toggleGroup(group.name)}
                       className="flex items-center gap-2 cursor-pointer focus:outline-none"
                     >
-                      <span className="text-muted-foreground hover:text-white">
+                      <span className="text-muted-foreground hover:text-foreground">
                         {isCollapsed ? (
                           <ChevronRight className="w-3.5 h-3.5" />
                         ) : (
@@ -1675,7 +1675,7 @@ export function TaskTable({
                         )}
                       </span>
 
-                      <span className="font-semibold text-xs text-[#3b82f6]">
+                      <span className="font-semibold text-xs text-primary">
                         {group.name}
                       </span>
 
@@ -1688,7 +1688,7 @@ export function TaskTable({
                     <button
                       type="button"
                       onClick={() => openQuickAdd(group.name)}
-                      className="opacity-0 group-hover/freeheader:opacity-100 p-1 text-muted-foreground hover:text-white rounded hover:bg-[#202336] transition-all cursor-pointer ml-1"
+                      className="opacity-0 group-hover/freeheader:opacity-100 group-focus-within/freeheader:opacity-100 p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-all cursor-pointer ml-1"
                       title="Adicionar tarefa neste grupo"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1699,13 +1699,13 @@ export function TaskTable({
                 {/* Conteúdo do Grupo Livre */}
                 {!isCollapsed && (
                   <div>
-                    {groupTasks.map((t) => renderTaskRow(t, 0, "#3b82f6"))}
+                    {groupTasks.map((t) => renderTaskRow(t, 0, "var(--primary)"))}
 
                     {/* Botão + Adicionar Tarefa no Grupo Livre */}
                     {addingInGroup === group.name ? (
                       <form
                         onSubmit={(e) => handleSaveQuickAdd(e, "PENDENTE", group.name)}
-                        className="flex items-center gap-2 py-2.5 px-4 bg-[#141624] border-t border-[#1f212a]"
+                        className="flex items-center gap-2 py-2.5 px-4 bg-muted/30 border-t border-border"
                       >
                         <input
                           autoFocus
@@ -1716,12 +1716,12 @@ export function TaskTable({
                           onKeyDown={(e) => {
                             if (e.key === "Escape") setAddingInGroup(null);
                           }}
-                          className="flex-1 bg-transparent text-xs text-white placeholder:text-muted-foreground focus:outline-none"
+                          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
                         />
                         <Button
                           type="submit"
                           size="sm"
-                          className="h-7 px-3 bg-[#3b82f6] text-white text-xs cursor-pointer"
+                          className="h-7 px-3 text-xs cursor-pointer"
                         >
                           Salvar ↵
                         </Button>
@@ -1730,7 +1730,7 @@ export function TaskTable({
                           variant="ghost"
                           size="sm"
                           onClick={() => setAddingInGroup(null)}
-                          className="h-7 px-2 text-xs text-muted-foreground hover:text-white cursor-pointer"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                         >
                           Cancelar
                         </Button>
@@ -1739,9 +1739,9 @@ export function TaskTable({
                       <button
                         type="button"
                         onClick={() => openQuickAdd(group.name)}
-                        className="w-full text-left h-[44px] pl-8 pr-3 text-xs text-muted-foreground/60 hover:text-white hover:bg-[#151722]/40 flex items-center gap-2 transition-colors cursor-pointer"
+                        className="w-full text-left h-[44px] pl-8 pr-3 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 flex items-center gap-2 transition-colors cursor-pointer"
                       >
-                        <Plus className="w-3.5 h-3.5 text-[#3b82f6]" />
+                        <Plus className="w-3.5 h-3.5 text-primary" />
                         <span>+ Adicionar tarefa</span>
                       </button>
                     )}
@@ -1779,7 +1779,7 @@ export function TaskTable({
             const isGroupSelected =
               groupTasks.length > 0 &&
               groupTasks.every((t) => selectedIds.has(t.id));
-            const stripeColor = group.color || "#8b5cf6";
+            const stripeColor = group.color || "var(--primary)";
 
             return (
               <div
@@ -1789,7 +1789,7 @@ export function TaskTable({
                   if (dragOverGroup !== group.id) setDragOverGroup(group.id);
                 }}
                 onDrop={(e) => handleDropOnGroup(e, group.defaultStatus)}
-                className="bg-[#121317] border border-[#1f212a] rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] overflow-hidden relative mb-4 transition-all"
+                className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4 transition-all"
               >
                 {/* Faixa Fina Colorida na Lateral Esquerda (3.5px) */}
                 <div
@@ -1798,7 +1798,7 @@ export function TaskTable({
                 />
 
                 {/* Cabeçalho do Bloco Elevado */}
-                <div className="flex items-center justify-between h-[50px] px-3.5 bg-[#141622] border-b border-[#1f212a] group/groupheader">
+                <div className="flex items-center justify-between h-[50px] px-3.5 bg-muted/40 border-b border-border group/groupheader">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <button
                       type="button"
@@ -1806,8 +1806,8 @@ export function TaskTable({
                       className={cn(
                         "w-4 h-4 rounded-xs border flex items-center justify-center transition-all cursor-pointer shrink-0",
                         isGroupSelected
-                          ? "bg-[#3b82f6] border-[#3b82f6] text-white"
-                          : "opacity-0 group-hover/groupheader:opacity-100 border-[#3a3e55] hover:border-foreground bg-[#10121d]"
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "opacity-0 group-hover/groupheader:opacity-100 group-focus-within/groupheader:opacity-100 border-border hover:border-foreground bg-background"
                       )}
                       title="Selecionar todas as tarefas deste grupo"
                     >
@@ -1821,7 +1821,7 @@ export function TaskTable({
                       onClick={() => toggleGroup(group.id)}
                       className="flex items-center gap-2 cursor-pointer focus:outline-none"
                     >
-                      <span className="text-muted-foreground hover:text-white">
+                      <span className="text-muted-foreground hover:text-foreground">
                         {isCollapsed ? (
                           <ChevronRight className="w-3.5 h-3.5" />
                         ) : (
@@ -1831,7 +1831,7 @@ export function TaskTable({
 
                       {group.icon}
 
-                      <span className="font-semibold text-xs text-white">
+                      <span className="font-semibold text-xs text-foreground">
                         {group.label}
                       </span>
 
@@ -1844,7 +1844,7 @@ export function TaskTable({
                     <button
                       type="button"
                       onClick={() => openQuickAdd(group.id)}
-                      className="opacity-0 group-hover/groupheader:opacity-100 p-1 text-muted-foreground hover:text-white rounded hover:bg-[#202336] transition-all cursor-pointer ml-1"
+                      className="opacity-0 group-hover/groupheader:opacity-100 group-focus-within/groupheader:opacity-100 p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-all cursor-pointer ml-1"
                       title="Adicionar tarefa neste grupo"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -1865,7 +1865,7 @@ export function TaskTable({
                         onSubmit={(e) =>
                           handleSaveQuickAdd(e, group.defaultStatus)
                         }
-                        className="flex items-center gap-2 py-2.5 px-4 bg-[#141624] border-t border-[#1f212a]"
+                        className="flex items-center gap-2 py-2.5 px-4 bg-muted/30 border-t border-border"
                       >
                         <input
                           autoFocus
@@ -1876,12 +1876,12 @@ export function TaskTable({
                           onKeyDown={(e) => {
                             if (e.key === "Escape") setAddingInGroup(null);
                           }}
-                          className="flex-1 bg-transparent text-xs text-white placeholder:text-muted-foreground focus:outline-none"
+                          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
                         />
                         <Button
                           type="submit"
                           size="sm"
-                          className="h-7 px-3 bg-[#3b82f6] text-white text-xs cursor-pointer"
+                          className="h-7 px-3 text-xs cursor-pointer"
                         >
                           Salvar ↵
                         </Button>
@@ -1890,7 +1890,7 @@ export function TaskTable({
                           variant="ghost"
                           size="sm"
                           onClick={() => setAddingInGroup(null)}
-                          className="h-7 px-2 text-xs text-muted-foreground hover:text-white cursor-pointer"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                         >
                           Cancelar
                         </Button>
@@ -1899,9 +1899,9 @@ export function TaskTable({
                       <button
                         type="button"
                         onClick={() => openQuickAdd(group.id)}
-                        className="w-full text-left h-[44px] pl-8 pr-3 text-xs text-muted-foreground/60 hover:text-white hover:bg-[#151722]/40 flex items-center gap-2 transition-colors cursor-pointer"
+                        className="w-full text-left h-[44px] pl-8 pr-3 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 flex items-center gap-2 transition-colors cursor-pointer"
                       >
-                        <Plus className="w-3.5 h-3.5 text-[#3b82f6]" />
+                        <Plus className="w-3.5 h-3.5 text-primary" />
                         <span>+ Adicionar tarefa</span>
                       </button>
                     )}
@@ -1929,11 +1929,8 @@ export function TaskTable({
       {/* Barra Flutuante de Ações em Lote */}
       {/* --------------------------------------------------------------------- */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border border-[#252838] bg-[#141624] text-white shadow-[0_8px_32px_rgba(0,0,0,0.8)] animate-in fade-in slide-in-from-bottom-3 duration-150">
-          <Badge
-            variant="default"
-            className="text-xs px-2.5 py-0.5 bg-[#3b82f6] text-white"
-          >
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl animate-in fade-in slide-in-from-bottom-3 duration-150">
+          <Badge variant="default" className="text-xs px-2.5 py-0.5">
             {selectedIds.size} selecionada(s)
           </Badge>
 
@@ -1943,7 +1940,7 @@ export function TaskTable({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs bg-[#1a1d2e] border-[#2b2e44] text-white hover:bg-[#25283f] cursor-pointer"
+                className="h-7 text-xs cursor-pointer"
               >
                 Mudar Status
               </Button>
@@ -1965,20 +1962,17 @@ export function TaskTable({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs bg-[#1a1d2e] border-[#2b2e44] text-white hover:bg-[#25283f] cursor-pointer"
+                className="h-7 text-xs cursor-pointer"
               >
                 Prioridade
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="center"
-              className="w-36 bg-[#141624] border-[#252838] text-white p-1 z-50"
-            >
+            <DropdownMenuContent align="center" className="w-36 p-1 z-50">
               {PRIORITIES.map((p) => (
                 <DropdownMenuItem
                   key={p}
                   onClick={() => handleBulkPriorityChange(p)}
-                  className="text-xs cursor-pointer hover:bg-[#1f2238]"
+                  className="text-xs cursor-pointer"
                 >
                   <PriorityIcon priority={p} showLabel />
                 </DropdownMenuItem>
@@ -1988,7 +1982,9 @@ export function TaskTable({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs">Adicionar tag</Button>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs cursor-pointer">
+                Adicionar tag
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center">
               {PRESET_TAGS.map((tag) => (
@@ -2002,7 +1998,7 @@ export function TaskTable({
             variant="destructive"
             size="sm"
             onClick={handleBulkDelete}
-            className="h-7 text-xs gap-1 cursor-pointer bg-red-600 hover:bg-red-700 text-white"
+            className="h-7 text-xs gap-1 cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Excluir</span>
@@ -2011,7 +2007,7 @@ export function TaskTable({
           <button
             type="button"
             onClick={() => setSelectedIds(new Set())}
-            className="p-1 text-muted-foreground hover:text-white rounded cursor-pointer"
+            className="p-1 text-muted-foreground hover:text-foreground rounded cursor-pointer"
             title="Limpar seleção"
           >
             <X className="w-4 h-4" />
@@ -2031,6 +2027,46 @@ export function TaskTable({
         onAddExistingColumn={handleAddExistingColumn}
         onCreateCustomColumn={handleCreateCustomColumn}
       />
+
+      <Dialog
+        open={Boolean(confirmDeleteState)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteState(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmDeleteState?.mode === "bulk"
+                ? `Excluir ${confirmDeleteState.count} tarefa(s)?`
+                : "Excluir tarefa?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmDeleteState?.mode === "bulk"
+                ? `Tem certeza que deseja excluir as ${confirmDeleteState.count} tarefas selecionadas? Esta ação não pode ser desfeita.`
+                : confirmDeleteState?.mode === "single"
+                ? `Tem certeza que deseja excluir a tarefa "${confirmDeleteState.task.title}"? Esta ação não pode ser desfeita.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteState(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDeleteAction}
+            >
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -492,8 +492,7 @@ export function parseEstimateToMinutes(estimate?: string | null): number | null 
 
 export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task {
   const prefix = crmTask.project?.code?.toUpperCase() || "IDE";
-  const shortSuffix = crmTask.id.slice(-3).toUpperCase();
-  const code = `${prefix}-${101 + index}${shortSuffix ? "" : ""}`;
+  const code = `${prefix}-${101 + index}`;
 
   const dueDate = crmTask.dueDate
     ? crmTask.dueDate.slice(0, 10)

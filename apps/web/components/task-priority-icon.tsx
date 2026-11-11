@@ -20,14 +20,14 @@ export function getPriorityPillStyle(priority?: string | null): string {
   const norm = normalizeTaskPriority(priority);
   switch (norm) {
     case "Urgente":
-      return "border-orange-500/40 bg-orange-950/30 text-orange-400";
+      return "border-orange-500/40 bg-orange-500/15 text-orange-700 dark:text-orange-400";
     case "Alta":
-      return "border-red-500/30 bg-red-950/30 text-red-400";
+      return "border-red-500/35 bg-red-500/15 text-red-700 dark:text-red-400";
     case "Normal":
-      return "border-blue-500/30 bg-blue-950/30 text-blue-400";
+      return "border-blue-500/35 bg-blue-500/15 text-blue-700 dark:text-blue-400";
     case "Baixa":
     default:
-      return "border-[#292c42] bg-[#161826] text-slate-300";
+      return "border-border bg-secondary text-secondary-foreground";
   }
 }
 
@@ -44,11 +44,11 @@ export function PriorityIcon({
         className={cn("inline-flex items-center gap-1.5", className)}
         title="Prioridade Urgente"
       >
-        <span className="w-3.5 h-3.5 rounded-xs bg-orange-500/20 border border-orange-500/40 text-orange-500 font-bold text-[10px] flex items-center justify-center leading-none">
+        <span className="w-3.5 h-3.5 rounded-xs bg-orange-500/20 border border-orange-500/40 text-orange-600 dark:text-orange-400 font-bold text-[10px] flex items-center justify-center leading-none">
           !
         </span>
         {showLabel && (
-          <span className="text-xs font-semibold text-orange-400">Urgente</span>
+          <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">Urgente</span>
         )}
       </span>
     );

@@ -4,13 +4,31 @@ import { useState } from "react";
 import type { CrmProjectManagement } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-export function NewProjectDialog({ open, onOpenChange, managements, selectedManagementId, connected, onCreated }: {
-  open: boolean;
+function NewProjectDialogContent({
+  onOpenChange,
+  managements,
+  selectedManagementId,
+  connected,
+  onCreated,
+}: {
   onOpenChange: (open: boolean) => void;
   managements: CrmProjectManagement[];
   selectedManagementId: string | null;
@@ -33,7 +51,10 @@ export function NewProjectDialog({ open, onOpenChange, managements, selectedMana
     setSaving(true);
     setError("");
     try {
-      await ideCrmClient.createProject(managementId, { name: name.trim(), description: description.trim() });
+      await ideCrmClient.createProject(managementId, {
+        name: name.trim(),
+        description: description.trim(),
+      });
       onOpenChange(false);
       await onCreated();
     } catch (err) {
@@ -44,22 +65,109 @@ export function NewProjectDialog({ open, onOpenChange, managements, selectedMana
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!saving) onOpenChange(next); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Novo projeto</DialogTitle><DialogDescription>Escolha a gestão e informe os dados do projeto.</DialogDescription></DialogHeader>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-1.5"><label htmlFor="project-management" className="text-sm font-medium">Gestão</label>
-            <Select value={managementId} onValueChange={setManagementId}>
-              <SelectTrigger id="project-management"><SelectValue placeholder="Selecione uma gestão" /></SelectTrigger>
-              <SelectContent>{managements.map((management) => <SelectItem key={management.id} value={management.id}>{management.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5"><label htmlFor="project-name" className="text-sm font-medium">Nome</label><Input id="project-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={300} required /></div>
-          <div className="space-y-1.5"><label htmlFor="project-description" className="text-sm font-medium">Descrição</label><Textarea id="project-description" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={5000} /></div>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="submit" disabled={saving || !managementId || !name.trim()}>{saving ? "Criando..." : "Criar projeto"}</Button></DialogFooter>
-        </form>
-      </DialogContent>
+    <DialogContent
+      onInteractOutside={(e) => {
+        if (saving) e.preventDefault();
+      }}
+      onEscapeKeyDown={(e) => {
+        if (saving) e.preventDefault();
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>Novo projeto</DialogTitle>
+        <DialogDescription>Escolha a gestão e informe os dados do projeto.</DialogDescription>
+      </DialogHeader>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-1.5">
+          <label htmlFor="project-management" className="text-sm font-medium">
+            Gestão
+          </label>
+          <Select value={managementId} onValueChange={setManagementId}>
+            <SelectTrigger id="project-management">
+              <SelectValue placeholder="Selecione uma gestão" />
+            </SelectTrigger>
+            <SelectContent>
+              {managements.map((management) => (
+                <SelectItem key={management.id} value={management.id}>
+                  {management.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="project-name" className="text-sm font-medium">
+            Nome
+          </label>
+          <Input
+            id="project-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={300}
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="project-description" className="text-sm font-medium">
+            Descrição
+          </label>
+          <Textarea
+            id="project-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={5000}
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={saving}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={saving || !managementId || !name.trim()}>
+            {saving ? "Criando..." : "Criar projeto"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
+export function NewProjectDialog({
+  open,
+  onOpenChange,
+  managements,
+  selectedManagementId,
+  connected,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  managements: CrmProjectManagement[];
+  selectedManagementId: string | null;
+  connected: boolean;
+  onCreated: () => Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open && (
+        <NewProjectDialogContent
+          key={selectedManagementId ?? "none"}
+          onOpenChange={onOpenChange}
+          managements={managements}
+          selectedManagementId={selectedManagementId}
+          connected={connected}
+          onCreated={onCreated}
+        />
+      )}
     </Dialog>
   );
 }

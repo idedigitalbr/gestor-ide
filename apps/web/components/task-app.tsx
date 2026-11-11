@@ -10,7 +10,6 @@ import {
   normalizeTaskPriority,
   type AppModuleSection,
   type CrmCompany,
-  type CrmCalendarEvent,
   type CrmContact,
   type CrmFinancialEntry,
   type CrmFinancialSummary,
@@ -25,7 +24,6 @@ import {
   type TaskStatus,
   type ViewMode,
   type TaskGroupBy,
-  type GroupOrder,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import {
@@ -65,7 +63,7 @@ import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
 import { EnterpriseModulesView } from "@/components/enterprise-modules-view";
 import { TaskTableSkeleton } from "@/components/task-skeleton";
 import { cn } from "@/lib/utils";
-import { CalendarDialogContext } from "@/components/calendar-dialog-context";
+import { useCalendarDialog } from "@/components/calendar-dialog-context";
 
 function getHighestCodeNumber(list: Task[]): number {
   let max = 100;
@@ -84,9 +82,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isSecondaryPage = pathname !== "/";
   const isCalendarPage = pathname === "/projects/calendar";
-  const [calendarDialogOpen, setCalendarDialogOpen] = useState(false);
-  const [calendarEditing, setCalendarEditing] = useState<CrmCalendarEvent | null>(null);
-  const [canCreateCalendarEvent, setCanCreateCalendarEvent] = useState(false);
+  const {
+    setOpen: setCalendarDialogOpen,
+    setEditing: setCalendarEditing,
+    canCreate: canCreateCalendarEvent,
+  } = useCalendarDialog();
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewManagementOpen, setIsNewManagementOpen] = useState(false);
   const [listSearch, setListSearch] = useState("");
@@ -141,21 +141,21 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   });
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [activeModule, setActiveModule] = useState<AppModuleSection>("tasks");
+  const [activeModule] = useState<AppModuleSection>("tasks");
 
   // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
   const [subtaskMode, setSubtaskMode] = useState<SubtaskDisplayMode>("collapsed");
   const [showClosedTasks, setShowClosedTasks] = useState(true);
-  const [showClosedSubtasks, setShowClosedSubtasks] = useState(true);
+  const [showClosedSubtasks] = useState(true);
   const [isFieldsModalOpen, setIsFieldsModalOpen] = useState(false);
-
-  // Barra lateral retrátil (shadcn/ui Sidebar): PADRÃO FECHADA (false) conforme solicitado
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Estado de Integração com a API Central do IDE CRM
   const [isApiReachable, setIsApiReachable] = useState(false);
   const [isConnectedCrm, setIsConnectedCrm] = useState<boolean>(() => {
     return Boolean(getCachedSession());
+  });
+  const [isBootstrapping, setIsBootstrapping] = useState<boolean>(() => {
+    return !(getCachedSession() && getCachedManagements());
   });
   const [currentUser, setCurrentUser] = useState<CrmUserProfile | null>(() => {
     return getCachedSession();
@@ -228,18 +228,80 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
   // Agrupamento: Padrão é "Nenhum" ("none") conforme solicitado
   const [groupBy, setGroupBy] = useState<TaskGroupBy>("none");
-  const [groupOrder, setGroupOrder] = useState<GroupOrder>("asc");
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(Boolean(initialModal));
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => {
     if (initialModal && initialModal !== "new") {
-      const found = INITIAL_TASKS.find((t) => t.code === initialModal);
-      return found ? found.id : INITIAL_TASKS[1]?.id ?? null;
+      const found = tasks.find(
+        (t) => t.id === initialModal || t.code === initialModal
+      );
+      return found ? found.id : null;
     }
     return null;
   });
   const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>("PENDENTE");
+  const handledInitialModalRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialModal || handledInitialModalRef.current === initialModal) return;
+    if (initialModal === "new") {
+      handledInitialModalRef.current = initialModal;
+      return;
+    }
+    const found = tasks.find((t) => t.id === initialModal || t.code === initialModal);
+    if (found) {
+      handledInitialModalRef.current = initialModal;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedTaskId(found.id);
+      setIsModalOpen(true);
+    }
+  }, [initialModal, tasks]);
+
+  const projectsRef = useRef(projects);
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
+  const isConnectedCrmRef = useRef(isConnectedCrm);
+  useEffect(() => {
+    isConnectedCrmRef.current = isConnectedCrm;
+  }, [isConnectedCrm]);
+
+  const selectedManagementIdRef = useRef(selectedManagementId);
+  useEffect(() => {
+    selectedManagementIdRef.current = selectedManagementId;
+  }, [selectedManagementId]);
+
+  const selectedProjectIdRef = useRef(selectedProjectId);
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId;
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    function handleAccountUpdated(event: Event) {
+      const detail = (
+        event as CustomEvent<{
+          name?: string | null;
+          email?: string;
+          avatarUrl?: string | null;
+        }>
+      ).detail;
+      if (!detail) return;
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        const next: CrmUserProfile = {
+          ...prev,
+          name: detail.name !== undefined ? detail.name : prev.name,
+          email: detail.email ?? prev.email,
+          avatarUrl: detail.avatarUrl !== undefined ? detail.avatarUrl : prev.avatarUrl,
+        };
+        setCachedSession(next);
+        return next;
+      });
+    }
+    window.addEventListener("gestor:account-updated", handleAccountUpdated);
+    return () => window.removeEventListener("gestor:account-updated", handleAccountUpdated);
+  }, []);
 
   // Busca direcionada e rápida de tarefas baseada no projeto ou gestão selecionados (com SWR)
   const loadTasks = useCallback(
@@ -249,6 +311,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       availableProjects?: CrmProject[],
       silent = false
     ) => {
+      if (!isConnectedCrmRef.current) {
+        setIsSyncingTasks(false);
+        return;
+      }
+
       const currentRequestId = ++activeRequestIdRef.current;
       const cached = managementIdFilter && !projectIdFilter ? null : getCachedTasks(projectIdFilter);
 
@@ -268,7 +335,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           loadedTasks = res.tasks ?? [];
         } else if (managementIdFilter) {
           // Busca as tarefas dos projetos daquela gestão
-          const currentProjects = availableProjects ?? projects;
+          const currentProjects = availableProjects ?? projectsRef.current;
           const mgmtProjects = currentProjects.filter(
             (p) => p.projectManagementId === managementIdFilter
           );
@@ -313,7 +380,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [projects]
+    []
   );
 
   // Carregamento lazy dos módulos enterprise (contatos, leads, financeiro)
@@ -364,11 +431,32 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           setManagements([]);
           setProjects([]);
           setIsApiReachable(Boolean(session));
+          isConnectedCrmRef.current = false;
           setIsConnectedCrm(false);
           setCurrentUser(null);
           setCachedSession(null);
           setTasks(INITIAL_TASKS);
+          if (
+            selectedManagementIdRef.current &&
+            !INITIAL_MANAGEMENTS.some((m) => m.id === selectedManagementIdRef.current)
+          ) {
+            setSelectedManagementId(null);
+            setSelectedProjectId(null);
+            try {
+              localStorage.removeItem("gestor_selected_management_id");
+              localStorage.removeItem("gestor_selected_project_id");
+            } catch {}
+          } else if (
+            selectedProjectIdRef.current &&
+            !INITIAL_PROJECTS.some((p) => p.id === selectedProjectIdRef.current)
+          ) {
+            setSelectedProjectId(null);
+            try {
+              localStorage.removeItem("gestor_selected_project_id");
+            } catch {}
+          }
           setIsSyncingTasks(false);
+          setIsBootstrapping(false);
           return;
         }
 
@@ -379,10 +467,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           setProjects([]);
           setTasks([]);
         }
-        setIsApiReachable(true);
-        setIsConnectedCrm(true);
-        setCurrentUser(session.user);
-        setCachedSession(session.user);
 
         // Dispara em paralelo sem waterfalls bloqueantes:
         // 1) Gestões
@@ -401,17 +485,57 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         const loadedManagements = managementsRes?.managements ?? [];
         const loadedProjects = projectsRes?.projects ?? [];
 
+        setIsApiReachable(true);
+        isConnectedCrmRef.current = true;
+        setIsConnectedCrm(true);
+        setCurrentUser(session.user);
+        setCachedSession(session.user);
+
         if (managementsRes) {
           setManagements(loadedManagements);
           setCachedManagements(loadedManagements);
+          if (
+            selectedManagementIdRef.current &&
+            !loadedManagements.some((m) => m.id === selectedManagementIdRef.current)
+          ) {
+            setSelectedManagementId(null);
+            setSelectedProjectId(null);
+            try {
+              localStorage.removeItem("gestor_selected_management_id");
+              localStorage.removeItem("gestor_selected_project_id");
+            } catch {}
+          }
         }
         if (projectsRes) {
           setProjects(loadedProjects);
           setCachedProjects(loadedProjects);
+          if (
+            selectedProjectIdRef.current &&
+            !loadedProjects.some((p) => p.id === selectedProjectIdRef.current)
+          ) {
+            setSelectedProjectId(null);
+            try {
+              localStorage.removeItem("gestor_selected_project_id");
+            } catch {}
+          }
         }
         if (membersRes?.members) {
           setMembers(membersRes.members);
+          if (!projectIdFilter) {
+            const uid = session.user.id;
+            setProjectMembership({
+              userId: uid,
+              projectIds: new Set(
+                membersRes.members
+                  .filter((member) => member.userId === uid)
+                  .map((member) => member.projectId)
+              ),
+              error: false,
+            });
+          }
         }
+        setIsBootstrapping(false);
+
         if (managementIdFilter && !projectIdFilter && !projectsRes) {
           setSyncError("Não foi possível carregar os projetos da gestão. Tente novamente.");
           setIsSyncingTasks(false);
@@ -423,9 +547,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         }
       } catch {
         setIsApiReachable(false);
+        isConnectedCrmRef.current = false;
         setIsConnectedCrm(false);
         setSyncError("Não foi possível conectar ao CRM. Verifique a conexão e atualize os dados.");
         setIsSyncingTasks(false);
+        setIsBootstrapping(false);
       }
     },
     [loadTasks]
@@ -437,18 +563,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     void syncWithIdeCrm(selectedProjectId, selectedManagementId);
     // Executa apenas uma vez na montagem inicial
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Atalho de teclado: Ctrl+B ou Cmd+B para abrir/fechar a barra lateral
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        setIsSidebarOpen((prev) => !prev);
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const effectiveManagements = useMemo(() => {
@@ -502,6 +616,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("gestor_selected_project_id");
     } catch {}
 
+    if (!isConnectedCrm) {
+      setIsSyncingTasks(false);
+      return;
+    }
+
     const cached = managementId ? null : getCachedTasks(null);
     if (cached && cached.length > 0) {
       setTasks(cached);
@@ -524,9 +643,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       }
     } catch {}
 
+    let resolvedManagementId = selectedManagementId;
     if (projectId) {
       const proj = effectiveProjects.find((p) => p.id === projectId);
       if (proj && proj.projectManagementId && proj.projectManagementId !== selectedManagementId) {
+        resolvedManagementId = proj.projectManagementId;
         setSelectedManagementId(proj.projectManagementId);
         try {
           localStorage.setItem("gestor_selected_management_id", proj.projectManagementId);
@@ -534,16 +655,21 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       }
     }
 
+    if (!isConnectedCrm) {
+      setIsSyncingTasks(false);
+      return;
+    }
+
     // Transição instantânea (0ms): se o projeto já está em cache, exibe imediatamente
-    const cached = !projectId && selectedManagementId ? null : getCachedTasks(projectId);
+    const cached = !projectId && resolvedManagementId ? null : getCachedTasks(projectId);
     if (cached && cached.length > 0) {
       setTasks(cached);
       setIsSyncingTasks(false);
       // Revalida em background sem tela preta / skeleton
-      void loadTasks(projectId, selectedManagementId, undefined, true);
+      void loadTasks(projectId, resolvedManagementId, undefined, true);
     } else {
       setIsSyncingTasks(true);
-      void loadTasks(projectId, selectedManagementId, undefined, false);
+      void loadTasks(projectId, resolvedManagementId, undefined, false);
     }
   }
 
@@ -553,7 +679,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     } catch {
       // O SDK limpa o token local mesmo quando o CRM está indisponível.
     }
+    isConnectedCrmRef.current = false;
     setIsConnectedCrm(false);
+    setIsSyncingTasks(false);
     setCurrentUser(null);
     setManagements([]);
     setSelectedManagementId(null);
@@ -568,10 +696,12 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     if (!selectedTaskId) return null;
     return (
       tasks.find((t) => t.id === selectedTaskId) ??
-      INITIAL_TASKS.find((t) => t.id === selectedTaskId || t.code === selectedTaskId) ??
+      (!isConnectedCrm
+        ? INITIAL_TASKS.find((t) => t.id === selectedTaskId || t.code === selectedTaskId)
+        : null) ??
       null
     );
-  }, [tasks, selectedTaskId]);
+  }, [tasks, selectedTaskId, isConnectedCrm]);
 
   const currentManagement = useMemo(() => {
     if (!selectedManagementId) return null;
@@ -587,16 +717,16 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       if (onlyMyTasks && (!currentUser?.id || !(task.assigneeIds ?? (task.assigneeId ? [task.assigneeId] : [])).includes(currentUser.id))) return false;
-      // 1. Filtro por Projeto Ativo (só filtra quando os projetos do CRM já carregaram ou quando a tarefa já possui projectId correspondente)
-      if (selectedProjectId && projects.length > 0) {
+      // 1. Filtro por Projeto Ativo (só filtra quando os projetos já carregaram ou quando a tarefa já possui projectId correspondente)
+      if (selectedProjectId && effectiveProjects.length > 0) {
         if (task.projectId && task.projectId !== selectedProjectId) {
           return false;
         }
-      } else if (selectedManagementId && projects.length > 0) {
+      } else if (selectedManagementId && effectiveProjects.length > 0) {
         // Se estiver em "Todos os Projetos" de uma Gestão específica,
         // exibe apenas tarefas cujos projetos pertençam àquela gestão
         const allowedProjectIds = new Set(
-          projects
+          effectiveProjects
             .filter((p) => p.projectManagementId === selectedManagementId)
             .map((p) => p.id)
         );
@@ -709,7 +839,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks, currentTime, onlyMyTasks, currentUser]);
+  }, [tasks, filters, selectedProjectId, selectedManagementId, effectiveProjects, showClosedTasks, currentTime, onlyMyTasks, currentUser]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -731,9 +861,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     const targetProjectId =
       selectedProjectId ||
       (selectedManagementId
-        ? projects.find((p) => p.projectManagementId === selectedManagementId)?.id
+        ? effectiveProjects.find((p) => p.projectManagementId === selectedManagementId)?.id
         : null) ||
-      projects[0]?.id;
+      effectiveProjects[0]?.id;
     if (isConnectedCrm && !targetProjectId) {
       setSyncError("Selecione um projeto antes de criar uma tarefa no CRM.");
       return;
@@ -772,19 +902,26 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(() => {
-          setSyncError("A tarefa não foi salva no CRM. Atualize os dados antes de tentar novamente.");
+          setTasks((prev) => prev.filter((t) => t.id !== tempId));
+          removeCachedTask(tempId);
+          setSyncError("A tarefa não foi salva no CRM. Tente novamente.");
         });
     }
   }
 
   function handleUpdateTask(updatedTask: Task) {
     const previousTask = tasks.find((task) => task.id === updatedTask.id);
-    if (previousTask && updatedTask.itemType !== previousTask.itemType) {
-      setLocalTaskPresentation(updatedTask.id, { itemType: updatedTask.itemType, customGroup: updatedTask.customGroup });
-      setTasks((previous) => previous.map((task) => task.id === updatedTask.id ? updatedTask : task));
-      updateCachedTask(updatedTask);
-      return;
+    const presentationChanged =
+      previousTask &&
+      (updatedTask.itemType !== previousTask.itemType ||
+        updatedTask.customGroup !== previousTask.customGroup);
+    if (presentationChanged) {
+      setLocalTaskPresentation(updatedTask.id, {
+        itemType: updatedTask.itemType,
+        customGroup: updatedTask.customGroup,
+      });
     }
+
     const version = (taskUpdateVersionsRef.current.get(updatedTask.id) ?? 0) + 1;
     taskUpdateVersionsRef.current.set(updatedTask.id, version);
     setTasks((prev) =>
@@ -793,14 +930,28 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     updateCachedTask(updatedTask);
 
     if (isConnectedCrm && !updatedTask.id.startsWith("task-")) {
-      const payload = mapGestorTaskToCrmUpdateInput(updatedTask);
-      if (previousTask?.startDate && !updatedTask.startDate) payload.startDate = null;
-      if (previousTask?.dueDate && !updatedTask.dueDate) payload.dueDate = null;
+      const fullPayload = mapGestorTaskToCrmUpdateInput(updatedTask);
+      const prevPayload = previousTask ? mapGestorTaskToCrmUpdateInput(previousTask) : null;
+      const changedPayload: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(fullPayload)) {
+        if (!prevPayload || JSON.stringify(prevPayload[key]) !== JSON.stringify(value)) {
+          changedPayload[key] = value;
+        }
+      }
+      if (previousTask?.startDate && !updatedTask.startDate) changedPayload.startDate = null;
+      if (previousTask?.dueDate && !updatedTask.dueDate) changedPayload.dueDate = null;
+
+      if (Object.keys(changedPayload).length === 0) {
+        return;
+      }
+
       void ideCrmClient
-        .updateTask(updatedTask.id, payload)
+        .updateTask(updatedTask.id, changedPayload)
         .catch(() => {
           if (previousTask && taskUpdateVersionsRef.current.get(updatedTask.id) === version) {
-            setTasks((current) => current.map((task) => task === updatedTask ? previousTask : task));
+            setTasks((current) =>
+              current.map((task) => (task.id === updatedTask.id ? previousTask : task))
+            );
             updateCachedTask(previousTask);
           }
           setSyncError("A alteração não foi salva no CRM. Atualize os dados antes de tentar novamente.");
@@ -829,6 +980,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   }
 
   function handleDeleteTask(id: string) {
+    const deletedIndex = tasks.findIndex((t) => t.id === id);
+    const deletedTask = deletedIndex >= 0 ? tasks[deletedIndex] : undefined;
     setTasks((prev) => prev.filter((t) => t.id !== id));
     removeCachedTask(id);
     if (selectedTaskId === id) {
@@ -837,9 +990,21 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
 
     if (isConnectedCrm && !id.startsWith("task-")) {
-      void ideCrmClient.deleteTask(id).then(() => removeLocalTaskPresentation(id)).catch(() => {
-        setSyncError("Não foi possível excluir a tarefa no CRM. Atualize os dados para recuperá-la.");
-      });
+      void ideCrmClient
+        .deleteTask(id)
+        .then(() => removeLocalTaskPresentation(id))
+        .catch(() => {
+          if (deletedTask) {
+            setTasks((prev) => {
+              if (prev.some((t) => t.id === deletedTask.id)) return prev;
+              const next = [...prev];
+              next.splice(Math.min(deletedIndex, next.length), 0, deletedTask);
+              return next;
+            });
+            addCachedTask(deletedTask);
+          }
+          setSyncError("Não foi possível excluir a tarefa no CRM. Tente novamente.");
+        });
     }
   }
 
@@ -871,14 +1036,16 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           next.splice(targetIndex, 0, updatedDragged);
         }
       }
-      setCachedTasks(selectedProjectId, next);
+      if (selectedProjectId || !selectedManagementId) {
+        setCachedTasks(selectedProjectId, next);
+      }
       return next;
     });
 
     if (
       isConnectedCrm &&
       !draggedTaskId.startsWith("task-") &&
-      dragged.status !== targetStatus
+      normalizeTaskStatus(dragged.status) !== normalizeTaskStatus(targetStatus)
     ) {
       void ideCrmClient
         .updateTask(
@@ -897,7 +1064,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           ? { ...t, subtasks, updatedAt: new Date().toISOString() }
           : t
       );
-      setCachedTasks(selectedProjectId, next);
+      if (selectedProjectId || !selectedManagementId) {
+        setCachedTasks(selectedProjectId, next);
+      }
       return next;
     });
 
@@ -913,8 +1082,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             .createChecklistItem(taskId, added.title)
             .then((res) => {
               if (res?.item?.id) {
-                setTasks((prev) =>
-                  prev.map((t) =>
+                setTasks((prev) => {
+                  const next = prev.map((t) =>
                     t.id === taskId
                       ? {
                           ...t,
@@ -923,8 +1092,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                           ),
                         }
                       : t
-                  )
-                );
+                  );
+                  const updatedTarget = next.find((t) => t.id === taskId);
+                  if (updatedTarget) updateCachedTask(updatedTarget);
+                  return next;
+                });
               }
             })
             .catch(() => setSyncError("Não foi possível criar o item de checklist no CRM."));
@@ -959,8 +1131,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     taskId: string,
     comment: NonNullable<Task["comments"]>[number]
   ) {
-    setTasks((prev) =>
-      prev.map((t) =>
+    setTasks((prev) => {
+      const next = prev.map((t) =>
         t.id === taskId
           ? {
               ...t,
@@ -968,13 +1140,61 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               updatedAt: new Date().toISOString(),
             }
           : t
-      )
-    );
+      );
+      const updatedTarget = next.find((t) => t.id === taskId);
+      if (updatedTarget) updateCachedTask(updatedTarget);
+      return next;
+    });
 
     if (isConnectedCrm && !taskId.startsWith("task-")) {
       void ideCrmClient
         .createTaskComment(taskId, comment.content)
-        .catch(() => setSyncError("Não foi possível salvar o comentário no CRM."));
+        .then((res) => {
+          if (res?.comment) {
+            setTasks((prev) => {
+              const next = prev.map((t) =>
+                t.id === taskId
+                  ? {
+                      ...t,
+                      comments: (t.comments ?? []).map((c) =>
+                        c.id === comment.id
+                          ? {
+                              ...c,
+                              id: res.comment.id,
+                              author:
+                                res.comment.user?.name ||
+                                res.comment.user?.email ||
+                                c.author,
+                              avatar: res.comment.user?.avatarUrl ?? c.avatar,
+                              createdAt: res.comment.createdAt || c.createdAt,
+                            }
+                          : c
+                      ),
+                    }
+                  : t
+              );
+              const updatedTarget = next.find((t) => t.id === taskId);
+              if (updatedTarget) updateCachedTask(updatedTarget);
+              return next;
+            });
+          }
+        })
+        .catch(() => {
+          setTasks((prev) => {
+            const next = prev.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    comments: (t.comments ?? []).filter((c) => c.id !== comment.id),
+                  }
+                : t
+            );
+            const updatedTarget = next.find((t) => t.id === taskId);
+            if (updatedTarget) updateCachedTask(updatedTarget);
+            return next;
+          });
+          setSyncError("Não foi possível salvar o comentário no CRM.");
+        });
     }
   }
 
@@ -999,7 +1219,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             tag: taskData.tag,
             tags: taskData.tags ?? t.tags,
             estimate: taskData.estimate,
+            projectId: taskData.projectId ?? t.projectId,
             projectName: taskData.projectName ?? t.projectName,
+            assigneeId: taskData.assigneeId !== undefined ? taskData.assigneeId : t.assigneeId,
+            assigneeIds: taskData.assigneeIds !== undefined ? taskData.assigneeIds : t.assigneeIds,
             assignee: taskData.assignee ?? t.assignee,
             assigneeAvatar: taskData.assigneeAvatar ?? t.assigneeAvatar,
             coverUrl: taskData.coverUrl !== undefined ? taskData.coverUrl : t.coverUrl,
@@ -1064,8 +1287,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onOpenNewEvent={() => { setCalendarEditing(null); setCalendarDialogOpen(true); }}
           canCreateCalendarEvent={canCreateCalendarEvent}
           onHome={() => { if (isSecondaryPage) router.push("/"); }}
-          isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           managements={effectiveManagements}
           projects={effectiveProjects}
           selectableProjects={visibleProjects}
@@ -1079,13 +1300,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           selectedProjectId={selectedProjectId}
           onSelectManagement={(id) => { handleSelectManagement(id); if (isSecondaryPage) router.push("/"); }}
           onSelectProject={(id) => { handleSelectProject(id); if (isSecondaryPage) router.push("/"); }}
-          activeModule={activeModule}
-          onModuleChange={setActiveModule}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           filters={filters}
           onFilterChange={(next) => { setFilters(next); if (isSecondaryPage) router.push("/"); }}
-          onOpenNewTaskModal={() => handleOpenNewTask("A Fazer")}
+          onOpenNewTaskModal={() => handleOpenNewTask("PENDENTE")}
           listSearch={listSearch}
           onListSearchChange={(value) => { setListSearch(value); if (isSecondaryPage) router.push("/"); }}
           listDisplayMode={selectedManagementId ? projectViewMode : managementViewMode}
@@ -1094,21 +1313,15 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onListFilterChange={selectedManagementId ? setProjectStatus : setManagementVisibility}
           onOpenNewProject={() => setIsNewProjectOpen(true)}
           onOpenNewManagement={() => setIsNewManagementOpen(true)}
-          totalTasks={filteredTasks.length}
           groupBy={groupBy}
-          groupOrder={groupOrder}
           onGroupByChange={setGroupBy}
-          onGroupOrderChange={setGroupOrder}
           tasks={tasks}
           currentUser={currentUser}
           onLogout={() => void handleDisconnectCrm()}
-          members={members}
           subtaskMode={subtaskMode}
           onSubtaskModeChange={setSubtaskMode}
           showClosedTasks={showClosedTasks}
           onToggleShowClosedTasks={setShowClosedTasks}
-          showClosedSubtasks={showClosedSubtasks}
-          onToggleShowClosedSubtasks={setShowClosedSubtasks}
           onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
         />
 
@@ -1132,7 +1345,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             !isSecondaryPage && selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
-          {!isConnectedCrm && (
+          {!isBootstrapping && !isConnectedCrm && (
             <div role="status" className="mb-4 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
               Modo de demonstração: alterações locais não são salvas no CRM.
             </div>
@@ -1151,9 +1364,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             </div>
           )}
           {isSecondaryPage ? (
-            <CalendarDialogContext.Provider value={{ open: calendarDialogOpen, setOpen: setCalendarDialogOpen, editing: calendarEditing, setEditing: setCalendarEditing, setCanCreate: setCanCreateCalendarEvent }}>
-              {children}
-            </CalendarDialogContext.Provider>
+            children
           ) : activeModule !== "tasks" ? (
             <EnterpriseModulesView
               section={activeModule}
@@ -1167,6 +1378,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
               onOpenConnectModal={() => setIsCrmModalOpen(true)}
             />
+          ) : isBootstrapping ? (
+            <TaskTableSkeleton />
           ) : selectedManagementId === null ? (
             /* Nível 1: Cards de Todas as Gestões */
             <ManagementsGridView
@@ -1201,7 +1414,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             <TaskTableSkeleton />
           ) : filteredTasks.length === 0 ? (
             <EmptyState
-              onAddTask={() => handleOpenNewTask("A Fazer")}
+              onAddTask={() => handleOpenNewTask("PENDENTE")}
               isFiltered={isFiltered}
               onClearFilters={handleClearFilters}
             />
@@ -1225,9 +1438,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               membersLoaded={Boolean(selectedProjectId && projectMembers?.projectId === selectedProjectId)}
               tasks={filteredTasks}
               groupBy={groupBy}
-              groupOrder={groupOrder}
-              onGroupByChange={setGroupBy}
-              onGroupOrderChange={setGroupOrder}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               onOpenDetails={handleOpenDetails}
@@ -1251,8 +1461,21 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         onClose={() => setIsModalOpen(false)}
         task={selectedTask}
         syncError={syncError}
-        members={projectMembers && selectedTask && projectMembers.projectId === selectedTask.projectId ? projectMembers.members : []}
-        onChangeAssignee={projectMembers && selectedTask && projectMembers.projectId === selectedTask.projectId ? handleChangeAssignee : undefined}
+        currentUser={currentUser}
+        members={
+          projectMembers &&
+          (selectedTask?.projectId ?? selectedProjectId) &&
+          projectMembers.projectId === (selectedTask?.projectId ?? selectedProjectId)
+            ? projectMembers.members
+            : []
+        }
+        onChangeAssignee={
+          projectMembers &&
+          selectedTask &&
+          projectMembers.projectId === selectedTask.projectId
+            ? handleChangeAssignee
+            : undefined
+        }
         initialStatus={modalInitialStatus}
         onSave={handleSaveFromModal}
         onUpdateTask={handleUpdateTask}

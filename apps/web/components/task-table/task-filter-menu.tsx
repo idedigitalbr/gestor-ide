@@ -12,9 +12,8 @@ import {
   RotateCcw,
   Tag,
   User,
-  X,
 } from "lucide-react";
-import type { Task, TaskFilter, TaskPriority, TaskStatus } from "@/types/task";
+import type { Task, TaskFilter } from "@/types/task";
 import { ALL_CANONICAL_STATUSES, StatusIcon } from "../task-status-icon";
 import { ALL_CANONICAL_PRIORITIES, PriorityIcon } from "../task-priority-icon";
 import { cn } from "@/lib/utils";
