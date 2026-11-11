@@ -3,6 +3,7 @@
 import React from "react";
 import type { Task, Subtask } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface TaskSegmentedProgressProps {
   task: Task;
@@ -33,7 +34,7 @@ export function computeTaskDescendantsSummary(
     if (visitedTaskIds.has(parentTaskId)) return [];
     visitedTaskIds.add(parentTaskId);
 
-    const direct = allTasks.filter((t) => t.parentTaskId === parentTaskId);
+    const direct = allTasks.filter((t) => t.parentTaskId === parentTaskId && !visitedTaskIds.has(t.id));
     const result: Task[] = [...direct];
     for (const child of direct) {
       result.push(...collectChildTasks(child.id));
@@ -44,7 +45,7 @@ export function computeTaskDescendantsSummary(
   const childTasks = collectChildTasks(task.id);
 
   // Coletar subtasks da própria tarefa e de todas as tarefas descendentes
-  const directSubtasks: Subtask[] = task.subtasks ?? [];
+  const directSubtasks: Subtask[] = [task, ...childTasks].flatMap((item) => item.subtasks ?? []);
 
   // Se não houver nem tarefas filhas nem subtarefas, não há descendentes
   if (childTasks.length === 0 && directSubtasks.length === 0) {
@@ -110,50 +111,30 @@ export function TaskSegmentedProgress({
   const percent = Math.round((completed / total) * 100);
   const isAllDone = completed === total && total > 0;
 
-  // Segmentos normalizados proporcionalmente
-  const segments = [
-    { key: "concluido", count: counts.concluido, color: "bg-[#10b981]" }, // Verde
-    { key: "fazendo", count: counts.fazendo, color: "bg-[#8b5cf6]" }, // Roxo/Azul
-    { key: "revisao", count: counts.revisao, color: "bg-[#f59e0b]" }, // Laranja
-    { key: "bloqueado", count: counts.bloqueado, color: "bg-[#ef4444]" }, // Vermelho
-    { key: "pendente", count: counts.pendente, color: "bg-[#374151]" }, // Grafite
-  ].filter((s) => s.count > 0);
+  const segmentCount = Math.min(total, 6);
+  const statuses = [
+    ...Array(counts.concluido).fill("bg-primary"),
+    ...Array(counts.fazendo).fill("bg-primary/75"),
+    ...Array(counts.revisao).fill("bg-primary/50"),
+    ...Array(counts.bloqueado).fill("bg-destructive"),
+    ...Array(counts.pendente).fill("bg-muted-foreground/30"),
+  ] as string[];
 
   return (
-    <div
-      className={`inline-flex items-center gap-1.5 shrink-0 select-none group/prog relative align-middle ${
-        className ?? ""
-      }`}
-    >
-      {/* Barra segmentada */}
-      <div className="flex h-[7px] w-12 rounded-[2px] overflow-hidden bg-[#222533] gap-[1px]">
-        {isAllDone ? (
-          <div className="h-full w-full bg-[#10b981]" />
-        ) : (
-          segments.map((seg) => {
-            const widthPct = Math.max(8, Math.round((seg.count / total) * 100));
-            return (
-              <div
-                key={seg.key}
-                className={`h-full ${seg.color}`}
-                style={{ width: `${widthPct}%` }}
-              />
-            );
-          })
-        )}
-      </div>
-
-      {/* Contagem discreta ao lado */}
-      <span className="text-[11px] font-mono font-medium text-muted-foreground/80">
-        {completed}/{total}
-      </span>
-
-      {/* Tooltip flutuante no hover estilo Mockup Anexo 8 & 9 */}
-      <div className="opacity-0 group-hover/prog:opacity-100 transition-opacity duration-150 pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-40 px-2.5 py-1 rounded-md bg-white text-black text-[11px] font-semibold shadow-xl whitespace-nowrap">
-        Feito {completed}/{total} {percent}%
-        {/* Setinha apontando para baixo */}
-        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-white" />
-      </div>
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-flex items-center gap-2 shrink-0 select-none ${className ?? ""}`} tabIndex={0} aria-label={`Feito ${completed} de ${total}, ${percent}%`}>
+            <span className="flex h-2.5 gap-0.5" aria-hidden="true">
+              {Array.from({ length: segmentCount }, (_, index) => (
+                <span key={index} className={`h-full w-2 rounded-[2px] ${isAllDone ? "bg-primary" : statuses[Math.floor((index * total) / segmentCount)]}`} />
+              ))}
+            </span>
+            <span className="text-[11px] font-medium text-muted-foreground">{completed}/{total}</span>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Feito {completed}/{total} {percent}%</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

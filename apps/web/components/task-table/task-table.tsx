@@ -78,6 +78,7 @@ import { getLocalFreeGroups, setLocalFreeGroups } from "@/lib/gestor-cache";
 interface TaskTableProps {
   tasks: Task[];
   onUpdateTask: (task: Task) => void;
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   onDeleteTask: (id: string) => void;
   onOpenDetails: (task: Task) => void;
   onAddTask: (
@@ -156,6 +157,7 @@ function getTaskTypeCategory(task: Task): string {
 export function TaskTable({
   tasks,
   onUpdateTask,
+  onChangeAssignee,
   onDeleteTask,
   onOpenDetails,
   onAddTask,
@@ -479,6 +481,17 @@ export function TaskTable({
     for (const id of selectedIds) {
       const t = tasks.find((item) => item.id === id);
       if (t) onUpdateTask({ ...t, priority });
+    }
+    setSelectedIds(new Set());
+  }
+
+  function handleBulkTagChange(tag: string) {
+    for (const id of selectedIds) {
+      const task = tasks.find((item) => item.id === id);
+      if (task) {
+        const tags = Array.from(new Set([...(task.tags ?? (task.tag ? [task.tag] : [])), tag]));
+        onUpdateTask({ ...task, tag: tags[0], tags });
+      }
     }
     setSelectedIds(new Set());
   }
@@ -855,17 +868,8 @@ export function TaskTable({
         : Boolean(expandedTasks[task.id]);
 
     const itemDef = getItemTypeDefinition(task.itemType);
+    const isSpecial = normalizeItemType(task.itemType) !== "TASK" || childTasks.length > 0;
     const stripeColor = itemDef.color || parentStripeColor || "#3b82f6";
-
-    // Recuo progressivo
-    const indentPaddingClass =
-      depth === 0
-        ? "pl-3.5"
-        : depth === 1
-        ? "pl-8"
-        : depth === 2
-        ? "pl-14"
-        : "pl-20";
 
     return (
       <React.Fragment key={task.id}>
@@ -876,37 +880,40 @@ export function TaskTable({
           onDragOver={(e) => handleDragOverRow(e, task.id, task.status)}
           onDrop={(e) => handleDropOnRow(e, task, task.status)}
           className={cn(
-            "flex items-center justify-between h-[50px] min-h-[50px] pr-3 transition-colors group/row relative border-b border-[#1c1f2d]/50",
-            indentPaddingClass,
+            "flex items-center justify-between h-[50px] min-h-[50px] pr-3 transition-colors group/row relative border-b border-border/50",
             isSelected
-              ? "bg-[#1d2238]/80"
-              : "hover:bg-[#151722]/80 bg-[#121317]",
+              ? "bg-accent"
+              : "hover:bg-accent/40",
             isDragged && "opacity-40",
             isDragTarget && "border-t-2 border-t-primary"
           )}
+          style={{ paddingLeft: `${depth * 36 + 14}px` }}
         >
+          {isSpecial && (
+            <div aria-hidden="true" className="absolute inset-y-0 right-0 rounded-xl border border-border bg-card pointer-events-none" style={{ left: `${depth * 36}px` }} />
+          )}
           {/* Conectores em formato de árvore para filhos */}
           {depth > 0 && (
             <>
               {/* Linha vertical que desce do pai */}
               <div
-                className="absolute top-0 bottom-0 w-[1.5px] bg-[#272a3d] pointer-events-none"
+                className="absolute top-0 bottom-0 w-px bg-border pointer-events-none"
                 style={{
-                  left: `${(depth - 1) * 24 + 18}px`,
+                  left: `${(depth - 1) * 36 + 18}px`,
                 }}
               />
               {/* Ramo curvo de 90° conectando visualmente ao item */}
               <div
-                className="absolute top-1/2 -translate-y-1/2 w-[16px] h-[20px] border-b-[1.5px] border-l-[1.5px] border-[#272a3d] rounded-bl-[6px] pointer-events-none"
+                className="absolute top-0 w-7 h-1/2 border-b border-l border-border rounded-bl-md pointer-events-none"
                 style={{
-                  left: `${(depth - 1) * 24 + 18}px`,
+                  left: `${(depth - 1) * 36 + 18}px`,
                 }}
               />
             </>
           )}
 
           {/* Lado Esquerdo: Drag Handle + Checkbox + Expand + Tipo Especial + Título + Progresso Segmentado + Quick Actions */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-4">
+          <div className="relative flex items-center gap-1.5 flex-1 min-w-0 pr-4">
             {/* Drag Handle ::: */}
             <span
               className="opacity-0 group-hover/row:opacity-100 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing transition-opacity shrink-0"
@@ -935,6 +942,8 @@ export function TaskTable({
               <button
                 type="button"
                 onClick={() => toggleExpandTask(task.id)}
+                aria-expanded={isTaskExpanded}
+                aria-label={`${isTaskExpanded ? "Recolher" : "Expandir"} ${task.title}`}
                 className="p-1 rounded hover:bg-[#202336] text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
                 title={
                   isTaskExpanded ? "Recolher descendentes" : "Expandir descendentes"
@@ -1000,11 +1009,12 @@ export function TaskTable({
                   type="button"
                   onClick={() => onOpenDetails(task)}
                   className={cn(
-                    "text-left text-xs font-medium hover:text-[#3b82f6] truncate cursor-pointer transition-colors max-w-xl",
+                    "text-left text-xs hover:text-primary truncate cursor-pointer transition-colors max-w-xl",
+                    isSpecial ? "font-semibold" : "font-medium",
                     task.status === "Concluído" ||
                       normalizeTaskStatus(task.status) === "CONCLUÍDO"
                       ? "line-through text-muted-foreground/60"
-                      : "text-[#e2e4f0]"
+                      : "text-foreground"
                   )}
                   title="Clique para abrir detalhes da tarefa"
                 >
@@ -1015,7 +1025,7 @@ export function TaskTable({
                 <TaskSegmentedProgress task={task} allTasks={tasks} />
 
                 {/* Botões Rápidos Inline no Hover (+ Subtarefa, Tag, Lápis) */}
-                <div className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 flex items-center gap-1 ml-1 transition-opacity shrink-0">
+                <div className="absolute right-2 z-10 opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 flex items-center gap-1 rounded-md bg-card transition-opacity">
                   {getAllowedGroupTypes(normalizeItemType(task.itemType)).length > 0 && (
                     <CreateGroupPopover compact parentType={normalizeItemType(task.itemType)} members={projectMembers} membersLoaded={membersLoaded} onCreateSpecialGroup={(data) => handleCreateSpecialGroup(data, task.id)} />
                   )}
@@ -1077,13 +1087,13 @@ export function TaskTable({
           </div>
 
           {/* Lado Direito: Colunas Alinhadas (STATUS | DATA | RESPONSÁVEL | ... | AÇÕES) */}
-          <div className="flex items-center shrink-0">
+          <div className="relative flex items-stretch self-stretch shrink-0">
             {columns
               .filter((c) => !hiddenColumnIds.has(c.id))
               .map((col) => {
                 if (col.id === "status") {
                   return (
-                    <div key={col.id} className="w-36 flex items-center pr-2">
+                    <div key={col.id} className="w-52 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskSolidStatusBadge
                         status={task.status}
                         onChangeStatus={(next) =>
@@ -1096,7 +1106,7 @@ export function TaskTable({
 
                 if (col.id === "dueDate") {
                   return (
-                    <div key={col.id} className="w-44 flex items-center pr-2">
+                    <div key={col.id} className="w-44 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskTimelineDateCell
                         startDate={task.startDate}
                         dueDate={task.dueDate}
@@ -1115,13 +1125,16 @@ export function TaskTable({
 
                 if (col.id === "assignee") {
                   return (
-                    <div key={col.id} className="w-36 flex items-center pr-2">
+                    <div key={col.id} className="w-36 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskAssigneeCell
                         assignee={task.assignee}
+                        assigneeId={task.assigneeId}
                         assigneeAvatar={task.assigneeAvatar}
-                        onUpdateAssignee={(assignee, assigneeAvatar) =>
-                          onUpdateTask({ ...task, assignee, assigneeAvatar })
-                        }
+                        members={projectMembers}
+                        membersLoaded={membersLoaded}
+                        onUpdateAssignee={(_assignee, _assigneeAvatar, assigneeId) => {
+                          if (onChangeAssignee) void onChangeAssignee(task.id, projectMembers.find((member) => member.userId === assigneeId) ?? null);
+                        }}
                       />
                     </div>
                   );
@@ -1131,7 +1144,7 @@ export function TaskTable({
                 return (
                   <div
                     key={col.id}
-                    className="w-28 flex items-center text-xs text-muted-foreground/50 px-1"
+                    className="w-28 flex items-center border-l border-muted-foreground/40 pl-3 pr-2 text-xs text-muted-foreground/50"
                   >
                     —
                   </div>
@@ -1188,7 +1201,8 @@ export function TaskTable({
 
         {/* Itens Descendentes (Child Tasks e Subtasks) quando Expandido */}
         {isTaskExpanded && (
-          <div className="relative">
+          <div className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+            {hasDescendants && <div aria-hidden="true" className="absolute top-0 bottom-0 w-px bg-border pointer-events-none" style={{ left: `${depth * 36 + 18}px` }} />}
             {/* 1. Renderizar Child Tasks recursivamente */}
             {childTasks.map((child) =>
               renderTaskRow(child, depth + 1, stripeColor)
@@ -1202,7 +1216,7 @@ export function TaskTable({
             {addingSubtaskForId === task.id && (
               <div
                 className="py-2 pr-3 bg-[#10121d] flex items-center gap-2 border-b border-[#1c1f2d]/50"
-                style={{ paddingLeft: `${(depth + 1) * 24 + 14}px` }}
+                style={{ paddingLeft: `${(depth + 1) * 36 + 14}px` }}
               >
                 <form
                   onSubmit={(e) => handleSaveNewSubtask(e, task)}
@@ -1247,19 +1261,40 @@ export function TaskTable({
   // ---------------------------------------------------------------------------
   // Renderizador de Lista de Subtarefas / Checklists
   // ---------------------------------------------------------------------------
+  function renderSubtaskColumns(task: Task, subtask: Subtask) {
+    const status = subtask.completed ? "CONCLUÍDO" : subtask.inProgress ? "FAZENDO AGORA" : "PENDENTE";
+    return (
+      <div className="flex items-stretch self-stretch shrink-0">
+        {columns.filter((column) => !hiddenColumnIds.has(column.id)).map((column) => {
+          const width = column.id === "status" ? "w-52" : column.id === "dueDate" ? "w-44" : column.id === "assignee" ? "w-36" : "w-28";
+          return (
+            <div key={column.id} className={cn(width, "flex items-center border-l border-muted-foreground/40 pl-3 pr-2")}>
+              {column.id === "status" && <TaskSolidStatusBadge status={status} size="sm" />}
+              {column.id === "dueDate" && <TaskTimelineDateCell dueDate={subtask.dueDate} status={status} onUpdateDates={({ dueDate }) => handleUpdateSubtaskMeta(task, subtask.id, { dueDate: dueDate || undefined })} />}
+              {column.id === "assignee" && <TaskAssigneeCell assignee={subtask.assignee} assigneeAvatar={subtask.assigneeAvatar} members={projectMembers} membersLoaded={membersLoaded} onUpdateAssignee={(assignee, assigneeAvatar) => handleUpdateSubtaskMeta(task, subtask.id, { assignee, assigneeAvatar })} />}
+              {column.id !== "status" && column.id !== "dueDate" && column.id !== "assignee" && <span className="text-muted-foreground">—</span>}
+            </div>
+          );
+        })}
+        <div className="w-8" />
+      </div>
+    );
+  }
+
   function renderSubtasksList(
     task: Task,
     depth: number,
-    stripeColor: string
+    stripeColor: string,
+    parentId?: string
   ): React.ReactNode {
     const visibleSubtasks = (task.subtasks ?? []).filter((st) =>
       showClosedSubtasks ? true : !st.completed
     );
 
     const parentIds = new Set(visibleSubtasks.map((s) => s.id));
-    const rootSubtasks = visibleSubtasks.filter(
-      (st) => !st.parentId || !parentIds.has(st.parentId)
-    );
+    const rootSubtasks = visibleSubtasks.filter((st) => parentId
+      ? st.parentId === parentId
+      : !st.parentId || !parentIds.has(st.parentId));
 
     return rootSubtasks.map((st) => {
       const childItems = visibleSubtasks.filter((ch) => ch.parentId === st.id);
@@ -1281,17 +1316,17 @@ export function TaskTable({
       return (
         <React.Fragment key={st.id}>
           <div
-            className="flex items-center justify-between h-[46px] pr-3 hover:bg-[#151722]/60 bg-[#0e1017] transition-colors group/subrow relative border-b border-[#1c1f2d]/40"
-            style={{ paddingLeft: `${depth * 24 + 14}px` }}
+            className="flex items-center justify-between h-[46px] pr-3 hover:bg-accent/40 bg-background transition-colors group/subrow relative border-b border-border/40"
+            style={{ paddingLeft: `${depth * 36 + 14}px` }}
           >
             {/* Conectores em formato de árvore */}
             <div
-              className="absolute top-0 bottom-0 w-[1.5px] bg-[#272a3d] pointer-events-none"
-              style={{ left: `${(depth - 1) * 24 + 18}px` }}
+              className="absolute top-0 bottom-0 w-px bg-border pointer-events-none"
+              style={{ left: `${(depth - 1) * 36 + 18}px` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-[16px] h-[20px] border-b-[1.5px] border-l-[1.5px] border-[#272a3d] rounded-bl-[6px] pointer-events-none"
-              style={{ left: `${(depth - 1) * 24 + 18}px` }}
+              className="absolute top-0 w-7 h-1/2 border-b border-l border-border rounded-bl-md pointer-events-none"
+              style={{ left: `${(depth - 1) * 36 + 18}px` }}
             />
 
             {/* Lado Esquerdo: Checkbox inteligente + Título */}
@@ -1401,167 +1436,30 @@ export function TaskTable({
             </div>
 
             {/* Lado Direito: Metadados alinhados às colunas */}
-            <div className="flex items-center shrink-0">
-              {/* Coluna STATUS */}
-              <div className="w-36 flex items-center pr-2">
-                <TaskSolidStatusBadge
-                  status={st.completed ? "CONCLUÍDO" : "PENDENTE"}
-                  size="sm"
-                />
-              </div>
-
-              {/* Coluna DATA */}
-              <div className="w-44 flex items-center pr-2">
-                <TaskTimelineDateCell
-                  dueDate={st.dueDate}
-                  status={st.completed ? "CONCLUÍDO" : "PENDENTE"}
-                  onUpdateDates={({ dueDate }) =>
-                    handleUpdateSubtaskMeta(task, st.id, {
-                      dueDate: dueDate || undefined,
-                    })
-                  }
-                />
-              </div>
-
-              {/* Coluna RESPONSÁVEL */}
-              <div className="w-36 flex items-center pr-2">
-                <TaskAssigneeCell
-                  assignee={st.assignee}
-                  assigneeAvatar={st.assigneeAvatar}
-                  onUpdateAssignee={(assignee, assigneeAvatar) =>
-                    handleUpdateSubtaskMeta(task, st.id, {
-                      assignee,
-                      assigneeAvatar,
-                    })
-                  }
-                />
-              </div>
-
-              {/* Espaço da coluna Ações para manter alinhamento exato */}
-              <div className="w-8" />
-            </div>
+            {renderSubtaskColumns(task, st)}
           </div>
 
-          {/* Sub-itens aninhados Nível 2 */}
-          {childItems.map((ch) => {
-            const chEditKey = `${task.id}:${ch.id}`;
-            const isChEditing = editingSubtaskKey === chEditKey;
-            return (
-              <div
-                key={ch.id}
-                className="flex items-center justify-between h-[42px] pr-3 hover:bg-[#151722]/50 bg-[#0a0c13] transition-colors group/chrow relative border-b border-[#1c1f2d]/30"
-                style={{ paddingLeft: `${(depth + 1) * 24 + 14}px` }}
-              >
-                <div
-                  className="absolute top-0 bottom-0 w-[1.5px] bg-[#272a3d] pointer-events-none"
-                  style={{ left: `${depth * 24 + 18}px` }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-[16px] h-[20px] border-b-[1.5px] border-l-[1.5px] border-[#272a3d] rounded-bl-[6px] pointer-events-none"
-                  style={{ left: `${depth * 24 + 18}px` }}
-                />
-
-                <div className="flex items-center gap-2 flex-1 min-w-0 pr-4">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleSubtask(task, ch.id)}
-                    className="p-0.5 rounded hover:bg-secondary/60 transition-colors cursor-pointer shrink-0"
-                  >
-                    {ch.completed ? (
-                      <span className="w-3.5 h-3.5 rounded-[3px] bg-[#10b981] border border-[#10b981] flex items-center justify-center text-white shadow-xs">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </span>
-                    ) : (
-                      <span className="w-3.5 h-3.5 rounded-[3px] border-[1.5px] border-[#8e92ab] hover:border-white bg-transparent transition-colors block" />
-                    )}
-                  </button>
-
-                  {isChEditing ? (
-                    <div className="flex items-center gap-1.5 flex-1 max-w-sm">
-                      <Input
-                        autoFocus
-                        value={editingSubtaskTitle}
-                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            handleSaveSubtaskTitle(task, ch.id);
-                          else if (e.key === "Escape") setEditingSubtaskKey(null);
-                        }}
-                        className="h-6 text-xs bg-background"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => handleSaveSubtaskTitle(task, ch.id)}
-                        className="h-6 px-2 text-[10px]"
-                      >
-                        Salvar
-                      </Button>
-                    </div>
-                  ) : (
-                    <span
-                      onClick={() => {
-                        setEditingSubtaskKey(chEditKey);
-                        setEditingSubtaskTitle(ch.title);
-                      }}
-                      className={cn(
-                        "text-[11.5px] truncate cursor-text",
-                        ch.completed
-                          ? "line-through text-muted-foreground/60"
-                          : "text-[#c2c5db]"
-                      )}
-                    >
-                      {ch.title}
-                    </span>
-                  )}
-
-                  <div className="opacity-0 group-hover/chrow:opacity-100 flex items-center gap-1 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSubtaskKey(chEditKey);
-                        setEditingSubtaskTitle(ch.title);
-                      }}
-                      className="p-0.5 rounded text-muted-foreground hover:text-white cursor-pointer"
-                    >
-                      <Pencil className="w-2.5 h-2.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSubtask(task, ch.id)}
-                      className="p-0.5 rounded text-muted-foreground hover:text-destructive cursor-pointer"
-                    >
-                      <Trash2 className="w-2.5 h-2.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center shrink-0">
-                  <div className="w-36 flex items-center pr-2">
-                    <TaskSolidStatusBadge
-                      status={ch.completed ? "CONCLUÍDO" : "PENDENTE"}
-                      size="sm"
-                    />
-                  </div>
-                  <div className="w-44" />
-                  <div className="w-36" />
-                  <div className="w-8" />
-                </div>
-              </div>
-            );
-          })}
+          {isParentOfChildren && renderSubtasksList(task, depth + 1, stripeColor, st.id)}
         </React.Fragment>
       );
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // JSX Principal
-  // ---------------------------------------------------------------------------
-  return (
-    <div className="w-full min-w-[760px] bg-[#000000] select-none text-xs relative pb-24 p-4 sm:p-6 space-y-4">
-      {/* Cabeçalho Global de Colunas */}
-      <div className="flex items-center justify-between px-3 py-2.5 border border-[#1f212a] text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-[#121317] rounded-xl shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
+  function renderColumnHeader(rootTasks: Task[]) {
+    // O indicador usa o mesmo cálculo das etapas, incluindo seus descendentes.
+    const taskIds = new Set(tasks.map((task) => task.id));
+    let summaryId = "__section_progress__";
+    while (taskIds.has(summaryId)) summaryId += "_";
+    const summaryRoot = rootTasks[0]
+      ? { ...rootTasks[0], id: summaryId, subtasks: [] }
+      : null;
+    const rootsById = new Set(rootTasks.map((task) => task.id));
+    const summaryTasks = tasks.map((task) =>
+      rootsById.has(task.id) ? { ...task, parentTaskId: summaryId } : task
+    );
+
+    return (
+      <div className="flex items-center justify-between px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         <div className="flex items-center gap-2 flex-1 min-w-0 pl-7">
           <ColumnHeaderCell
             id="title"
@@ -1573,17 +1471,19 @@ export function TaskTable({
             onSetSort={handleSetSort}
             className="p-0 hover:bg-transparent text-[#e2e4f0]"
           />
+          {summaryRoot && <TaskSegmentedProgress task={summaryRoot} allTasks={summaryTasks} />}
         </div>
 
-        <div className="flex items-center shrink-0">
+        <div className="flex items-stretch self-stretch shrink-0">
           {columns
             .filter((c) => !hiddenColumnIds.has(c.id))
             .map((col, idx, arr) => (
               <div
                 key={col.id}
                 className={cn(
+                  "flex items-center border-l border-muted-foreground/40 pl-3",
                   col.id === "status"
-                    ? "w-36 pr-2"
+                    ? "w-52 pr-2"
                     : col.id === "dueDate"
                     ? "w-44 pr-2"
                     : col.id === "assignee"
@@ -1644,23 +1544,63 @@ export function TaskTable({
           </div>
         </div>
       </div>
+    );
+  }
+
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  let maxDepth = 0;
+  for (const task of tasks) {
+    let depth = 0;
+    let parentId = task.parentTaskId;
+    const visited = new Set([task.id]);
+    while (parentId && taskById.has(parentId) && !visited.has(parentId)) {
+      visited.add(parentId);
+      depth++;
+      parentId = taskById.get(parentId)?.parentTaskId;
+    }
+    maxDepth = Math.max(maxDepth, depth);
+    const subtasksById = new Map((task.subtasks ?? []).map((item) => [item.id, item]));
+    for (const item of task.subtasks ?? []) {
+      let itemDepth = depth + 1;
+      let itemParent = item.parentId;
+      const visitedItems = new Set([item.id]);
+      while (itemParent && subtasksById.has(itemParent) && !visitedItems.has(itemParent)) {
+        visitedItems.add(itemParent);
+        itemDepth++;
+        itemParent = subtasksById.get(itemParent)?.parentId;
+      }
+      maxDepth = Math.max(maxDepth, itemDepth);
+    }
+  }
+  const metadataWidth = columns.filter((column) => !hiddenColumnIds.has(column.id)).reduce((width, column) => width + (column.id === "status" ? 208 : column.id === "dueDate" ? 176 : column.id === "assignee" ? 144 : 112), 32);
+
+  // ---------------------------------------------------------------------------
+  // JSX Principal
+  // ---------------------------------------------------------------------------
+  return (
+    <div className="w-full bg-background select-none text-xs relative pb-24 p-4 sm:p-6 space-y-4" style={{ minWidth: Math.max(760, metadataWidth + maxDepth * 36 + 280) }}>
+
 
       {/* --------------------------------------------------------------------- */}
       {/* MODO 1: AGRUPAMENTO NATURAL (groupBy === "none") */}
       {/* --------------------------------------------------------------------- */}
       {groupBy === "none" && naturalGroups && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {naturalGroups.specialRootTasks.length > 0 && (
+            <section aria-label="Projeto" className="rounded-2xl border border-border bg-card/30 p-3 space-y-3">
+              {renderColumnHeader(naturalGroups.specialRootTasks)}
+              <div className="space-y-3">
           {/* A. Grupos Especiais (Tarefas Raiz com Tipo Especial / Descendentes) */}
           {naturalGroups.specialRootTasks.map((rootTask) => {
             const itemDef = getItemTypeDefinition(rootTask.itemType);
-            const stripeColor = itemDef.color || "#8b5cf6";
+            const stripeColor = normalizeItemType(rootTask.itemType) === "TASK" ? "var(--primary)" : itemDef.color;
             const isCollapsed = Boolean(collapsedGroups[rootTask.id]);
             const isSelected = selectedIds.has(rootTask.id);
 
             return (
               <div
                 key={rootTask.id}
-                className="bg-[#121317] border border-[#1f212a] rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] overflow-hidden relative transition-all"
+                className="bg-background border border-border rounded-2xl overflow-hidden relative transition-colors"
               >
                 {/* Faixa Fina Colorida na Lateral Esquerda do Bloco (3.5px) */}
                 <div
@@ -1674,6 +1614,14 @@ export function TaskTable({
             );
           })}
 
+              </div>
+            </section>
+          )}
+
+          {(naturalGroups.freeGroups.length > 0 || naturalGroups.regularRootTasks.length > 0 || naturalGroups.specialRootTasks.length === 0) && (
+            <section aria-label="Outras tarefas" className="rounded-2xl border border-border bg-card/30 p-3 space-y-3">
+              {renderColumnHeader([...naturalGroups.freeGroups.flatMap((group) => group.tasks), ...naturalGroups.regularRootTasks])}
+              <div className="space-y-3">
           {/* B. Grupos Livres (Containers Visuais sem status/data próprios) */}
           {naturalGroups.freeGroups.map((group) => {
             const isCollapsed = Boolean(collapsedGroups[group.name]);
@@ -1804,27 +1752,17 @@ export function TaskTable({
           })}
 
           {/* C. Tarefas Regulares Raízes Sem Grupo Especial nem Livre */}
-          {naturalGroups.regularRootTasks.length > 0 && (
-            <div className="bg-[#121317] border border-[#1f212a] rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] overflow-hidden relative mb-4">
-              <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-[#64748b] rounded-l-2xl z-20 pointer-events-none" />
-
-              <div className="flex items-center justify-between h-[50px] px-3.5 bg-[#141622] border-b border-[#1f212a]">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-xs text-white">
-                    Tarefas gerais
-                  </span>
-                  <span className="text-[11px] text-muted-foreground font-mono">
-                    {naturalGroups.regularRootTasks.length} tarefas
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                {sortTasksList(naturalGroups.regularRootTasks).map((t) =>
-                  renderTaskRow(t, 0, "#64748b")
-                )}
-              </div>
+          {sortTasksList(naturalGroups.regularRootTasks).map((task) => (
+            <div
+              key={task.id}
+              className="bg-card border border-border rounded-2xl overflow-hidden relative"
+            >
+              <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-muted-foreground rounded-l-2xl z-20 pointer-events-none" />
+              {renderTaskRow(task, 0)}
             </div>
+          ))}
+              </div>
+            </section>
           )}
         </div>
       )}
@@ -1834,6 +1772,7 @@ export function TaskTable({
       {/* --------------------------------------------------------------------- */}
       {groupBy !== "none" && (
         <div className="space-y-4">
+          {renderColumnHeader(tasks.filter((task) => !task.parentTaskId || !tasks.some((parent) => parent.id === task.parentTaskId)))}
           {computedGroups.map((group) => {
             const isCollapsed = Boolean(collapsedGroups[group.id]);
             const groupTasks = sortTasksList(group.tasks);
@@ -2043,6 +1982,17 @@ export function TaskTable({
                 >
                   <PriorityIcon priority={p} showLabel />
                 </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs">Adicionar tag</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center">
+              {PRESET_TAGS.map((tag) => (
+                <DropdownMenuItem key={tag} onSelect={() => handleBulkTagChange(tag)}>#{tag}</DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>

@@ -135,14 +135,8 @@
 }
 
 html {
-  zoom: 1.1;
+  font-size: 110%;
   height: 100%;
-}
-
-@supports not (zoom: 1.1) {
-  html {
-    font-size: 110%;
-  }
 }
 
 body {

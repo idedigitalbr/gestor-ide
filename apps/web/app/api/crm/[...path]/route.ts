@@ -31,21 +31,20 @@ async function forwardToIdeCrm(request: Request, context: RouteContext) {
   const bearer = extractBearerFromRequest(request);
   if (bearer) {
     headers.set("Authorization", `Bearer ${bearer}`);
-  } else {
-    const upstreamCookie = await getStoredUpstreamCookieHeader();
-    if (upstreamCookie) {
-      headers.set("Cookie", upstreamCookie);
-    }
+  }
+  const upstreamCookie = await getStoredUpstreamCookieHeader();
+  if (upstreamCookie) {
+    headers.set("Cookie", upstreamCookie);
   }
 
   const isBodyMethod = !["GET", "HEAD"].includes(request.method.toUpperCase());
-  const bodyText = isBodyMethod ? await request.text() : undefined;
+  const body = isBodyMethod ? await request.arrayBuffer() : undefined;
 
   try {
     const upstreamRes = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: bodyText && bodyText.length > 0 ? bodyText : undefined,
+      body: body && body.byteLength > 0 ? body : undefined,
       cache: "no-store",
       keepalive: true,
     });

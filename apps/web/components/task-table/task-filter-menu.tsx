@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useId } from "react";
+import React, { useState, useId } from "react";
 import {
   Calendar,
   Check,
@@ -18,6 +18,7 @@ import type { Task, TaskFilter, TaskPriority, TaskStatus } from "@/types/task";
 import { ALL_CANONICAL_STATUSES, StatusIcon } from "../task-status-icon";
 import { ALL_CANONICAL_PRIORITIES, PriorityIcon } from "../task-priority-icon";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 export interface TaskFilterMenuProps {
   filters: TaskFilter;
@@ -73,38 +74,7 @@ export function TaskFilterMenu({
 }: TaskFilterMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>("status");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const triggerId = useId();
-
-  // Fecha ao clicar fora ou pressionar Escape
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleMouseDown(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node) &&
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
 
   const activeCount = countActiveFilters(filters);
   const hasActiveFilters = activeCount > 0;
@@ -179,12 +149,13 @@ export function TaskFilterMenu({
   };
 
   return (
-    <div className={cn("relative inline-block", className)} ref={containerRef}>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <div className={cn("relative inline-block", className)}>
       {/* Botão de Disparo do Filtro */}
+      <PopoverTrigger asChild>
       <button
         id={triggerId}
         type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
         aria-expanded={isOpen}
         aria-haspopup="true"
         title="Filtrar tarefas"
@@ -217,29 +188,26 @@ export function TaskFilterMenu({
           <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" />
         )}
       </button>
+      </PopoverTrigger>
 
       {/* Popover do Filtro Avançado */}
-      {isOpen && (
-        <div
-          ref={popoverRef}
-          role="dialog"
+        <PopoverContent
+          align={align}
+          collisionPadding={8}
           aria-label="Filtros de tarefas"
-          className={cn(
-            "absolute mt-1.5 w-[min(460px,calc(100vw-2rem))] z-50 rounded-xl border border-[#2c2f44] bg-[#161722] text-[#e2e4ef] shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col",
-            align === "end" ? "right-0" : "left-0"
-          )}
+          className="w-[460px] rounded-xl p-2 shadow-2xl"
         >
           {/* Header do Popover com Limpar Filtros */}
-          <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#25283a]">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
             <div className="flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-[#a78bfa]" />
-              <span className="text-xs font-bold text-white">Filtrar por</span>
+              <Filter className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-bold text-foreground">Filtrar por</span>
             </div>
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="inline-flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] text-destructive hover:text-destructive transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Limpar filtros</span>
@@ -250,7 +218,7 @@ export function TaskFilterMenu({
           {/* Corpo com Navegação Lateral e Opções */}
           <div className="flex min-h-[220px] max-h-[320px] pt-2">
             {/* Abas Laterais (Dimensões do Anexo 1) */}
-            <div className="w-40 border-r border-[#25283a] pr-2 space-y-0.5">
+            <div className="w-28 shrink-0 border-r border-border pr-2 space-y-0.5 sm:w-40">
               {FILTER_TABS.map((tab) => {
                 const Icon = tab.icon;
                 const count = tabCounts[tab.id];
@@ -264,21 +232,21 @@ export function TaskFilterMenu({
                     className={cn(
                       "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
                       isSelected
-                        ? "bg-[#25283b] text-white"
-                        : "text-[#c4c7db] hover:bg-[#1e2030] hover:text-white"
+                        ? "bg-secondary text-foreground"
+                        : "text-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <div className="flex items-center gap-2 truncate">
                       <Icon
                         className={cn(
                           "w-3.5 h-3.5 shrink-0",
-                          isSelected ? "text-[#a78bfa]" : "text-[#8e92a8]"
+                          isSelected ? "text-primary" : "text-muted-foreground"
                         )}
                       />
                       <span className="truncate">{tab.label}</span>
                     </div>
                     {count > 0 && (
-                      <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-[#7c5dfa] text-white text-[10px] font-bold">
+                      <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
                         {count}
                       </span>
                     )}
@@ -288,7 +256,7 @@ export function TaskFilterMenu({
             </div>
 
             {/* Conteúdo da Aba Selecionada */}
-            <div className="flex-1 pl-3 overflow-y-auto space-y-1">
+            <div className="min-w-0 flex-1 pl-3 overflow-y-auto space-y-1">
               {activeTab === "status" && (
                 <div className="space-y-1">
                   {ALL_CANONICAL_STATUSES.map((status) => {
@@ -305,8 +273,8 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -314,7 +282,7 @@ export function TaskFilterMenu({
                           <span>{status}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -330,16 +298,16 @@ export function TaskFilterMenu({
                     className={cn(
                       "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                       filters.assignees?.includes("unassigned")
-                        ? "bg-[#201e33] text-white"
-                        : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                        ? "bg-secondary text-foreground"
+                        : "text-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <User className="w-3.5 h-3.5 text-[#8e92a8]" />
+                      <User className="w-3.5 h-3.5 text-muted-foreground" />
                       <span>Sem responsável</span>
                     </div>
                     {filters.assignees?.includes("unassigned") && (
-                      <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                      <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                     )}
                   </button>
 
@@ -355,16 +323,16 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <User className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <User className="w-3.5 h-3.5 text-primary" />
                           <span>{assignee}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -388,8 +356,8 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
@@ -400,7 +368,7 @@ export function TaskFilterMenu({
                           <span>{priority}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -416,16 +384,16 @@ export function TaskFilterMenu({
                     className={cn(
                       "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                       filters.tags?.includes("untagged")
-                        ? "bg-[#201e33] text-white"
-                        : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                        ? "bg-secondary text-foreground"
+                        : "text-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Tag className="w-3.5 h-3.5 text-[#8e92a8]" />
+                      <Tag className="w-3.5 h-3.5 text-muted-foreground" />
                       <span>Sem etiqueta</span>
                     </div>
                     {filters.tags?.includes("untagged") && (
-                      <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                      <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                     )}
                   </button>
 
@@ -439,16 +407,16 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <Tag className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Tag className="w-3.5 h-3.5 text-primary" />
                           <span>#{tag}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -481,16 +449,16 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white font-medium"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground font-medium"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <Calendar className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Calendar className="w-3.5 h-3.5 text-primary" />
                           <span>{option.label}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -520,16 +488,16 @@ export function TaskFilterMenu({
                         className={cn(
                           "w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer text-left",
                           isChecked
-                            ? "bg-[#201e33] text-white font-medium"
-                            : "text-[#c4c7db] hover:bg-[#1b1d2b] hover:text-white"
+                            ? "bg-secondary text-foreground font-medium"
+                            : "text-foreground hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <Package className="w-3.5 h-3.5 text-[#a78bfa]" />
+                          <Package className="w-3.5 h-3.5 text-primary" />
                           <span>{option.label}</span>
                         </div>
                         {isChecked && (
-                          <Check className="w-4 h-4 text-[#a78bfa] stroke-[2.5]" />
+                          <Check className="w-4 h-4 text-primary stroke-[2.5]" />
                         )}
                       </button>
                     );
@@ -538,8 +506,8 @@ export function TaskFilterMenu({
               )}
             </div>
           </div>
-        </div>
-      )}
+        </PopoverContent>
     </div>
+    </Popover>
   );
 }

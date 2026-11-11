@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import {
-  Search,
-  Plus,
-  LayoutGrid,
-  List as ListIcon,
   Folder,
   CheckCircle2,
   ListTodo,
@@ -16,35 +12,21 @@ import {
   ArrowRight,
   ExternalLink,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
 
 interface ManagementProjectsViewProps {
+  search: string;
+  statusFilter: string;
+  viewMode: ListDisplayMode;
   management: CrmProjectManagement;
   projects: CrmProject[];
   tasks: Task[];
   onBack?: () => void;
   onSelectProject: (projectId: string) => void;
-  onOpenNewProject?: () => void;
 }
-
-const PROJECT_STATUS_LABELS: Record<string, string> = {
-  all: "Todos os status",
-  active: "Ativo",
-  planning: "Planejamento",
-  in_progress: "Em andamento",
-  paused: "Pausado",
-  completed: "Concluído",
-};
 
 const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }> = {
   low: { label: "Baixa", bg: "bg-blue-500/10", text: "text-blue-500" },
@@ -54,16 +36,16 @@ const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }
 };
 
 export function ManagementProjectsView({
+  search,
+  statusFilter,
+  viewMode,
   management,
   projects,
   tasks,
   onBack,
   onSelectProject,
-  onOpenNewProject,
 }: ManagementProjectsViewProps) {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+
 
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
@@ -242,16 +224,6 @@ export function ManagementProjectsView({
 
             <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
               <span className="text-muted-foreground text-[11px]">Gestão integrada</span>
-              {onOpenNewProject && (
-                <Button
-                  size="sm"
-                  onClick={onOpenNewProject}
-                  className="h-7 text-xs bg-primary text-primary-foreground hover:opacity-90 px-3 gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Novo Projeto</span>
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -324,81 +296,6 @@ export function ManagementProjectsView({
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar projeto por nome, código ou descrição..."
-              className="h-9 pl-9 pr-3 text-xs bg-muted/30 border-border rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Status Filter */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 text-xs border-border bg-card hover:bg-muted/40 font-normal px-3"
-                >
-                  <span>{PROJECT_STATUS_LABELS[statusFilter] || "Status"}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44 bg-popover border-border">
-                {Object.entries(PROJECT_STATUS_LABELS).map(([key, label]) => (
-                  <DropdownMenuItem
-                    key={key}
-                    onClick={() => setStatusFilter(key)}
-                    className={cn(
-                      "text-xs cursor-pointer",
-                      statusFilter === key && "bg-secondary text-secondary-foreground font-medium"
-                    )}
-                  >
-                    {label}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Toggle View: Cards / List */}
-            <div className="flex items-center bg-muted/40 border border-border rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode("cards")}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
-                  viewMode === "cards"
-                    ? "bg-primary text-primary-foreground shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                title="Exibir em cards"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Cards</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("list")}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
-                  viewMode === "list"
-                    ? "bg-primary text-primary-foreground shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                title="Exibir em lista"
-              >
-                <ListIcon className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Lista</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Project Cards / List */}
         {filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
@@ -409,12 +306,6 @@ export function ManagementProjectsView({
             <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-4">
               Nenhum projeto corresponde aos filtros aplicados ou ainda não há projetos cadastrados.
             </p>
-            {onOpenNewProject && (
-              <Button size="sm" onClick={onOpenNewProject} className="text-xs">
-                <Plus className="w-3.5 h-3.5 mr-1" />
-                Criar primeiro projeto
-              </Button>
-            )}
           </div>
         ) : viewMode === "cards" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

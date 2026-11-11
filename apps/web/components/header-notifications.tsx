@@ -1,0 +1,38 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Bell, CheckCheck, Clock3 } from "lucide-react";
+import type { CrmNotification } from "@gestor-ide/core";
+import { ideCrmClient } from "@gestor-ide/sdk";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+export function HeaderNotifications({ connected }: { connected: boolean }) {
+  const [items, setItems] = useState<CrmNotification[]>([]);
+  const [count, setCount] = useState(0);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    if (!connected) return;
+    setLoading(true);
+    try { const result = await ideCrmClient.listNotifications(); setItems(result.notifications); setCount(result.unreadCount); setError(""); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível carregar as notificações."); }
+    finally { setLoading(false); }
+  }, [connected]);
+  useEffect(() => { if (!connected) return; void Promise.resolve().then(load); const timer = window.setInterval(() => void load(), 60000); return () => window.clearInterval(timer); }, [connected, load]);
+  async function markRead(item: CrmNotification) {
+    if (item.readAt) return;
+    try { await ideCrmClient.markNotificationRead(item.id); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível atualizar a notificação."); }
+  }
+  return <Popover onOpenChange={(open) => { if (open) void load(); }}>
+    <PopoverTrigger asChild><Button variant="ghost" size="icon" className="relative h-8 w-8" aria-label={`Notificações${count ? `, ${count} não lidas` : ""}`}><Bell className="size-4" />{count > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-destructive px-1 text-[9px] text-destructive-foreground">{count > 9 ? "9+" : count}</span>}</Button></PopoverTrigger>
+    <PopoverContent align="end" className="w-[min(22rem,calc(100vw-1rem))] p-0">
+      <div className="border-b border-border px-4 py-3"><h2 className="text-sm font-semibold">Notificações</h2><p className="text-xs text-muted-foreground">{count} não lidas</p></div>
+      <div className="max-h-96 overflow-y-auto">
+        {!connected ? <p className="p-4 text-sm text-muted-foreground">Conecte-se ao CRM para ver suas notificações.</p> : error ? <p role="alert" className="p-4 text-sm text-destructive">{error}</p> : loading && !items.length ? <p className="p-4 text-sm text-muted-foreground">Carregando...</p> : !items.length ? <p className="p-4 text-sm text-muted-foreground">Nenhuma notificação.</p> : items.map(item => <button key={item.id} type="button" onClick={() => void markRead(item)} className="flex w-full gap-3 border-b border-border p-3 text-left hover:bg-muted/50">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><CheckCheck className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.title}</span>{item.message && <span className="mt-1 block text-xs text-muted-foreground">{item.message}</span>}<span className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><Clock3 className="size-3" />{new Date(item.createdAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></span>{!item.readAt && <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />}</button>)}
+      </div>
+    </PopoverContent>
+  </Popover>;
+}

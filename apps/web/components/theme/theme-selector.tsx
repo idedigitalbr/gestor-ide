@@ -115,7 +115,7 @@ export function ThemeSelector() {
       ref={dialogRef}
       role="dialog"
       aria-label="Aparência"
-      className="fixed bottom-[56px] left-[12px] z-[100] flex h-[240px] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl"
+      className="fixed bottom-[56px] left-[12px] z-[100] flex h-[240px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl"
     >
       {/* Cabeçalho do Figma: Pílula de cor à esquerda, Aparência no centro, Modo e Fechar à direita */}
       <div className="relative flex h-[45px] shrink-0 items-center justify-between border-b border-border px-[10px]">

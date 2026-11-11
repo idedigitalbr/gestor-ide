@@ -1,6 +1,10 @@
 // @gestor-ide/sdk — Cliente HTTP tipado da API Central do IDE CRM
 import type {
   CrmCompany,
+  CrmAccount,
+  CrmCalendarEvent,
+  CrmNotification,
+  CrmProjectsDashboard,
   CrmContact,
   CrmFinancialEntry,
   CrmFinancialSummary,
@@ -144,6 +148,32 @@ export class IdeCrmClient {
     }
   }
 
+  async getAccount(): Promise<{ account: CrmAccount }> { return this.request("/account"); }
+  async updateAccount(input: { name?: string; email?: string; avatarUrl?: string | null; currentPassword?: string; password?: string }): Promise<{ account: CrmAccount }> {
+    return this.request("/account", { method: "PATCH", body: JSON.stringify(input) });
+  }
+  async uploadAvatar(file: File): Promise<{ account: CrmAccount }> {
+    const body = new FormData(); body.append("file", file);
+    return this.request("/account/avatar", { method: "POST", body });
+  }
+  async listNotifications(): Promise<{ notifications: CrmNotification[]; unreadCount: number }> { return this.request("/notifications?limit=50"); }
+  async markNotificationRead(id: string): Promise<void> { await this.request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) }); }
+  async getProjectsDashboard(): Promise<{ dashboard: CrmProjectsDashboard }> { return this.request("/projects/dashboard"); }
+  async getCalendar(start: string, end: string): Promise<{ events: CrmCalendarEvent[]; tasks: Array<{ id: string; title: string; dueDate: string | null; startDate: string | null }> }> {
+    return this.request(`/projects/calendar?${new URLSearchParams({ start, end })}`);
+  }
+  async listCalendarFallbackTasks(): Promise<{ tasks: CrmProjectTask[] }> {
+    return this.request("/projects/tasks");
+  }
+  async saveCalendarEvent(data: Record<string, unknown>, id?: string): Promise<void> {
+    await this.request(id ? `/projects/calendar/${encodeURIComponent(id)}` : "/projects/calendar", { method: id ? "PATCH" : "POST", body: JSON.stringify(data) }, !id);
+  }
+  async deleteCalendarEvent(id: string, scope = "OCCURRENCE"): Promise<void> {
+    await this.request(`/projects/calendar/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ scope }) });
+  }
+  async getSettings(): Promise<{ settings: Record<string, unknown> }> { return this.request("/settings"); }
+  async saveSettings(settings: Record<string, unknown>): Promise<void> { await this.request("/settings", { method: "POST", body: JSON.stringify({ settings }) }); }
+
   // --------------------------------------------------------------------------
   // Módulo: Projetos & Tarefas
   // --------------------------------------------------------------------------
@@ -151,10 +181,27 @@ export class IdeCrmClient {
   async listManagements(): Promise<{ managements: CrmProjectManagement[] }> {
     return this.request("/projects/managements");
   }
+  async listManagementMembers(id: string): Promise<{ members: Array<{ userId: string }> }> {
+    return this.request(`/projects/managements/${encodeURIComponent(id)}/members`);
+  }
+
+  async createManagement(input: { name: string; description?: string }): Promise<{ management: CrmProjectManagement }> {
+    return this.request("/projects/managements", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
 
   async listProjects(search?: string): Promise<{ projects: CrmProject[] }> {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";
     return this.request(`/projects/items${query}`);
+  }
+
+  async createProject(managementId: string, input: { name: string; description?: string }): Promise<{ project: CrmProject }> {
+    return this.request(`/projects/managements/${encodeURIComponent(managementId)}/projects`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }, true);
   }
 
   async listTasks(params?: {

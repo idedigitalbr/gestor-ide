@@ -4,6 +4,35 @@ import { IdeCrmApiError, IdeCrmClient } from "./index";
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
+test("cria gestão pela API do CRM", async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return Response.json({ management: { id: "g1" } }, { status: 201 });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => "token-teste" });
+  expect(await client.createManagement({ name: "Gestão", description: "Descrição" })).toEqual({ management: { id: "g1" } });
+  expect(request.url).toBe("/api/crm/projects/managements");
+  expect(request.method).toBe("POST");
+  expect(request.headers.get("Authorization")).toBe("Bearer token-teste");
+  expect(JSON.parse(request.body)).toEqual({ name: "Gestão", description: "Descrição" });
+});
+
+test("cria projeto na gestão escolhida pela API do CRM", async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return Response.json({ project: { id: "p1" } }, { status: 201 });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => "token-teste" });
+  expect(await client.createProject("gestão 1", { name: "Projeto", description: "Descrição" })).toEqual({ project: { id: "p1" } });
+  expect(request.url).toBe("/api/crm/projects/managements/gest%C3%A3o%201/projects");
+  expect(request.method).toBe("POST");
+  expect(request.headers.get("Idempotency-Key")).toBeTruthy();
+  expect(request.headers.get("Authorization")).toBe("Bearer token-teste");
+  expect(JSON.parse(request.body)).toEqual({ name: "Projeto", description: "Descrição" });
+});
+
 test("envia token, dados e chave de idempotência ao criar tarefa", async () => {
   let request;
   globalThis.fetch = async (url, options) => {

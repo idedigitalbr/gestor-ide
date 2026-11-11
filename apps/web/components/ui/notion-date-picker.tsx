@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   formatMonthYearPtBr,
   formatNotionDate,
@@ -145,7 +145,6 @@ export function NotionDatePicker({
 }: NotionDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   const parsedStart = useMemo(() => parseIsoOrDateString(startDate), [startDate]);
   const parsedEnd = useMemo(() => parseIsoOrDateString(endDate), [endDate]);
@@ -194,34 +193,6 @@ export function NotionDatePicker({
     setManualDraft(null);
     setIsOpen(true);
   };
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleMouseDown(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node) &&
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handleMouseDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
 
   const calendarDays = useMemo(
     () => generateCalendarMonth(viewDate.getFullYear(), viewDate.getMonth()),
@@ -341,7 +312,9 @@ export function NotionDatePicker({
   const hasDate = Boolean(startDate);
 
   return (
-    <div className={cn("relative inline-block", className)} ref={containerRef}>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <PopoverAnchor asChild>
+    <div className={cn("inline-block", className)} ref={containerRef}>
       {renderTrigger ? (
         renderTrigger({
           formatted: formattedDisplay,
@@ -409,17 +382,17 @@ export function NotionDatePicker({
         </button>
       )}
 
-      {isOpen && (
-        <div
-          ref={popoverRef}
+    </div>
+    </PopoverAnchor>
+        <PopoverContent
           role="dialog"
           aria-label="Seletor de datas"
-          className={cn(
-            "absolute z-50 mt-1 w-[280px] sm:w-[290px] rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl p-3 outline-none",
-            align === "end" && "right-0",
-            align === "center" && "left-1/2 -translate-x-1/2",
-            align === "start" && "left-0"
-          )}
+          align={align}
+          collisionPadding={8}
+          onInteractOutside={(event) => {
+            if (containerRef.current?.contains(event.target as Node)) event.preventDefault();
+          }}
+          className="w-[280px] max-w-[calc(100vw-1rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl p-3 shadow-2xl sm:w-[290px]"
         >
           {/* Top input bar */}
           <div className="mb-2.5">
@@ -664,8 +637,7 @@ export function NotionDatePicker({
               Pronto
             </button>
           </div>
-        </div>
-      )}
-    </div>
+        </PopoverContent>
+    </Popover>
   );
 }

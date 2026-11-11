@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import type {
   CrmProject,
   CrmProjectManagement,
@@ -19,6 +19,7 @@ import type {
 } from "@/types/task";
 import {
   ArrowLeft,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -27,15 +28,19 @@ import {
   Download,
   Filter,
   Home,
+  LayoutDashboard,
   Layers,
+  LogOut,
   Plus,
   Search,
   Settings,
+  UserRound,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -47,10 +52,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import { MANAGEMENT_VISIBILITY_LABELS, PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
 import { GROUP_OPTIONS, getGroupByLabel } from "./task-table/task-grouping-menu";
 import { TaskFilterMenu } from "./task-table/task-filter-menu";
 import { HeaderWorkspaceSelector } from "./header-workspace-selector";
+import { HeaderNotifications } from "./header-notifications";
 import { cn } from "@/lib/utils";
 
 // Ícone ClickUp de Subtarefas (Ramificação com dois nós conectados)
@@ -87,7 +98,7 @@ function HeaderTooltip({
         <TooltipTrigger asChild>{children}</TooltipTrigger>
         <TooltipContent
           side="top"
-          className="z-50 bg-[#1e2029] text-white text-xs px-2.5 py-1 rounded-md border border-[#2e3142] shadow-xl font-medium"
+          className="z-50 bg-popover text-popover-foreground text-xs px-2.5 py-1 rounded-md border border-border shadow-xl font-medium"
         >
           {label}
         </TooltipContent>
@@ -126,10 +137,20 @@ function exportTasksToCsv(tasks: Task[]) {
 export type SubtaskDisplayMode = "collapsed" | "expanded" | "separate";
 
 interface AppHeaderProps {
+  isProjectPage?: boolean;
+  isCalendarPage?: boolean;
+  onOpenNewEvent?: () => void;
+  canCreateCalendarEvent?: boolean;
+  onHome?: () => void;
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
   managements?: CrmProjectManagement[];
   projects?: CrmProject[];
+  selectableProjects?: CrmProject[];
+  onlyMyProjects: boolean;
+  onOnlyMyProjectsChange: (value: boolean) => void;
+  onlyMyTasks: boolean;
+  onOnlyMyTasksChange: (value: boolean) => void;
   currentManagementName?: string;
   currentProjectName?: string;
   selectedManagementId?: string | null;
@@ -143,6 +164,14 @@ interface AppHeaderProps {
   filters: TaskFilter;
   onFilterChange: (filters: TaskFilter) => void;
   onOpenNewTaskModal: () => void;
+  listSearch: string;
+  onListSearchChange: (value: string) => void;
+  listDisplayMode: ListDisplayMode;
+  onListDisplayModeChange: (mode: ListDisplayMode) => void;
+  listFilter: string;
+  onListFilterChange: (value: string) => void;
+  onOpenNewProject: () => void;
+  onOpenNewManagement: () => void;
   totalTasks: number;
   groupBy?: TaskGroupBy;
   groupOrder?: GroupOrder;
@@ -159,13 +188,24 @@ interface AppHeaderProps {
   showClosedSubtasks?: boolean;
   onToggleShowClosedSubtasks?: (show: boolean) => void;
   visibleColumnsCount?: number;
+  onLogout?: () => void;
 }
 
 export function AppHeader({
+  isProjectPage = false,
+  isCalendarPage = false,
+  onOpenNewEvent,
+  canCreateCalendarEvent = false,
+  onHome,
   isSidebarOpen,
   onToggleSidebar,
   managements = [],
   projects = [],
+  selectableProjects,
+  onlyMyProjects,
+  onOnlyMyProjectsChange,
+  onlyMyTasks,
+  onOnlyMyTasksChange,
   currentManagementName,
   currentProjectName,
   selectedManagementId,
@@ -179,6 +219,14 @@ export function AppHeader({
   filters,
   onFilterChange,
   onOpenNewTaskModal,
+  listSearch,
+  onListSearchChange,
+  listDisplayMode,
+  onListDisplayModeChange,
+  listFilter,
+  onListFilterChange,
+  onOpenNewProject,
+  onOpenNewManagement,
   totalTasks,
   groupBy = "none",
   groupOrder = "asc",
@@ -195,6 +243,7 @@ export function AppHeader({
   showClosedSubtasks = true,
   onToggleShowClosedSubtasks,
   visibleColumnsCount = 5,
+  onLogout,
 }: AppHeaderProps) {
   const isInsideProject = Boolean(selectedProjectId);
 
@@ -203,22 +252,7 @@ export function AppHeader({
   const [activeSubView, setActiveSubView] = useState<
     "main" | "grupo" | "subtarefas" | "filtro"
   >("main");
-  const [avatarError, setAvatarError] = useState(false);
-
-  const settingsRef = useRef<HTMLDivElement>(null);
-
-  // Fechar popover ao clicar fora
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
-      if (settingsRef.current && !settingsRef.current.contains(target)) {
-        setIsSettingsPopoverOpen(false);
-        setActiveSubView("main");
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
 
   // Quantidade de filtros ativos
   const activeFiltersCount = useMemo(() => {
@@ -256,7 +290,7 @@ export function AppHeader({
       {/* LADO ESQUERDO: Home + Seletor de Gestão e Projeto          */}
       {/* (Sem ícones redundantes no header, conforme solicitado)     */}
       {/* ========================================================= */}
-      <div className={cn("flex items-center gap-1.5 min-w-0", isInsideProject && "w-full sm:w-auto sm:flex-1")}>
+      <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:flex-1">
         <HeaderTooltip label="Início (Todas as Gestões)">
           <Button
             variant="ghost"
@@ -265,6 +299,7 @@ export function AppHeader({
             onClick={() => {
               onSelectManagement?.(null);
               onSelectProject?.(null);
+              onHome?.();
             }}
             aria-label="Início (Todas as Gestões)"
           >
@@ -272,7 +307,9 @@ export function AppHeader({
           </Button>
         </HeaderTooltip>
 
+        <HeaderTooltip label="Dashboard de projetos"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><a href="/projects/dashboard" aria-label="Dashboard de projetos"><LayoutDashboard className="size-4" /></a></Button></HeaderTooltip>
         <HeaderWorkspaceSelector
+          key={currentUser?.id ?? "anonymous"}
           managements={managements}
           selectedManagementId={selectedManagementId ?? null}
           onSelectManagement={onSelectManagement}
@@ -281,49 +318,27 @@ export function AppHeader({
           onSelectProject={onSelectProject}
           currentManagementName={currentManagementName}
           currentProjectName={currentProjectName}
+          selectableProjects={selectableProjects}
         />
+        <HeaderTooltip label="Calendário"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><a href="/projects/calendar" aria-label="Calendário"><CalendarDays className="size-4" /></a></Button></HeaderTooltip>
       </div>
 
       {/* ========================================================= */}
       {/* LADO DIREITO: Avatar + Busca + "|" + Config + "+ Tarefa"    */}
       {/* (Super minimalista, exatamente como no Anexo 2)            */}
       {/* ========================================================= */}
-      {isInsideProject ? (
+      {(
         <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
-          {/* Avatar do Usuário com Indicador Online Verde */}
-          <HeaderTooltip label={displayName}>
-            <div className="relative shrink-0 mr-0.5">
-              <div
-                className="h-7 w-7 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 border border-border/80 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden shadow-xs cursor-pointer"
-                aria-label="Perfil do usuário"
-              >
-                {currentUser?.avatarUrl && !avatarError ? (
-                  <img
-                    src={currentUser.avatarUrl}
-                    alt={displayName}
-                    className="h-full w-full object-cover"
-                    onError={() => setAvatarError(true)}
-                  />
-                ) : (
-                  <span>{initials}</span>
-                )}
-              </div>
-              <span
-                className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-background"
-                title="Online"
-              />
-            </div>
-          </HeaderTooltip>
-
           {/* Campo de Busca Rápida */}
           <div className="relative flex min-w-0 flex-1 items-center sm:flex-none">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              value={filters.search}
+              value={isInsideProject ? filters.search : listSearch}
               onChange={(e) =>
-                onFilterChange({ ...filters, search: e.target.value })
+                isInsideProject ? onFilterChange({ ...filters, search: e.target.value }) : onListSearchChange(e.target.value)
               }
-              placeholder="Buscar tarefas..."
+              placeholder={isInsideProject ? "Buscar tarefas..." : selectedManagementId ? "Buscar projetos..." : "Buscar gestões..."}
+              aria-label={isInsideProject ? "Buscar tarefas" : selectedManagementId ? "Buscar projetos" : "Buscar gestões"}
               className="h-8 w-full sm:w-48 md:w-56 pl-8 pr-2.5 text-xs bg-muted/40 border-border/70 rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
@@ -332,14 +347,16 @@ export function AppHeader({
           <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
 
           {/* Configurações da Visualização (Engrenagem) - Abre o Popover Completo do Anexo 2 */}
-          <div className="relative" ref={settingsRef}>
+          {isProjectPage ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização"><Settings className="w-4 h-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}><Copy className="w-3.5 h-3.5" /> Copiar link da visualização</DropdownMenuItem></DropdownMenuContent>
+            </DropdownMenu>
+          ) : isInsideProject ? <Popover open={isSettingsPopoverOpen} onOpenChange={(open) => { setIsSettingsPopoverOpen(open); if (!open) setActiveSubView("main"); }}>
             <HeaderTooltip label="Personalize as configurações da sua visualização">
+              <PopoverTrigger asChild>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveSubView("main");
-                  setIsSettingsPopoverOpen((prev) => !prev);
-                }}
                 className={cn(
                   "flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer",
                   isSettingsPopoverOpen && "bg-muted text-foreground ring-1 ring-border"
@@ -349,14 +366,15 @@ export function AppHeader({
               >
                 <Settings className="w-4 h-4" />
               </button>
+              </PopoverTrigger>
             </HeaderTooltip>
 
             {/* Menu Dropdown idêntico ao Anexo 2 */}
-            {isSettingsPopoverOpen && (
-              <div
-                role="dialog"
+              <PopoverContent
+                align="end"
+                collisionPadding={8}
                 aria-label="Personalizar visualização"
-                className="absolute right-0 mt-1.5 w-72 z-50 rounded-xl border border-[#2c2f44] bg-[#161722] text-[#e2e4ef] shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col"
+                className="w-72 rounded-xl p-2 shadow-2xl"
               >
                 {activeSubView === "main" && (
                   <>
@@ -374,12 +392,15 @@ export function AppHeader({
                       </button>
                     </div>
 
-                    {/* Subheader: [Lista] Lista */}
-                    <div className="px-2 py-1.5 flex items-center gap-2 border-b border-[#25283a]">
-                      <div className="flex items-center justify-center h-5 w-5 rounded bg-muted/30">
-                        <Layers className="w-3 h-3 text-muted-foreground" />
+                    <div className="border-b border-border px-2 py-2">
+                      <span className="text-xs font-semibold text-foreground">Visualizar em:</span>
+                      <div role="radiogroup" aria-label="Visualizar em" className="mt-1 space-y-0.5">
+                        {([ ["table", "Tabela"], ["kanban", "Kanban"], ["calendar", "Calendário"], ["gantt", "Gantt"], ["workload", "Carga de Trabalho"] ] as const).map(([mode, label]) => (
+                          <button key={mode} type="button" role="radio" aria-checked={viewMode === mode} onClick={() => { onViewModeChange?.(mode); setIsSettingsPopoverOpen(false); }} className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            {label}{viewMode === mode && <Check className="h-3.5 w-3.5" />}
+                          </button>
+                        ))}
                       </div>
-                      <span className="text-xs font-semibold text-white">Lista</span>
                     </div>
 
                     {/* Lista de Opções */}
@@ -669,16 +690,39 @@ export function AppHeader({
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+              </PopoverContent>
+          </Popover>
+
+          : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização"><Settings className="w-4 h-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Visualização</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={listDisplayMode} onValueChange={(value) => onListDisplayModeChange(value as ListDisplayMode)}>
+                  <DropdownMenuRadioItem value="cards">Cards</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="list">Lista</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>{selectedManagementId ? "Status dos projetos" : "Visibilidade"}</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={listFilter} onValueChange={onListFilterChange}>
+                  {Object.entries(selectedManagementId ? PROJECT_STATUS_LABELS : MANAGEMENT_VISIBILITY_LABELS).map(([value, label]) => (
+                    <DropdownMenuRadioItem key={value} value={value}>{label}</DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}><Copy className="w-3.5 h-3.5" /> Copiar link da visualização</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Botão Roxo ClickUp "+ Tarefa ▾" */}
-          <div className="inline-flex items-center rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white shadow-xs transition-colors overflow-hidden ml-1">
+          {!isProjectPage ? (isInsideProject ? <div className="inline-flex items-center rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-colors overflow-hidden ml-1">
             <button
               type="button"
               onClick={onOpenNewTaskModal}
-              className="h-8 px-2.5 sm:px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-white"
+              className="h-8 px-2.5 sm:px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-primary-foreground"
               title="Criar nova tarefa"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -688,7 +732,7 @@ export function AppHeader({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="h-8 px-1.5 border-l border-white/20 hover:bg-black/10 flex items-center justify-center cursor-pointer text-white"
+                  className="h-8 px-1.5 border-l border-primary-foreground/20 hover:bg-primary-foreground/10 flex items-center justify-center cursor-pointer text-primary-foreground"
                   title="Mais opções de criação"
                   aria-label="Mais opções de criação"
                 >
@@ -714,10 +758,71 @@ export function AppHeader({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+          </div> : <Button size="sm" className="h-8 gap-1.5" onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
+            <Button size="sm" className="h-8 gap-1.5" onClick={onOpenNewEvent} disabled={!canCreateCalendarEvent}><Plus className="w-3.5 h-3.5" /> Evento</Button>
+          ) : null}
+          <HeaderNotifications connected={Boolean(currentUser)} />
+          {/* Avatar do Usuário com Indicador Online Verde */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 shrink-0 rounded-full" aria-label="Abrir menu da conta">
+              <span className="h-7 w-7 rounded-full bg-primary border border-border/80 flex items-center justify-center text-[10px] font-bold text-primary-foreground overflow-hidden shadow-xs">
+                {currentUser?.avatarUrl && currentUser.avatarUrl !== failedAvatar ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={displayName}
+                    className="h-full w-full object-cover"
+                    onError={() => setFailedAvatar(currentUser.avatarUrl)}
+                  />
+                ) : (
+                  <span>{initials}</span>
+                )}
+              </span>
+              <span
+                className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-primary ring-2 ring-background"
+                title="Online"
+              />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" collisionPadding={8} className="w-72 max-w-[calc(100vw-1rem)] p-0">
+              <DropdownMenuLabel className="px-4 py-3">
+                <div className="truncate font-semibold">{displayName}</div>
+                {currentUser?.email && <div className="truncate text-xs font-normal text-muted-foreground">{currentUser.email}</div>}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Preferências</div>
+              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                <label htmlFor="only-my-projects">Ver somente projetos que faço parte</label>
+                <Switch id="only-my-projects" checked={onlyMyProjects} onCheckedChange={onOnlyMyProjectsChange} />
+              </div>
+              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                <label htmlFor="only-my-tasks">Ver somente tarefas que sou responsável</label>
+                <Switch id="only-my-tasks" checked={onlyMyTasks} onCheckedChange={onOnlyMyTasksChange} />
+              </div>
+              <DropdownMenuSeparator />
+              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Conta</div>
+              <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
+                <a href="/settings/account">
+                  <UserRound className="size-4 shrink-0" />
+                  <span className="min-w-0 whitespace-normal"><span className="block font-medium">Configurações da conta</span><span className="block text-xs text-muted-foreground">Nome, email, foto e senha</span></span>
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Sistema</div>
+              <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
+                <a href="/settings">
+                  <Settings className="size-4 shrink-0" />
+                  <span className="min-w-0 whitespace-normal"><span className="block font-medium">Administração</span><span className="block text-xs text-muted-foreground">Configurações, usuários e permissões</span></span>
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="m-2 cursor-pointer" onSelect={onLogout} disabled={!currentUser}>
+                <LogOut className="size-4" /> Sair
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
         </div>
-      ) : (
-        <div className="flex items-center gap-2" />
       )}
     </header>
   );

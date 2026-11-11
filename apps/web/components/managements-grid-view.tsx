@@ -1,12 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import type { CrmProjectManagement } from "@gestor-ide/core";
 import {
-  Search,
-  Plus,
-  LayoutGrid,
-  List as ListIcon,
   Folder,
   Users,
   ArrowRight,
@@ -14,39 +10,30 @@ import {
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { MANAGEMENT_VISIBILITY_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
 
 interface ManagementsGridViewProps {
+  search: string;
+  onSearchChange: (value: string) => void;
+  visibilityFilter: string;
+  onVisibilityFilterChange: (value: string) => void;
+  viewMode: ListDisplayMode;
   managements: CrmProjectManagement[];
   onSelectManagement: (managementId: string) => void;
-  onOpenCreateManagement?: () => void;
 }
 
-const VISIBILITY_LABELS: Record<string, string> = {
-  all: "Todas as visibilidades",
-  company: "Empresa",
-  unit: "Unidade",
-  team: "Equipe",
-  private: "Privado",
-};
-
 export function ManagementsGridView({
+  search,
+  onSearchChange,
+  visibilityFilter,
+  onVisibilityFilterChange,
+  viewMode,
   managements,
   onSelectManagement,
-  onOpenCreateManagement,
 }: ManagementsGridViewProps) {
-  const [search, setSearch] = useState("");
-  const [visibilityFilter, setVisibilityFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+
 
   const filteredManagements = useMemo(() => {
     let list = managements;
@@ -67,114 +54,6 @@ export function ManagementsGridView({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Gestões
-            </h1>
-            <Badge variant="outline" className="text-xs px-2 py-0.5 border-border">
-              {managements.length} {managements.length === 1 ? "ambiente" : "ambientes"}
-            </Badge>
-          </div>
-          <p className="text-xs md:text-sm text-muted-foreground">
-            Organize projetos por ambiente, acompanhe indicadores e acesse cada workspace com clareza.
-          </p>
-        </div>
-
-        {onOpenCreateManagement && (
-          <Button
-            size="sm"
-            onClick={onOpenCreateManagement}
-            className="h-8 gap-1.5 text-xs bg-primary text-primary-foreground hover:opacity-90 font-medium px-3 shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Nova Gestão</span>
-          </Button>
-        )}
-      </div>
-
-      {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Search */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground pointer-events-none" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, código ou descrição..."
-            className="h-9 pl-9 pr-3 text-xs bg-muted/30 border-border rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Visibility Filter Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 text-xs border-border bg-card hover:bg-muted/40 font-normal px-3"
-              >
-                <span>{VISIBILITY_LABELS[visibilityFilter] || "Visibilidade"}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 bg-popover border-border">
-              {Object.entries(VISIBILITY_LABELS).map(([key, label]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => setVisibilityFilter(key)}
-                  className={cn(
-                    "text-xs cursor-pointer",
-                    visibilityFilter === key && "bg-secondary text-secondary-foreground font-medium"
-                  )}
-                >
-                  {label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Toggle View: Cards / List */}
-          <div className="flex items-center bg-muted/40 border border-border rounded-lg p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("cards")}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
-                viewMode === "cards"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Exibir em cards"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Cards</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
-                viewMode === "list"
-                  ? "bg-primary text-primary-foreground shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Exibir em lista"
-            >
-              <ListIcon className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Lista</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Counter */}
-      <div className="text-[11px] text-muted-foreground">
-        Exibindo {filteredManagements.length} de {managements.length} gestões
-      </div>
-
       {/* Grid or List of Cards */}
       {filteredManagements.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
@@ -190,8 +69,8 @@ export function ManagementsGridView({
               variant="outline"
               size="sm"
               onClick={() => {
-                setSearch("");
-                setVisibilityFilter("all");
+                onSearchChange("");
+                onVisibilityFilterChange("all");
               }}
               className="text-xs"
             >
@@ -205,7 +84,7 @@ export function ManagementsGridView({
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const visibilityText = VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
+            const visibilityText = MANAGEMENT_VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
             const bgColor = mgmt.color || "#2563eb";
 
             return (
@@ -333,7 +212,7 @@ export function ManagementsGridView({
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const visibilityText = VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
+            const visibilityText = MANAGEMENT_VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
             const bgColor = mgmt.color || "#2563eb";
 
             return (

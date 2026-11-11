@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/themes/theme-context";
+import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "IDE Gestor — Plataforma de Gestão Empresarial",
@@ -35,7 +36,7 @@ export default function RootLayout({
         className="h-full bg-background text-foreground antialiased select-none"
         suppressHydrationWarning
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider><AppShell>{children}</AppShell></ThemeProvider>
       </body>
     </html>
   );

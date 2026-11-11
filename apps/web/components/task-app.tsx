@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   mapCrmTaskToGestorTask,
   mapGestorTaskToCrmCreateInput,
@@ -10,6 +10,7 @@ import {
   normalizeTaskPriority,
   type AppModuleSection,
   type CrmCompany,
+  type CrmCalendarEvent,
   type CrmContact,
   type CrmFinancialEntry,
   type CrmFinancialSummary,
@@ -52,14 +53,19 @@ import {
 import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
 import { ManagementsGridView } from "@/components/managements-grid-view";
 import { ManagementProjectsView } from "@/components/management-projects-view";
+import { NewProjectDialog } from "@/components/new-project-dialog";
+import { NewManagementDialog } from "@/components/new-management-dialog";
+import type { ListDisplayMode } from "@/lib/list-view-options";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
+import { TaskAdditionalView } from "@/components/task-additional-view";
 import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
 import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
 import { EnterpriseModulesView } from "@/components/enterprise-modules-view";
 import { TaskTableSkeleton } from "@/components/task-skeleton";
 import { cn } from "@/lib/utils";
+import { CalendarDialogContext } from "@/components/calendar-dialog-context";
 
 function getHighestCodeNumber(list: Task[]): number {
   let max = 100;
@@ -73,7 +79,33 @@ function getHighestCodeNumber(list: Task[]): number {
   return max;
 }
 
-export function TaskApp() {
+export function TaskApp({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isSecondaryPage = pathname !== "/";
+  const isCalendarPage = pathname === "/projects/calendar";
+  const [calendarDialogOpen, setCalendarDialogOpen] = useState(false);
+  const [calendarEditing, setCalendarEditing] = useState<CrmCalendarEvent | null>(null);
+  const [canCreateCalendarEvent, setCanCreateCalendarEvent] = useState(false);
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [isNewManagementOpen, setIsNewManagementOpen] = useState(false);
+  const [listSearch, setListSearch] = useState("");
+  const [onlyMyProjects, setOnlyMyProjects] = useState(() => {
+    try { return localStorage.getItem("gestor_only_my_projects") !== "false"; } catch { return true; }
+  });
+  const [onlyMyTasks, setOnlyMyTasks] = useState(() => {
+    try { return localStorage.getItem("gestor_only_my_tasks") === "true"; } catch { return false; }
+  });
+  const [membershipRetry, setMembershipRetry] = useState(0);
+  const [projectMembership, setProjectMembership] = useState<{
+    userId: string;
+    projectIds: Set<string> | null;
+    error: boolean;
+  } | null>(null);
+  const [managementVisibility, setManagementVisibility] = useState("all");
+  const [projectStatus, setProjectStatus] = useState("all");
+  const [managementViewMode, setManagementViewMode] = useState<ListDisplayMode>("cards");
+  const [projectViewMode, setProjectViewMode] = useState<ListDisplayMode>("cards");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -427,7 +459,38 @@ export function TaskApp() {
     return isConnectedCrm ? projects : INITIAL_PROJECTS;
   }, [projects, isConnectedCrm]);
 
+  useEffect(() => {
+    if (!onlyMyProjects || !isConnectedCrm || !currentUser?.id) return;
+    const userId = currentUser.id;
+    let cancelled = false;
+    void ideCrmClient.listProjectMembers().then(({ members: projectMemberList }) => {
+      if (!cancelled) setProjectMembership({ userId, projectIds: new Set(projectMemberList.filter((member) => member.userId === userId).map((member) => member.projectId)), error: false });
+    }).catch(() => {
+      if (!cancelled) setProjectMembership({ userId, projectIds: null, error: true });
+    });
+    return () => { cancelled = true; };
+  }, [onlyMyProjects, isConnectedCrm, currentUser?.id, projects, membershipRetry]);
+
+  const membershipForCurrentUser = projectMembership?.userId === currentUser?.id ? projectMembership : null;
+  const membershipPending = onlyMyProjects && isConnectedCrm && Boolean(currentUser?.id) && !membershipForCurrentUser;
+  const visibleProjects = useMemo(() => {
+    if (!onlyMyProjects || !isConnectedCrm || !currentUser?.id) return effectiveProjects;
+    const projectIds = membershipForCurrentUser?.projectIds;
+    return projectIds ? effectiveProjects.filter((project) => projectIds.has(project.id)) : [];
+  }, [onlyMyProjects, isConnectedCrm, currentUser?.id, effectiveProjects, membershipForCurrentUser]);
+
+  function updateOnlyMyProjects(value: boolean) {
+    setOnlyMyProjects(value);
+    try { localStorage.setItem("gestor_only_my_projects", String(value)); } catch {}
+  }
+
+  function updateOnlyMyTasks(value: boolean) {
+    setOnlyMyTasks(value);
+    try { localStorage.setItem("gestor_only_my_tasks", String(value)); } catch {}
+  }
+
   function handleSelectManagement(managementId: string | null) {
+    setListSearch("");
     setSelectedManagementId(managementId);
     setSelectedProjectId(null); // Ao selecionar ou trocar de gestão, exibe os projetos da gestão (Nível 2)
     try {
@@ -450,6 +513,8 @@ export function TaskApp() {
   }
 
   function handleSelectProject(projectId: string | null) {
+    setListSearch("");
+    setViewMode("table");
     setSelectedProjectId(projectId);
     try {
       if (projectId) {
@@ -483,7 +548,11 @@ export function TaskApp() {
   }
 
   async function handleDisconnectCrm() {
-    await ideCrmClient.logout();
+    try {
+      await ideCrmClient.logout();
+    } catch {
+      // O SDK limpa o token local mesmo quando o CRM está indisponível.
+    }
     setIsConnectedCrm(false);
     setCurrentUser(null);
     setManagements([]);
@@ -517,6 +586,7 @@ export function TaskApp() {
   // Filtered tasks computation respeitando a Hierarquia: Gestão -> Projeto -> Filtros
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
+      if (onlyMyTasks && (!currentUser?.id || !(task.assigneeIds ?? (task.assigneeId ? [task.assigneeId] : [])).includes(currentUser.id))) return false;
       // 1. Filtro por Projeto Ativo (só filtra quando os projetos do CRM já carregaram ou quando a tarefa já possui projectId correspondente)
       if (selectedProjectId && projects.length > 0) {
         if (task.projectId && task.projectId !== selectedProjectId) {
@@ -639,7 +709,7 @@ export function TaskApp() {
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks, currentTime]);
+  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks, currentTime, onlyMyTasks, currentUser]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -745,6 +815,7 @@ export function TaskApp() {
       const existing = tasks.find((task) => task.id === taskId);
       const patch = {
         assigneeId: member?.userId,
+        assigneeIds: member ? [member.userId] : [],
         assignee: member?.user.name || member?.user.email || undefined,
         assigneeAvatar: member?.user.avatarUrl || undefined,
       };
@@ -957,6 +1028,7 @@ export function TaskApp() {
   }
 
   function handleClearFilters() {
+    updateOnlyMyTasks(false);
     setFilters({
       search: "",
       status: "Todos",
@@ -971,7 +1043,7 @@ export function TaskApp() {
   }
 
   const isFiltered = Boolean(
-    filters.search ||
+    onlyMyTasks || filters.search ||
       filters.status !== "Todos" ||
       filters.priority !== "Todas" ||
       (filters.statuses && filters.statuses.length > 0) ||
@@ -987,23 +1059,41 @@ export function TaskApp() {
       {/* Main Content Area (Sidebar desativada conforme solicitado) */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full overflow-hidden">
         <AppHeader
+          isProjectPage={isSecondaryPage}
+          isCalendarPage={isCalendarPage}
+          onOpenNewEvent={() => { setCalendarEditing(null); setCalendarDialogOpen(true); }}
+          canCreateCalendarEvent={canCreateCalendarEvent}
+          onHome={() => { if (isSecondaryPage) router.push("/"); }}
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           managements={effectiveManagements}
           projects={effectiveProjects}
+          selectableProjects={visibleProjects}
+          onlyMyProjects={onlyMyProjects}
+          onOnlyMyProjectsChange={updateOnlyMyProjects}
+          onlyMyTasks={onlyMyTasks}
+          onOnlyMyTasksChange={updateOnlyMyTasks}
           currentManagementName={currentManagement?.name}
           currentProjectName={currentProject?.name}
           selectedManagementId={selectedManagementId}
           selectedProjectId={selectedProjectId}
-          onSelectManagement={handleSelectManagement}
-          onSelectProject={handleSelectProject}
+          onSelectManagement={(id) => { handleSelectManagement(id); if (isSecondaryPage) router.push("/"); }}
+          onSelectProject={(id) => { handleSelectProject(id); if (isSecondaryPage) router.push("/"); }}
           activeModule={activeModule}
           onModuleChange={setActiveModule}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           filters={filters}
-          onFilterChange={setFilters}
+          onFilterChange={(next) => { setFilters(next); if (isSecondaryPage) router.push("/"); }}
           onOpenNewTaskModal={() => handleOpenNewTask("A Fazer")}
+          listSearch={listSearch}
+          onListSearchChange={(value) => { setListSearch(value); if (isSecondaryPage) router.push("/"); }}
+          listDisplayMode={selectedManagementId ? projectViewMode : managementViewMode}
+          onListDisplayModeChange={selectedManagementId ? setProjectViewMode : setManagementViewMode}
+          listFilter={selectedManagementId ? projectStatus : managementVisibility}
+          onListFilterChange={selectedManagementId ? setProjectStatus : setManagementVisibility}
+          onOpenNewProject={() => setIsNewProjectOpen(true)}
+          onOpenNewManagement={() => setIsNewManagementOpen(true)}
           totalTasks={filteredTasks.length}
           groupBy={groupBy}
           groupOrder={groupOrder}
@@ -1011,6 +1101,7 @@ export function TaskApp() {
           onGroupOrderChange={setGroupOrder}
           tasks={tasks}
           currentUser={currentUser}
+          onLogout={() => void handleDisconnectCrm()}
           members={members}
           subtaskMode={subtaskMode}
           onSubtaskModeChange={setSubtaskMode}
@@ -1022,10 +1113,23 @@ export function TaskApp() {
         />
 
         {/* View Content */}
+        {isNewProjectOpen && <NewProjectDialog
+          open={isNewProjectOpen}
+          onOpenChange={setIsNewProjectOpen}
+          managements={effectiveManagements}
+          selectedManagementId={selectedManagementId}
+          connected={isConnectedCrm}
+          onCreated={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+        />}
+        {isNewManagementOpen && <NewManagementDialog
+          onClose={() => setIsNewManagementOpen(false)}
+          connected={isConnectedCrm}
+          onCreated={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+        />}
         <main
           className={cn(
             "min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden",
-            selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
+            !isSecondaryPage && selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
           {!isConnectedCrm && (
@@ -1041,7 +1145,16 @@ export function TaskApp() {
               </button>
             </div>
           )}
-          {activeModule !== "tasks" ? (
+          {!isSecondaryPage && onlyMyProjects && membershipForCurrentUser?.error && (
+            <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
+              Não foi possível verificar seus projetos. <button type="button" className="underline" onClick={() => setMembershipRetry((value) => value + 1)}>Tentar novamente</button>
+            </div>
+          )}
+          {isSecondaryPage ? (
+            <CalendarDialogContext.Provider value={{ open: calendarDialogOpen, setOpen: setCalendarDialogOpen, editing: calendarEditing, setEditing: setCalendarEditing, setCanCreate: setCanCreateCalendarEvent }}>
+              {children}
+            </CalendarDialogContext.Provider>
+          ) : activeModule !== "tasks" ? (
             <EnterpriseModulesView
               section={activeModule}
               isConnected={isConnectedCrm}
@@ -1057,19 +1170,32 @@ export function TaskApp() {
           ) : selectedManagementId === null ? (
             /* Nível 1: Cards de Todas as Gestões */
             <ManagementsGridView
+              search={listSearch}
+              onSearchChange={setListSearch}
+              visibilityFilter={managementVisibility}
+              onVisibilityFilterChange={setManagementVisibility}
+              viewMode={managementViewMode}
               managements={effectiveManagements}
               onSelectManagement={(id) => handleSelectManagement(id)}
-              onOpenCreateManagement={() => setIsCrmModalOpen(true)}
             />
+          ) : selectedManagementId && membershipPending ? (
+            <p role="status" className="text-sm text-muted-foreground">Carregando seus projetos...</p>
+          ) : selectedManagementId && onlyMyProjects && membershipForCurrentUser?.error ? null
+          : selectedProjectId && onlyMyProjects && isConnectedCrm && membershipForCurrentUser?.projectIds && !membershipForCurrentUser.projectIds.has(selectedProjectId) ? (
+            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              Este projeto não está entre os seus projetos. <button type="button" className="text-primary underline" onClick={() => updateOnlyMyProjects(false)}>Ver todos os projetos</button>
+            </div>
           ) : selectedProjectId === null && currentManagement ? (
             /* Nível 2: Cards dos Projetos da Gestão Selecionada */
             <ManagementProjectsView
+              search={listSearch}
+              statusFilter={projectStatus}
+              viewMode={projectViewMode}
               management={currentManagement}
-              projects={effectiveProjects}
+              projects={visibleProjects}
               tasks={tasks}
               onBack={() => handleSelectManagement(null)}
               onSelectProject={(id) => handleSelectProject(id)}
-              onOpenNewProject={() => handleOpenNewTask("A Fazer")}
             />
           ) : isSyncingTasks ? (
             <TaskTableSkeleton />
@@ -1079,6 +1205,8 @@ export function TaskApp() {
               isFiltered={isFiltered}
               onClearFilters={handleClearFilters}
             />
+          ) : viewMode === "calendar" || viewMode === "gantt" || viewMode === "workload" ? (
+            <TaskAdditionalView mode={viewMode} tasks={filteredTasks} members={projectMembers?.projectId === selectedProjectId ? projectMembers.members : []} onOpen={handleOpenDetails} />
           ) : viewMode === "kanban" ? (
             <TaskKanban
               tasks={filteredTasks}
@@ -1090,6 +1218,7 @@ export function TaskApp() {
           ) : (
             <div className="w-full overflow-x-auto">
             <TaskTable
+              onChangeAssignee={handleChangeAssignee}
               key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
               projectId={selectedProjectId}
               projectMembers={projectMembers?.projectId === selectedProjectId ? projectMembers?.members ?? [] : []}

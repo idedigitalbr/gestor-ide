@@ -26,6 +26,15 @@ test("preserva datas, hierarquia e etiquetas do CRM", () => {
   expect(mapGestorTaskToCrmUpdateInput(task).tags).toEqual(["primeira", "segunda"]);
 });
 
+test("preserva todos os responsáveis para o filtro de tarefas", () => {
+  const task = mapCrmTaskToGestorTask({
+    ...crmTask,
+    assignees: [...crmTask.assignees, { userId: "user-2", user: { id: "user-2", name: "Outra pessoa", email: "outra@example.test" } }],
+  });
+  expect(task.assigneeId).toBe("user-1");
+  expect(task.assigneeIds).toEqual(["user-1", "user-2"]);
+});
+
 test("não transforma nome do projeto em etiqueta ao atualizar", () => {
   const task = mapCrmTaskToGestorTask({ ...crmTask, tags: [] });
   expect(task.tag).toBeUndefined();

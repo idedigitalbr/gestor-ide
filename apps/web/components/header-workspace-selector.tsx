@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { CrmProject, CrmProjectManagement } from "@gestor-ide/core";
 import { Check, ChevronDown, Folder, Layers3, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface HeaderWorkspaceSelectorProps {
   managements: CrmProjectManagement[];
@@ -15,6 +16,7 @@ interface HeaderWorkspaceSelectorProps {
   onSelectProject?: (projectId: string | null) => void;
   currentManagementName?: string;
   currentProjectName?: string;
+  selectableProjects?: CrmProject[];
 }
 
 export function HeaderWorkspaceSelector({
@@ -26,47 +28,19 @@ export function HeaderWorkspaceSelector({
   onSelectProject,
   currentManagementName,
   currentProjectName,
+  selectableProjects = projects,
 }: HeaderWorkspaceSelectorProps) {
   const [managementOpen, setManagementOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [managementQuery, setManagementQuery] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
 
-  const managementRef = useRef<HTMLDivElement>(null);
-  const projectRef = useRef<HTMLDivElement>(null);
-
-  // Fechar ao clicar fora
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as Node;
-      if (managementRef.current && !managementRef.current.contains(target)) {
-        setManagementOpen(false);
-      }
-      if (projectRef.current && !projectRef.current.contains(target)) {
-        setProjectOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Fechar com Escape
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setManagementOpen(false);
-        setProjectOpen(false);
-      }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
   // Gestões filtradas
   const filteredManagements = useMemo(() => {
     const q = managementQuery.trim().toLowerCase();
-    if (!q) return managements;
-    return managements.filter(
+    const visible = managements;
+    if (!q) return visible;
+    return visible.filter(
       (m) =>
         m.name.toLowerCase().includes(q) ||
         (m.code && m.code.toLowerCase().includes(q)) ||
@@ -77,14 +51,15 @@ export function HeaderWorkspaceSelector({
   // Projetos da gestão atual
   const managementProjects = useMemo(() => {
     if (!selectedManagementId) return [];
-    return projects.filter((p) => p.projectManagementId === selectedManagementId);
-  }, [projects, selectedManagementId]);
+    return selectableProjects.filter((p) => p.projectManagementId === selectedManagementId);
+  }, [selectableProjects, selectedManagementId]);
 
   // Projetos filtrados pela busca
   const filteredProjects = useMemo(() => {
     const q = projectQuery.trim().toLowerCase();
-    if (!q) return managementProjects;
-    return managementProjects.filter(
+    const visible = managementProjects;
+    if (!q) return visible;
+    return visible.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.code && p.code.toLowerCase().includes(q)) ||
@@ -117,7 +92,7 @@ export function HeaderWorkspaceSelector({
     projects.find((p) => p.id === selectedProjectId) ?? null;
 
   const managementLabel =
-    activeManagement?.name || currentManagementName || "Todas as Gestões";
+    activeManagement?.name || currentManagementName || `Todas as Gestões (${managements.length})`;
   const projectLabel =
     activeProject?.name || currentProjectName || "Todos os Projetos";
   const hasManagementSelected = Boolean(selectedManagementId);
@@ -144,15 +119,13 @@ export function HeaderWorkspaceSelector({
         className="flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-0.5 relative z-50"
       >
         {/* 1. SELETOR DE GESTÃO (ANEXO 2) */}
-        <div className={cn("relative min-w-0", managementOpen && "z-50")} ref={managementRef}>
+        <Popover open={managementOpen} onOpenChange={(open) => { setManagementOpen(open); if (open) setProjectOpen(false); }}>
+        <div className={cn("relative min-w-0 shrink", managementOpen && "z-50")}>
+          <PopoverTrigger asChild>
           <button
             type="button"
-            onClick={() => {
-              setProjectOpen(false);
-              setManagementOpen((prev) => !prev);
-            }}
             className={cn(
-              "group flex h-7 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "group flex h-7 w-full min-w-0 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
             aria-expanded={managementOpen}
@@ -168,12 +141,14 @@ export function HeaderWorkspaceSelector({
               )}
             />
           </button>
+          </PopoverTrigger>
 
-          {managementOpen && (
-            <div
-              role="dialog"
+            <PopoverContent
+              align="start"
+              sideOffset={8}
+              collisionPadding={8}
               aria-label="Escolher gestão"
-              className="absolute left-0 top-full z-50 mt-2 w-72 sm:w-80 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/50 animate-in fade-in zoom-in-95 duration-100"
+              className="flex w-80 flex-col overflow-hidden rounded-xl p-0 shadow-2xl"
             >
             {/* Input de busca (buscarzinho) */}
             <div className="border-b border-border p-2">
@@ -201,7 +176,8 @@ export function HeaderWorkspaceSelector({
               </div>
             </div>
 
-            <div className="max-h-64 overflow-y-auto p-1 space-y-0.5">
+
+            <div className="min-h-0 overflow-y-auto p-1 space-y-0.5">
               {/* Opção Todas as Gestões */}
               <button
                 type="button"
@@ -269,32 +245,22 @@ export function HeaderWorkspaceSelector({
                 </div>
               )}
             </div>
-          </div>
-        )}
+          </PopoverContent>
       </div>
+      </Popover>
 
       <span className="text-muted-foreground/40 text-xs font-semibold select-none px-0.5">/</span>
 
       {/* 2. SELETOR DE PROJETO (ANEXO 2 - só habilitado após setar a gestão) */}
-      <div className={cn("relative min-w-0", projectOpen && "z-50")} ref={projectRef}>
+      <Popover open={projectOpen} onOpenChange={(open) => { setProjectOpen(open); if (open) setManagementOpen(false); }}>
+      <div className={cn("relative min-w-0 shrink", projectOpen && "z-50")}>
         {!hasManagementSelected ? (
-          <button
-            type="button"
-            disabled
-            className="flex h-7 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground/40 cursor-not-allowed"
-            title="Selecione uma gestão primeiro para escolher um projeto"
-          >
-            <span className="truncate">Todos os Projetos</span>
-          </button>
+          <div aria-hidden="true" className="h-7 w-20" />
         ) : (
-          <button
+          <PopoverTrigger asChild><button
             type="button"
-            onClick={() => {
-              setManagementOpen(false);
-              setProjectOpen((prev) => !prev);
-            }}
             className={cn(
-              "group flex h-7 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "group flex h-7 w-full min-w-0 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               projectOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
             aria-expanded={projectOpen}
@@ -309,14 +275,15 @@ export function HeaderWorkspaceSelector({
                 projectOpen && "rotate-180 text-foreground"
               )}
             />
-          </button>
+          </button></PopoverTrigger>
         )}
 
-        {projectOpen && hasManagementSelected && (
-          <div
-            role="dialog"
+          <PopoverContent
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
             aria-label="Escolher projeto"
-            className="absolute left-0 sm:left-auto top-full z-50 mt-2 w-72 sm:w-80 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/50 animate-in fade-in zoom-in-95 duration-100"
+            className="flex w-80 flex-col overflow-hidden rounded-xl p-0 shadow-2xl"
           >
             {/* Input de busca de projetos */}
             <div className="border-b border-border p-2">
@@ -344,7 +311,8 @@ export function HeaderWorkspaceSelector({
               </div>
             </div>
 
-            <div className="max-h-64 overflow-y-auto p-1 space-y-0.5">
+
+            <div className="min-h-0 overflow-y-auto p-1 space-y-0.5">
               {/* Opção Todos os Projetos */}
               <button
                 type="button"
@@ -410,9 +378,9 @@ export function HeaderWorkspaceSelector({
                 </div>
               )}
             </div>
-          </div>
-        )}
+          </PopoverContent>
       </div>
+      </Popover>
     </div>
     </>
   );

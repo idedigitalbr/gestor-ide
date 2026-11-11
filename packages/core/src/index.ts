@@ -19,7 +19,7 @@ export type CanonicalTaskPriority = "Baixa" | "Normal" | "Alta" | "Urgente";
 
 export type TaskPriority = CanonicalTaskPriority | "Média";
 
-export type ViewMode = "table" | "kanban";
+export type ViewMode = "table" | "kanban" | "calendar" | "gantt" | "workload";
 
 export type AppModuleSection =
   | "tasks"
@@ -66,6 +66,7 @@ export interface Task {
   projectId?: string;
   projectName?: string;
   assigneeId?: string;
+  assigneeIds?: string[];
   assignee?: string;
   assigneeAvatar?: string;
   coverUrl?: string;
@@ -121,6 +122,22 @@ export interface CrmUserProfile {
   roles: string[];
   permissions: string[];
   modules: CrmModuleAccess;
+}
+
+export interface CrmAccount { id: string; name: string | null; email: string; avatarUrl: string | null }
+export interface CrmNotification { id: string; title: string; message: string | null; createdAt: string; readAt: string | null; taskId?: string | null }
+export interface CrmCalendarEvent {
+  id: string; title: string; description: string | null; type: "MEETING" | "DELIVERY" | "OTHER"; status: "CONFIRMED" | "TENTATIVE" | "CANCELLED"; priority: "LOW" | "MEDIUM" | "HIGH";
+  projectId: string | null; isAllDay: boolean; startsAt: string | null; endsAt: string | null; allDayStartDate: string | null; allDayEndDate: string | null; timeZone: string;
+  meetingMode: "ONLINE" | "IN_PERSON" | null; location: string | null; meetingUrl: string | null; notes: string | null; reminderMinutes: number | null;
+  participants: Array<{ user: { id: string } }>; seriesId?: string; recurrenceRule?: { frequency: string; interval: number; count: number } | null;
+}
+export interface CrmProjectsDashboard {
+  generatedAt: string;
+  metrics: { totalManagements: number; activeManagements: number; totalProjects: number; openTasks: number; overdueTasks: number; unassignedOpenTasks: number; totalMembers: number };
+  statusDistribution: { status: string; label: string; count: number; percentage: number }[];
+  managements: { id: string; name: string; projects: number; openTasks: number; overdueTasks: number; progress: number }[];
+  insights: { title: string; description: string; rule: string; severity: string }[];
 }
 
 export interface CrmProjectManagement {
@@ -517,6 +534,7 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
     parentTaskId: crmTask.parentTaskId ?? undefined,
     projectName: crmTask.project?.name,
     assigneeId: crmTask.assignees?.[0]?.userId,
+    assigneeIds: crmTask.assignees?.map((assignee) => assignee.userId),
     assignee: firstAssignee?.name || undefined,
     assigneeAvatar: firstAssignee?.avatarUrl || undefined,
     subtasks,
