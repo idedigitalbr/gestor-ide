@@ -19,7 +19,7 @@
    ```bash
    bun run dev
    ```
-   *(Por padrão, o `next.config.ts` redireciona `/api/crm/*` para o backend do IDE CRM em `http://localhost:3004/api/*`. Configure `IDE_CRM_BASE_URL` se o CRM estiver em outra URL).*
+   *(As rotas do Next.js encaminham `/api/crm/*` para o IDE CRM. Por padrão, usam `https://crm.suporteide.digital`; configure `IDE_CRM_BASE_URL=http://localhost:3004` para usar um CRM local.)*
 
 3. **Validações de Qualidade:**
    ```bash

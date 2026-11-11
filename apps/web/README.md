@@ -11,7 +11,7 @@ bun install --frozen-lockfile
 bun run dev:web
 ```
 
-Abrir [http://localhost:3000](http://localhost:3000). Esse comando executa somente o workspace `web`, economizando recursos no notebook. `bun run dev` na raiz continua disponível para iniciar todos os workspaces com tarefas `dev`.
+Abrir [http://localhost:3005](http://localhost:3005). Tanto `bun run dev:web` quanto `bun run dev` na raiz iniciam somente o workspace `web`.
 
 ## Conferir antes de integrar alterações
 
