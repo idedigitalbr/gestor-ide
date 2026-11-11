@@ -10,6 +10,13 @@ export const PROJECT_TASK_ITEM_TYPES = [
 
 export type ProjectTaskItemType = (typeof PROJECT_TASK_ITEM_TYPES)[number];
 
+export function getAllowedGroupTypes(parentType: ProjectTaskItemType | null): ProjectTaskItemType[] {
+  if (parentType === null) return ["STAGE"];
+  if (parentType === "STAGE") return ["PAGE", "MODULE"];
+  if (parentType === "PAGE" || parentType === "MODULE") return ["SECTION", "ITEM"];
+  return [];
+}
+
 export interface TaskItemTypeDefinition {
   type: ProjectTaskItemType;
   label: string;

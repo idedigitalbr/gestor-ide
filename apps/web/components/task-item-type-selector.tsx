@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   getItemTypeDefinition,
   normalizeItemType,
@@ -64,6 +65,8 @@ export interface TaskItemTypeSelectorProps {
   variant?: "badge" | "button" | "icon-only" | "full";
   className?: string;
   align?: "start" | "end" | "center";
+  unavailableReason?: string;
+  note?: string;
 }
 
 export function TaskItemTypeSelector({
@@ -75,29 +78,15 @@ export function TaskItemTypeSelector({
   variant = "badge",
   className,
   align = "start",
+  unavailableReason,
+  note,
 }: TaskItemTypeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const currentType = normalizeItemType(value);
   const currentDef = getItemTypeDefinition(currentType);
-
-  // Fecha o menu ao clicar fora
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleClickOutside(event: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearch("");
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
 
   // Foca no input de busca ao abrir
   useEffect(() => {
@@ -123,19 +112,20 @@ export function TaskItemTypeSelector({
   }, [allowedTypes, search]);
 
   const handleSelect = (type: ProjectTaskItemType) => {
+    if (unavailableReason && type !== currentType) return;
     onChange(type);
     setIsOpen(false);
     setSearch("");
   };
 
   return (
-    <div className="relative inline-block text-left" ref={popoverRef}>
+    <Popover open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setSearch(""); }}>
       {/* Botão de Disparo */}
+      <PopoverTrigger asChild>
       {variant === "icon-only" ? (
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen(!isOpen)}
           aria-label={`Tipo de item: ${currentDef.label}`}
           title={`Tipo: ${currentDef.label} (${currentDef.subtitle}). Clique para alterar.`}
           className={cn(
@@ -149,7 +139,6 @@ export function TaskItemTypeSelector({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen(!isOpen)}
           className={cn(
             "flex w-full items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-all hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60",
             className
@@ -166,7 +155,6 @@ export function TaskItemTypeSelector({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen(!isOpen)}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:opacity-50",
             className
@@ -181,7 +169,6 @@ export function TaskItemTypeSelector({
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen(!isOpen)}
           className={cn(
             "group inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold transition-all hover:border-border hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 disabled:opacity-60",
             currentDef.badgeBg,
@@ -194,15 +181,13 @@ export function TaskItemTypeSelector({
           <ChevronDown className="h-2.5 w-2.5 opacity-40 group-hover:opacity-100 transition-opacity" />
         </button>
       )}
+      </PopoverTrigger>
 
       {/* Popover / Dropdown Menu Estilo ClickUp */}
-      {isOpen && (
-        <div
-          className={cn(
-            "absolute z-50 mt-1 w-64 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl shadow-black/20 backdrop-blur-sm animate-in fade-in-0 zoom-in-95",
-            align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"
-          )}
-          style={{ minWidth: "240px" }}
+        <PopoverContent
+          align={align}
+          collisionPadding={8}
+          className="w-64 max-w-[calc(100vw-1rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl p-1.5"
         >
           {/* Campo de Busca */}
           <div className="relative mb-1 px-1 pt-1 pb-1">
@@ -229,6 +214,10 @@ export function TaskItemTypeSelector({
           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Tipo de Item
           </div>
+          {unavailableReason && (
+            <p role="status" className="px-2 pb-2 text-xs text-muted-foreground">{unavailableReason}</p>
+          )}
+          {note && <p className="px-2 pb-2 text-xs text-muted-foreground">{note}</p>}
 
           {/* Lista de Opções */}
           <div className="max-h-60 overflow-y-auto space-y-0.5">
@@ -243,9 +232,11 @@ export function TaskItemTypeSelector({
                   <button
                     key={item.type}
                     type="button"
+                    disabled={Boolean(unavailableReason) && !isSelected}
                     onClick={() => handleSelect(item.type)}
                     className={cn(
                       "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-secondary hover:text-foreground cursor-pointer",
+                      "disabled:cursor-not-allowed disabled:opacity-50",
                       isSelected && "bg-secondary font-semibold"
                     )}
                   >
@@ -266,8 +257,7 @@ export function TaskItemTypeSelector({
               })
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </PopoverContent>
+    </Popover>
   );
 }

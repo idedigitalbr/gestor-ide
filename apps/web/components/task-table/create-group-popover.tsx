@@ -1,202 +1,94 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, FolderPlus, Layers, Sparkles } from "lucide-react";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
+import { Check, FolderPlus, Plus } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  TASK_ITEM_TYPES_LIST,
-  type ProjectTaskItemType,
-} from "@/lib/task-item-type";
+import { TaskItemTypeIcon } from "@/components/task-item-type-selector";
+import { getAllowedGroupTypes, getItemTypeDefinition, type ProjectTaskItemType } from "@/lib/task-item-type";
 import type { TaskStatus } from "@/types/task";
 import { TaskSolidStatusBadge } from "./task-solid-status-badge";
 import { cn } from "@/lib/utils";
 
 interface CreateGroupPopoverProps {
-  onCreateFreeGroup: (name: string) => void;
-  onCreateSpecialGroup: (data: {
-    title: string;
-    itemType: ProjectTaskItemType;
-    status: TaskStatus;
-  }) => void;
+  onCreateFreeGroup?: (name: string) => void;
+  onCreateSpecialGroup: (data: { title: string; itemType: ProjectTaskItemType; status: TaskStatus }) => void;
+  parentType?: ProjectTaskItemType | null;
+  compact?: boolean;
 }
 
-export function CreateGroupPopover({
-  onCreateFreeGroup,
-  onCreateSpecialGroup,
-}: CreateGroupPopoverProps) {
+const HIERARCHY: { type: ProjectTaskItemType; depth: number }[] = [
+  { type: "STAGE", depth: 0 },
+  { type: "PAGE", depth: 1 },
+  { type: "MODULE", depth: 1 },
+  { type: "SECTION", depth: 2 },
+  { type: "ITEM", depth: 2 },
+];
+
+export function CreateGroupPopover({ onCreateFreeGroup, onCreateSpecialGroup, parentType = null, compact = false }: CreateGroupPopoverProps) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"free" | "special">("special");
+  const allowedTypes = getAllowedGroupTypes(parentType);
+  const [selectedType, setSelectedType] = useState<ProjectTaskItemType | "FREE">(allowedTypes[0] ?? "FREE");
+  const [title, setTitle] = useState("");
+  const [status, setStatus] = useState<TaskStatus>("PENDENTE");
 
-  // Campos para Grupo Livre
-  const [freeGroupName, setFreeGroupName] = useState("");
-
-  // Campos para Grupo Especial
-  const [specialTitle, setSpecialTitle] = useState("");
-  const [selectedType, setSelectedType] = useState<ProjectTaskItemType>("STAGE");
-  const [specialStatus, setSpecialStatus] = useState<TaskStatus>("PENDENTE");
-
-  function handleCreateFree(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = freeGroupName.trim();
-    if (!trimmed) return;
-    onCreateFreeGroup(trimmed);
-    setFreeGroupName("");
-    setOpen(false);
-  }
-
-  function handleCreateSpecial(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = specialTitle.trim();
-    if (!trimmed) return;
-    onCreateSpecialGroup({
-      title: trimmed,
-      itemType: selectedType,
-      status: specialStatus,
-    });
-    setSpecialTitle("");
+  function handleCreate(event: React.FormEvent) {
+    event.preventDefault();
+    const name = title.trim();
+    if (!name) return;
+    if (selectedType === "FREE") {
+      if (!onCreateFreeGroup || parentType !== null) return;
+      onCreateFreeGroup(name);
+    } else {
+      if (!allowedTypes.includes(selectedType)) return;
+      onCreateSpecialGroup({ title: name, itemType: selectedType, status });
+    }
+    setTitle("");
     setOpen(false);
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[#252838] bg-[#12141f] text-xs font-semibold text-[#c8cce0] hover:text-white hover:border-[#3b82f6] hover:bg-[#181a28] shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4 text-[#8b5cf6]" />
-          <span>+ Adicionar novo grupo</span>
-        </button>
+        <Button type="button" variant="outline" size="sm" className={cn("gap-2", compact && "h-6 w-6 p-0")} aria-label={compact ? "Adicionar grupo dentro" : undefined}>
+          <Plus className="h-4 w-4" />{!compact && <span>Adicionar novo grupo</span>}
+        </Button>
       </PopoverTrigger>
-
-      <PopoverContent
-        align="start"
-        side="top"
-        className="w-80 p-3.5 bg-[#141624] border-[#252838] text-white shadow-2xl rounded-2xl z-50"
-      >
-        <div className="flex items-center gap-1.5 p-1 bg-[#0d0e17] rounded-lg mb-3">
-          <button
-            type="button"
-            onClick={() => setTab("special")}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer",
-              tab === "special"
-                ? "bg-[#25283f] text-white shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-white"
+      <PopoverContent align="start" side="top" collisionPadding={8} className="w-80 max-w-[calc(100vw-1rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl p-3">
+        <form onSubmit={handleCreate} className="space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-semibold text-muted-foreground">Tipo de grupo</p>
+            <p className="mb-2 text-xs text-muted-foreground">A organização por tipo e grupos livres fica salva neste navegador.</p>
+            {parentType === null && (
+              <button type="button" onClick={() => setSelectedType("FREE")} className={cn("flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-secondary", selectedType === "FREE" && "bg-secondary")}>
+                <FolderPlus className="h-4 w-4 text-primary" />
+                <span className="flex-1"><span className="block font-semibold">Grupo livre</span><span className="text-muted-foreground">Organizar tarefas por contexto</span></span>
+                {selectedType === "FREE" && <Check className="h-4 w-4" />}
+              </button>
             )}
-          >
-            <Layers className="w-3.5 h-3.5 text-[#8b5cf6]" />
-            <span>Grupo especial</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("free")}
-            className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-colors cursor-pointer",
-              tab === "free"
-                ? "bg-[#25283f] text-white shadow-xs font-semibold"
-                : "text-muted-foreground hover:text-white"
-            )}
-          >
-            <FolderPlus className="w-3.5 h-3.5 text-[#3b82f6]" />
-            <span>Grupo livre</span>
-          </button>
-        </div>
-
-        {tab === "special" ? (
-          <form onSubmit={handleCreateSpecial} className="space-y-3">
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                Tipo especial
-              </label>
-              <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
-                {TASK_ITEM_TYPES_LIST.filter((t) => t.type !== "TASK").map((def) => {
-                  const isSelected = selectedType === def.type;
-                  return (
-                    <button
-                      key={def.type}
-                      type="button"
-                      onClick={() => setSelectedType(def.type)}
-                      className={cn(
-                        "flex items-center gap-1.5 p-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer",
-                        isSelected
-                          ? "border-[#8b5cf6] bg-[#8b5cf6]/15 text-white font-medium"
-                          : "border-[#252838] bg-[#10121d] text-muted-foreground hover:text-white"
-                      )}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: def.color }}
-                      />
-                      <span className="truncate">{def.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                Título do grupo / tarefa especial
-              </label>
-              <Input
-                autoFocus
-                placeholder="Ex: Etapa 06 — Pós-lançamento..."
-                value={specialTitle}
-                onChange={(e) => setSpecialTitle(e.target.value)}
-                className="h-8 text-xs bg-[#0d0e17] border-[#252838] text-white placeholder:text-[#6e728c]"
-              />
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <TaskSolidStatusBadge
-                status={specialStatus}
-                onChangeStatus={setSpecialStatus}
-                size="sm"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                className="h-8 px-3 text-xs bg-[#8b5cf6] hover:bg-[#7c4def] text-white font-medium cursor-pointer"
-              >
-                Criar grupo especial
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <form onSubmit={handleCreateFree} className="space-y-3">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              O grupo livre é apenas um container visual para organizar tarefas por nome ou contexto.
-            </p>
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
-                Nome do container livre
-              </label>
-              <Input
-                autoFocus
-                placeholder="Ex: Tarefas pendentes, Backlog..."
-                value={freeGroupName}
-                onChange={(e) => setFreeGroupName(e.target.value)}
-                className="h-8 text-xs bg-[#0d0e17] border-[#252838] text-white placeholder:text-[#6e728c]"
-              />
-            </div>
-            <div className="flex justify-end pt-1">
-              <Button
-                type="submit"
-                size="sm"
-                className="h-8 px-3 text-xs bg-[#3b82f6] hover:bg-[#2563eb] text-white font-medium cursor-pointer"
-              >
-                Criar grupo livre
-              </Button>
-            </div>
-          </form>
-        )}
+            {HIERARCHY.map(({ type, depth }) => {
+              const def = getItemTypeDefinition(type);
+              const available = allowedTypes.includes(type);
+              const selected = selectedType === type;
+              return (
+                <button key={type} type="button" disabled={!available} onClick={() => setSelectedType(type)} className={cn("flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50", depth === 1 && "pl-5", depth === 2 && "pl-8", selected && "bg-secondary")}>
+                  <TaskItemTypeIcon type={type} size={16} />
+                  <span className="min-w-0 flex-1"><span className="block font-semibold">{def.label}</span><span className="block text-muted-foreground">{def.subtitle}</span></span>
+                  {selected && <Check className="h-4 w-4" />}
+                </button>
+              );
+            })}
+          </div>
+          <label className="block text-xs font-semibold text-muted-foreground">
+            Nome
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Nome do grupo" className="mt-1" />
+          </label>
+          <div className="flex items-center justify-between gap-2">
+            {selectedType !== "FREE" && <TaskSolidStatusBadge status={status} onChangeStatus={setStatus} size="sm" />}
+            <Button type="submit" size="sm" disabled={!title.trim()} className="ml-auto">Criar grupo</Button>
+          </div>
+        </form>
       </PopoverContent>
     </Popover>
   );

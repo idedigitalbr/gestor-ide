@@ -13,6 +13,40 @@ const KEY_MANAGEMENTS = `${PREFIX}managements`;
 const KEY_PROJECTS = `${PREFIX}projects`;
 const KEY_SESSION = `${PREFIX}session`;
 const KEY_TASKS_PREFIX = `${PREFIX}tasks_`;
+const LOCAL_UI_PREFIX = "gestor_local_ui_";
+
+type LocalTaskPresentation = { itemType?: string; customGroup?: string };
+
+function getLocalUiKey(kind: string, id: string): string {
+  const userId = getCachedSession()?.id ?? "anon";
+  return `${LOCAL_UI_PREFIX}${encodeURIComponent(userId)}_${kind}_${encodeURIComponent(id)}`;
+}
+
+export function getLocalTaskPresentation(taskId: string): LocalTaskPresentation {
+  try {
+    const value = JSON.parse(safeGetItem(getLocalUiKey("task", taskId)) ?? "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch { return {}; }
+}
+
+export function setLocalTaskPresentation(taskId: string, presentation: LocalTaskPresentation): void {
+  safeSetItem(getLocalUiKey("task", taskId), JSON.stringify(presentation));
+}
+
+export function removeLocalTaskPresentation(taskId: string): void {
+  safeRemoveItem(getLocalUiKey("task", taskId));
+}
+
+export function getLocalFreeGroups(projectId: string): string[] {
+  try {
+    const value = JSON.parse(safeGetItem(getLocalUiKey("groups", projectId)) ?? "[]");
+    return Array.isArray(value) ? value.filter((name): name is string => typeof name === "string") : [];
+  } catch { return []; }
+}
+
+export function setLocalFreeGroups(projectId: string, names: string[]): void {
+  safeSetItem(getLocalUiKey("groups", projectId), JSON.stringify(names));
+}
 
 // In-Memory cache para velocidade de nanossegundos durante a sessão
 const memoryTasks = new Map<string, Task[]>();

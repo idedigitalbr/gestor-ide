@@ -7,6 +7,11 @@ import {
   setCachedManagements,
   setCachedProjects,
   setCachedTasks,
+  getLocalTaskPresentation,
+  setLocalTaskPresentation,
+  getLocalFreeGroups,
+  setLocalFreeGroups,
+  setCachedSession,
 } from "./gestor-cache";
 
 const values = new Map();
@@ -22,6 +27,19 @@ beforeEach(() => {
   globalThis.window = {};
   globalThis.localStorage = storage;
   clearGestorCache();
+  values.clear();
+});
+
+test("organização local fica separada por usuário e projeto", () => {
+  setCachedSession({ id: "user-a" });
+  setLocalTaskPresentation("t1", { itemType: "STAGE", customGroup: "Grupo A" });
+  setLocalFreeGroups("p1", ["Grupo A"]);
+  expect(getLocalTaskPresentation("t1")).toEqual({ itemType: "STAGE", customGroup: "Grupo A" });
+  expect(getLocalFreeGroups("p1")).toEqual(["Grupo A"]);
+  expect(getLocalFreeGroups("p2")).toEqual([]);
+  setCachedSession({ id: "user-b" });
+  expect(getLocalTaskPresentation("t1")).toEqual({});
+  expect(getLocalFreeGroups("p1")).toEqual([]);
 });
 
 afterEach(() => {

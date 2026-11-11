@@ -36,6 +36,7 @@ test("envia datas e múltiplas etiquetas e permite limpar etiquetas", () => {
   const task = mapCrmTaskToGestorTask(crmTask);
   const input = mapGestorTaskToCrmCreateInput(task, "project-1");
   expect(input.startDate).toBe("2026-11-01");
+  expect(input.parentTaskId).toBe("parent-1");
   expect(input.tags).toEqual(["primeira", "segunda"]);
   expect(mapGestorTaskToCrmUpdateInput({ tags: [] }).tags).toEqual([]);
 });

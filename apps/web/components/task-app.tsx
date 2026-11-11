@@ -45,6 +45,9 @@ import {
   getCachedSession,
   setCachedSession,
   clearGestorCache,
+  getLocalTaskPresentation,
+  setLocalTaskPresentation,
+  removeLocalTaskPresentation,
 } from "@/lib/gestor-cache";
 import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
 import { ManagementsGridView } from "@/components/managements-grid-view";
@@ -260,7 +263,10 @@ export function TaskApp() {
           loadedTasks = res.tasks ?? [];
         }
 
-        const mapped = loadedTasks.map((t, idx) => mapCrmTaskToGestorTask(t, idx));
+        const mapped = loadedTasks.map((t, idx) => ({
+          ...mapCrmTaskToGestorTask(t, idx),
+          ...getLocalTaskPresentation(t.id),
+        }));
         const finalTasks = mapped;
         setTasks(finalTasks);
         if (projectIdFilter || !managementIdFilter) setCachedTasks(projectIdFilter, finalTasks);
@@ -678,7 +684,9 @@ export function TaskApp() {
         .then((res) => {
           if (res?.task) {
             const synced = mapCrmTaskToGestorTask(res.task, 0);
-            const finalTask = { ...synced, code: newTask.code };
+            const presentation = { itemType: newTask.itemType, customGroup: newTask.customGroup };
+            setLocalTaskPresentation(synced.id, presentation);
+            const finalTask = { ...synced, ...presentation, code: newTask.code };
             setTasks((prev) =>
               prev.map((t) =>
                 t.id === tempId ? finalTask : t
@@ -696,6 +704,12 @@ export function TaskApp() {
 
   function handleUpdateTask(updatedTask: Task) {
     const previousTask = tasks.find((task) => task.id === updatedTask.id);
+    if (previousTask && updatedTask.itemType !== previousTask.itemType) {
+      setLocalTaskPresentation(updatedTask.id, { itemType: updatedTask.itemType, customGroup: updatedTask.customGroup });
+      setTasks((previous) => previous.map((task) => task.id === updatedTask.id ? updatedTask : task));
+      updateCachedTask(updatedTask);
+      return;
+    }
     const version = (taskUpdateVersionsRef.current.get(updatedTask.id) ?? 0) + 1;
     taskUpdateVersionsRef.current.set(updatedTask.id, version);
     setTasks((prev) =>
@@ -747,7 +761,7 @@ export function TaskApp() {
     }
 
     if (isConnectedCrm && !id.startsWith("task-")) {
-      void ideCrmClient.deleteTask(id).catch(() => {
+      void ideCrmClient.deleteTask(id).then(() => removeLocalTaskPresentation(id)).catch(() => {
         setSyncError("Não foi possível excluir a tarefa no CRM. Atualize os dados para recuperá-la.");
       });
     }
@@ -964,9 +978,9 @@ export function TaskApp() {
   );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
       {/* Main Content Area (Sidebar desativada conforme solicitado) */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full overflow-hidden">
         <AppHeader
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
@@ -1005,7 +1019,7 @@ export function TaskApp() {
         {/* View Content */}
         <main
           className={cn(
-            "flex-1 overflow-y-auto",
+            "min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden",
             selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
@@ -1069,7 +1083,10 @@ export function TaskApp() {
               onQuickAdd={handleOpenNewTask}
             />
           ) : (
+            <div className="w-full overflow-x-auto">
             <TaskTable
+              key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
+              projectId={selectedProjectId}
               tasks={filteredTasks}
               groupBy={groupBy}
               groupOrder={groupOrder}
@@ -1087,6 +1104,7 @@ export function TaskApp() {
               subtaskMode={subtaskMode}
               showClosedSubtasks={showClosedSubtasks}
             />
+            </div>
           )}
         </main>
       </div>

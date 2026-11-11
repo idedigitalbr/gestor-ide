@@ -251,12 +251,12 @@ export function AppHeader({
     .toUpperCase();
 
   return (
-    <header className="planw-app-header h-12 px-3 border-b border-border/60 bg-background/95 backdrop-blur-xs flex items-center justify-between select-none text-xs shrink-0 relative z-50 text-foreground">
+    <header className="planw-app-header min-h-12 px-3 py-1 border-b border-border/60 bg-background/95 backdrop-blur-xs flex flex-wrap items-center justify-between gap-y-1 select-none text-xs shrink-0 relative z-50 text-foreground">
       {/* ========================================================= */}
       {/* LADO ESQUERDO: Home + Seletor de Gestão e Projeto          */}
       {/* (Sem ícones redundantes no header, conforme solicitado)     */}
       {/* ========================================================= */}
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div className={cn("flex items-center gap-1.5 min-w-0", isInsideProject && "w-full sm:w-auto sm:flex-1")}>
         <HeaderTooltip label="Início (Todas as Gestões)">
           <Button
             variant="ghost"
@@ -289,7 +289,7 @@ export function AppHeader({
       {/* (Super minimalista, exatamente como no Anexo 2)            */}
       {/* ========================================================= */}
       {isInsideProject ? (
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex w-full min-w-0 items-center gap-1.5 sm:w-auto sm:shrink-0">
           {/* Avatar do Usuário com Indicador Online Verde */}
           <HeaderTooltip label={displayName}>
             <div className="relative shrink-0 mr-0.5">
@@ -316,7 +316,7 @@ export function AppHeader({
           </HeaderTooltip>
 
           {/* Campo de Busca Rápida */}
-          <div className="relative flex items-center">
+          <div className="relative flex min-w-0 flex-1 items-center sm:flex-none">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
               value={filters.search}
@@ -324,7 +324,7 @@ export function AppHeader({
                 onFilterChange({ ...filters, search: e.target.value })
               }
               placeholder="Buscar tarefas..."
-              className="h-8 w-36 sm:w-48 md:w-56 pl-8 pr-2.5 text-xs bg-muted/40 border-border/70 rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+              className="h-8 w-full sm:w-48 md:w-56 pl-8 pr-2.5 text-xs bg-muted/40 border-border/70 rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
 

@@ -7,7 +7,7 @@ const TaskApp = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-screen w-screen items-center justify-center bg-background text-muted-foreground text-sm">
+      <div className="flex h-full w-full items-center justify-center bg-background text-muted-foreground text-sm">
         Carregando IDE Gestor...
       </div>
     ),

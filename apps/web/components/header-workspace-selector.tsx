@@ -141,10 +141,10 @@ export function HeaderWorkspaceSelector({
       <div
         role="navigation"
         aria-label="Seletor de Gestão e Projeto"
-        className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-0.5 relative z-50"
+        className="flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-0.5 relative z-50"
       >
         {/* 1. SELETOR DE GESTÃO (ANEXO 2) */}
-        <div className={cn("relative", managementOpen && "z-50")} ref={managementRef}>
+        <div className={cn("relative min-w-0", managementOpen && "z-50")} ref={managementRef}>
           <button
             type="button"
             onClick={() => {
@@ -276,7 +276,7 @@ export function HeaderWorkspaceSelector({
       <span className="text-muted-foreground/40 text-xs font-semibold select-none px-0.5">/</span>
 
       {/* 2. SELETOR DE PROJETO (ANEXO 2 - só habilitado após setar a gestão) */}
-      <div className={cn("relative", projectOpen && "z-50")} ref={projectRef}>
+      <div className={cn("relative min-w-0", projectOpen && "z-50")} ref={projectRef}>
         {!hasManagementSelected ? (
           <button
             type="button"

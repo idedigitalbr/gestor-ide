@@ -25,6 +25,8 @@ import { TaskItemTypeSelector } from "../task-item-type-selector";
 import {
   isTaskContentFilled,
   getItemTypeDefinition,
+  getAllowedGroupTypes,
+  normalizeItemType,
   type ProjectTaskItemType,
 } from "@/lib/task-item-type";
 import {
@@ -70,6 +72,7 @@ import { TaskSolidStatusBadge } from "./task-solid-status-badge";
 import { TaskTimelineDateCell } from "./task-timeline-date-cell";
 import { TaskAssigneeCell } from "./task-assignee-cell";
 import { CreateGroupPopover } from "./create-group-popover";
+import { getLocalFreeGroups, setLocalFreeGroups } from "@/lib/gestor-cache";
 
 interface TaskTableProps {
   tasks: Task[];
@@ -94,6 +97,7 @@ interface TaskTableProps {
   onCloseFieldsModal?: () => void;
   subtaskMode?: "collapsed" | "expanded" | "separate";
   showClosedSubtasks?: boolean;
+  projectId?: string | null;
 }
 
 const TABLE_GROUPS: CanonicalTaskStatus[] = ALL_CANONICAL_STATUSES;
@@ -163,6 +167,7 @@ export function TaskTable({
   onCloseFieldsModal,
   subtaskMode = "collapsed",
   showClosedSubtasks = true,
+  projectId,
 }: TaskTableProps) {
   // Controle de colunas e ordenação rápida
   const [columns, setColumns] = useState<TableColumnConfig[]>(DEFAULT_COLUMNS);
@@ -191,7 +196,7 @@ export function TaskTable({
   );
 
   // Lista dinâmica de grupos livres criados pelo usuário
-  const [customFreeGroups, setCustomFreeGroups] = useState<string[]>([]);
+  const [customFreeGroups, setCustomFreeGroups] = useState<string[]>(() => projectId ? getLocalFreeGroups(projectId) : []);
 
   function handleSortToggle(columnId: string) {
     if (sortColumn !== columnId) {
@@ -436,7 +441,7 @@ export function TaskTable({
     setQuickTag("geral");
   }
 
-  function handleSaveQuickAdd(e: React.FormEvent, status: TaskStatus) {
+  function handleSaveQuickAdd(e: React.FormEvent, status: TaskStatus, customGroup?: string) {
     e.preventDefault();
     const trimmed = quickTitle.trim();
     if (!trimmed) return;
@@ -449,6 +454,7 @@ export function TaskTable({
       tag: quickTag,
       description: "",
       itemType: "TASK",
+      customGroup,
     });
 
     setAddingInGroup(null);
@@ -781,21 +787,25 @@ export function TaskTable({
 
   // Handlers para criação de novos grupos através do Popover
   function handleCreateFreeGroup(name: string) {
-    setCustomFreeGroups((prev) => [...prev, name]);
+    const next = customFreeGroups.includes(name) ? customFreeGroups : [...customFreeGroups, name];
+    setCustomFreeGroups(next);
+    if (projectId) setLocalFreeGroups(projectId, next);
   }
 
   function handleCreateSpecialGroup(data: {
     title: string;
     itemType: ProjectTaskItemType;
     status: TaskStatus;
-  }) {
+  }, parentTaskId?: string) {
     onAddTask({
       title: data.title,
       itemType: data.itemType,
       status: data.status,
       priority: "Normal",
       description: "",
+      parentTaskId,
     });
+    if (parentTaskId) setExpandedTasks((prev) => ({ ...prev, [parentTaskId]: true }));
   }
 
   // ---------------------------------------------------------------------------
@@ -816,6 +826,9 @@ export function TaskTable({
     const childTasks = sortTasksList(
       tasks.filter((t) => t.parentTaskId === task.id)
     );
+    const parentTask = task.parentTaskId ? tasks.find((item) => item.id === task.parentTaskId) : undefined;
+    const parentType = parentTask ? normalizeItemType(parentTask.itemType) : null;
+    const allowedItemTypes: ProjectTaskItemType[] = ["TASK", ...getAllowedGroupTypes(parentType)];
     const subtasks = task.subtasks ?? [];
     const hasDescendants = childTasks.length > 0 || subtasks.length > 0;
 
@@ -925,8 +938,10 @@ export function TaskTable({
             {/* Ícone e Seletor do Tipo Especial da Tarefa */}
             <TaskItemTypeSelector
               value={task.itemType ?? "TASK"}
+              allowedTypes={allowedItemTypes}
               hasContent={isTaskContentFilled(task.description)}
               variant="icon-only"
+              note="Tipo especial salvo somente neste navegador."
               onChange={(newType) =>
                 onUpdateTask({ ...task, itemType: newType })
               }
@@ -985,7 +1000,10 @@ export function TaskTable({
                 <TaskSegmentedProgress task={task} allTasks={tasks} />
 
                 {/* Botões Rápidos Inline no Hover (+ Subtarefa, Tag, Lápis) */}
-                <div className="opacity-0 group-hover/row:opacity-100 flex items-center gap-1 ml-1 transition-opacity shrink-0">
+                <div className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 flex items-center gap-1 ml-1 transition-opacity shrink-0">
+                  {getAllowedGroupTypes(normalizeItemType(task.itemType)).length > 0 && (
+                    <CreateGroupPopover compact parentType={normalizeItemType(task.itemType)} onCreateSpecialGroup={(data) => handleCreateSpecialGroup(data, task.id)} />
+                  )}
                   <button
                     type="button"
                     onClick={() => handleOpenAddSubtask(task)}
@@ -1526,7 +1544,7 @@ export function TaskTable({
   // JSX Principal
   // ---------------------------------------------------------------------------
   return (
-    <div className="w-full bg-[#000000] select-none text-xs relative pb-24 min-h-screen p-4 sm:p-6 space-y-4">
+    <div className="w-full min-w-[760px] bg-[#000000] select-none text-xs relative pb-24 p-4 sm:p-6 space-y-4">
       {/* Cabeçalho Global de Colunas */}
       <div className="flex items-center justify-between px-3 py-2.5 border border-[#1f212a] text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-[#121317] rounded-xl shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
         <div className="flex items-center gap-2 flex-1 min-w-0 pl-7">
@@ -1723,7 +1741,7 @@ export function TaskTable({
                     {/* Botão + Adicionar Tarefa no Grupo Livre */}
                     {addingInGroup === group.name ? (
                       <form
-                        onSubmit={(e) => handleSaveQuickAdd(e, "PENDENTE")}
+                        onSubmit={(e) => handleSaveQuickAdd(e, "PENDENTE", group.name)}
                         className="flex items-center gap-2 py-2.5 px-4 bg-[#141624] border-t border-[#1f212a]"
                       >
                         <input

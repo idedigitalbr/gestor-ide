@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { MemberAvatarContent } from "@/components/member-avatar-content";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -221,15 +222,7 @@ export function ManagementProjectsView({
                         className="w-8 h-8 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[10px] font-bold text-foreground"
                         title={m.user?.name || "Membro"}
                       >
-                        {m.user?.avatarUrl ? (
-                          <img
-                            src={m.user.avatarUrl}
-                            alt={m.user?.name || ""}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span>{(m.user?.name || "U").slice(0, 2).toUpperCase()}</span>
-                        )}
+                        <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
                       </div>
                     ))}
                     {memberCount > 5 && (
@@ -520,15 +513,7 @@ export function ManagementProjectsView({
                                 key={m.userId || idx}
                                 className="w-5 h-5 rounded-full border border-card bg-muted overflow-hidden flex items-center justify-center text-[8px] font-bold"
                               >
-                                {m.user?.avatarUrl ? (
-                                  <img
-                                    src={m.user.avatarUrl}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span>{(m.user?.name || "U").slice(0, 1)}</span>
-                                )}
+                                <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} initialsLength={1} />
                               </div>
                             ))}
                           </div>
