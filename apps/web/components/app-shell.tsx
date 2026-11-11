@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 const TaskApp = dynamic(
   () => import("@/components/task-app").then((module) => module.TaskApp),
@@ -12,5 +12,9 @@ const TaskApp = dynamic(
 );
 
 export function AppShell({ children }: { children: ReactNode }) {
-  return <TaskApp>{children}</TaskApp>;
+  return (
+    <Suspense fallback={<div className="flex h-full w-full items-center justify-center bg-background text-sm text-muted-foreground">Carregando IDE Gestor...</div>}>
+      <TaskApp>{children}</TaskApp>
+    </Suspense>
+  );
 }
