@@ -43,6 +43,13 @@ const MONTHS_FULL = [
   "dezembro",
 ];
 
+function validCalendarDate(year: number, month: number, day: number): Date | null {
+  const date = new Date(year, month, day);
+  return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day
+    ? date
+    : null;
+}
+
 export function parseIsoOrDateString(value: string | null | undefined): Date | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -56,7 +63,7 @@ export function parseIsoOrDateString(value: string | null | undefined): Date | n
     let year = parseInt(parts[2], 10);
     if (year < 100) year += 2000;
     if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-    return new Date(year, month, day);
+    return validCalendarDate(year, month, day);
   }
 
   // YYYY-MM-DD
@@ -66,7 +73,7 @@ export function parseIsoOrDateString(value: string | null | undefined): Date | n
     const year = parseInt(match[1], 10);
     const month = parseInt(match[2], 10) - 1;
     const day = parseInt(match[3], 10);
-    return new Date(year, month, day);
+    return validCalendarDate(year, month, day);
   }
 
   const parsed = new Date(trimmed);

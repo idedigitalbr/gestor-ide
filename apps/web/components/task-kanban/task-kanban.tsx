@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import type { Task, TaskStatus, CanonicalTaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
-import { ALL_CANONICAL_STATUSES, getStatusDefinition } from "../task-status-icon";
+import { ALL_CANONICAL_STATUSES } from "../task-status-icon";
 import { KanbanColumn } from "./kanban-column";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Eye } from "lucide-react";

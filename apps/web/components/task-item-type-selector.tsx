@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import {
-  CircleDot,
   Layers,
   File,
   FileText,
@@ -19,10 +18,8 @@ import { cn } from "@/lib/utils";
 import {
   getItemTypeDefinition,
   normalizeItemType,
-  PROJECT_TASK_ITEM_TYPES,
   TASK_ITEM_TYPES_LIST,
   type ProjectTaskItemType,
-  type TaskItemTypeDefinition,
 } from "@/lib/task-item-type";
 
 interface TaskItemTypeIconProps {

@@ -46,7 +46,6 @@ import {
   setCachedSession,
   clearGestorCache,
 } from "@/lib/gestor-cache";
-import { Sidebar } from "@/components/sidebar";
 import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
 import { ManagementsGridView } from "@/components/managements-grid-view";
 import { ManagementProjectsView } from "@/components/management-projects-view";
@@ -56,7 +55,7 @@ import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
 import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
 import { EnterpriseModulesView } from "@/components/enterprise-modules-view";
-import { TaskTableSkeleton, TaskKanbanSkeleton } from "@/components/task-skeleton";
+import { TaskTableSkeleton } from "@/components/task-skeleton";
 import { cn } from "@/lib/utils";
 
 function getHighestCodeNumber(list: Task[]): number {

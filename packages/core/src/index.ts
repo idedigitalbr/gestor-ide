@@ -482,13 +482,14 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
     : undefined;
 
   const tags = Array.isArray(crmTask.tags) ? crmTask.tags : [];
-  const primaryTag = tags[0] ?? crmTask.project?.name;
+  const primaryTag = tags[0];
   const firstAssignee = crmTask.assignees?.[0]?.user;
 
   const subtasks: Subtask[] = (crmTask.checklistItems ?? []).map((item) => ({
     id: item.id,
     title: item.title,
     completed: Boolean(item.completed),
+    parentId: item.parentId ?? undefined,
   }));
 
   const comments: TaskComment[] = (crmTask.comments ?? []).map((comment) => ({
@@ -506,11 +507,13 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
     description: crmTask.description ?? "",
     status: mapCrmStatusToGestor(crmTask.status),
     priority: mapCrmPriorityToGestor(crmTask.priority),
+    startDate: crmTask.startDate?.slice(0, 10),
     dueDate,
     tag: primaryTag,
     tags: tags.length > 0 ? tags : undefined,
     estimate: formatEstimateFromMinutes(crmTask.estimateMinutes),
     projectId: crmTask.projectId,
+    parentTaskId: crmTask.parentTaskId ?? undefined,
     projectName: crmTask.project?.name,
     assignee: firstAssignee?.name || undefined,
     assigneeAvatar: firstAssignee?.avatarUrl || undefined,
@@ -531,9 +534,12 @@ export function mapGestorTaskToCrmCreateInput(
     description: task.description?.trim() || null,
     status: mapGestorStatusToCrm(task.status),
     priority: mapGestorPriorityToCrm(task.priority),
+    startDate: task.startDate || null,
     dueDate: task.dueDate ? task.dueDate : null,
     estimateMinutes: parseEstimateToMinutes(task.estimate),
-    tags: task.tag?.trim() ? [task.tag.trim()] : [],
+    tags: task.tags !== undefined
+      ? task.tags.map((tag) => tag.trim()).filter(Boolean)
+      : task.tag?.trim() ? [task.tag.trim()] : [],
   };
 }
 
@@ -543,8 +549,10 @@ export function mapGestorTaskToCrmUpdateInput(task: Partial<Task>) {
   if (task.description !== undefined) payload.description = task.description.trim() || null;
   if (task.status !== undefined) payload.status = mapGestorStatusToCrm(task.status);
   if (task.priority !== undefined) payload.priority = mapGestorPriorityToCrm(task.priority);
+  if (task.startDate !== undefined) payload.startDate = task.startDate || null;
   if (task.dueDate !== undefined) payload.dueDate = task.dueDate || null;
   if (task.estimate !== undefined) payload.estimateMinutes = parseEstimateToMinutes(task.estimate);
-  if (task.tag !== undefined) payload.tags = task.tag.trim() ? [task.tag.trim()] : [];
+  if (task.tags !== undefined) payload.tags = task.tags.map((tag) => tag.trim()).filter(Boolean);
+  else if (task.tag !== undefined) payload.tags = task.tag.trim() ? [task.tag.trim()] : [];
   return payload;
 }

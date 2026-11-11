@@ -176,6 +176,7 @@ export class IdeCrmClient {
     description?: string | null;
     status?: string;
     priority?: "low" | "medium" | "high" | "urgent";
+    startDate?: string | null;
     dueDate?: string | null;
     estimateMinutes?: number | null;
     tags?: string[];

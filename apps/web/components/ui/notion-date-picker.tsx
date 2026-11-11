@@ -11,8 +11,6 @@ import {
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -310,7 +308,7 @@ export function NotionDatePicker({
     }
 
     if (trimmed.includes("→") || trimmed.includes(" - ")) {
-      const parts = trimmed.split(/→|-/);
+      const parts = trimmed.split(/\s*→\s*|\s+-\s+/);
       const s = parseIsoOrDateString(parts[0]);
       const e = parseIsoOrDateString(parts[1]);
       if (s) {

@@ -24,6 +24,7 @@
 3. **Validações de Qualidade:**
    ```bash
    bun run test:themes
+   bun run test
    bun run typecheck
    bun run lint
    bun run build

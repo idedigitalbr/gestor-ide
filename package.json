@@ -13,6 +13,7 @@
     "dev:web": "turbo dev --filter=web",
     "dev:api": "bun run --cwd apps/api dev",
     "lint": "turbo lint",
+    "test": "bun test",
     "typecheck": "turbo typecheck",
     "test:themes": "bun run --cwd apps/web test:themes"
   },

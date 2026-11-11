@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { NotionDatePicker } from "@/components/ui/notion-date-picker";
 import { formatNotionDate } from "@/lib/notion-date";
 import { cn } from "@/lib/utils";

@@ -2,12 +2,11 @@
 
 import React from "react";
 import type { Task, TaskPriority, TaskStatus } from "@/types/task";
-import { normalizeTaskStatus, normalizeTaskPriority } from "@/types/task";
+import { normalizeTaskStatus } from "@/types/task";
 import {
   StatusIcon,
   StatusDropdownContent,
   ALL_CANONICAL_STATUSES,
-  getStatusDefinition,
 } from "../task-status-icon";
 import { TaskItemTypeIcon } from "../task-item-type-selector";
 import { isTaskContentFilled } from "@/lib/task-item-type";
