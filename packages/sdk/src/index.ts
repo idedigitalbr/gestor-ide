@@ -207,6 +207,10 @@ export class IdeCrmClient {
     });
   }
 
+  async setTaskAssignees(taskId: string, assigneeIds: string[]): Promise<{ task: CrmProjectTask }> {
+    return this.updateTask(taskId, { assigneeIds });
+  }
+
   async createChecklistItem(
     taskId: string,
     title: string

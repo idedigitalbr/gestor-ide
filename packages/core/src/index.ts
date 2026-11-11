@@ -65,6 +65,7 @@ export interface Task {
   estimate?: string;
   projectId?: string;
   projectName?: string;
+  assigneeId?: string;
   assignee?: string;
   assigneeAvatar?: string;
   coverUrl?: string;
@@ -515,6 +516,7 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
     projectId: crmTask.projectId,
     parentTaskId: crmTask.parentTaskId ?? undefined,
     projectName: crmTask.project?.name,
+    assigneeId: crmTask.assignees?.[0]?.userId,
     assignee: firstAssignee?.name || undefined,
     assigneeAvatar: firstAssignee?.avatarUrl || undefined,
     subtasks,

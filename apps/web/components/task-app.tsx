@@ -152,9 +152,28 @@ export function TaskApp() {
   const [financeSummary, setFinanceSummary] = useState<CrmFinancialSummary | null>(null);
   const [financeEntries, setFinanceEntries] = useState<CrmFinancialEntry[]>([]);
   const [members, setMembers] = useState<CrmProjectMember[]>([]);
+  const [projectMembers, setProjectMembers] = useState<{
+    projectId: string;
+    members: CrmProjectMember[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!selectedProjectId || !isConnectedCrm) return;
+    let cancelled = false;
+    void ideCrmClient.listProjectMembers(selectedProjectId).then((result) => {
+      if (!cancelled) setProjectMembers({ projectId: selectedProjectId, members: result.members });
+    }).catch(() => {
+      if (!cancelled) {
+        setProjectMembers(null);
+        setSyncError("Não foi possível carregar os membros deste projeto.");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedProjectId, isConnectedCrm]);
 
   // Contador de requisições ativas para cancelar/ignorar respostas obsoletas (race condition)
   const activeRequestIdRef = useRef(0);
+  const taskUpdateVersionsRef = useRef(new Map<string, number>());
 
   // Monotonic collision-free code counter initialized above existing tasks
   const nextCodeNumberRef = useRef(getHighestCodeNumber(INITIAL_TASKS) + 1);
@@ -301,7 +320,7 @@ export function TaskApp() {
       managementIdFilter?: string | null
     ) => {
       try {
-        const session = await ideCrmClient.getSession().catch(() => null);
+        const session = await ideCrmClient.getSession();
         if (!session || !session.authenticated || !session.user) {
           clearGestorCache();
           setManagements([]);
@@ -365,7 +384,9 @@ export function TaskApp() {
           }
         }
       } catch {
-        setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+        setIsApiReachable(false);
+        setIsConnectedCrm(false);
+        setSyncError("Não foi possível conectar ao CRM. Verifique a conexão e atualize os dados.");
         setIsSyncingTasks(false);
       }
     },
@@ -674,17 +695,46 @@ export function TaskApp() {
   }
 
   function handleUpdateTask(updatedTask: Task) {
+    const previousTask = tasks.find((task) => task.id === updatedTask.id);
+    const version = (taskUpdateVersionsRef.current.get(updatedTask.id) ?? 0) + 1;
+    taskUpdateVersionsRef.current.set(updatedTask.id, version);
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     );
     updateCachedTask(updatedTask);
 
     if (isConnectedCrm && !updatedTask.id.startsWith("task-")) {
+      const payload = mapGestorTaskToCrmUpdateInput(updatedTask);
+      if (previousTask?.startDate && !updatedTask.startDate) payload.startDate = null;
+      if (previousTask?.dueDate && !updatedTask.dueDate) payload.dueDate = null;
       void ideCrmClient
-        .updateTask(updatedTask.id, mapGestorTaskToCrmUpdateInput(updatedTask))
+        .updateTask(updatedTask.id, payload)
         .catch(() => {
+          if (previousTask && taskUpdateVersionsRef.current.get(updatedTask.id) === version) {
+            setTasks((current) => current.map((task) => task === updatedTask ? previousTask : task));
+            updateCachedTask(previousTask);
+          }
           setSyncError("A alteração não foi salva no CRM. Atualize os dados antes de tentar novamente.");
         });
+    }
+  }
+
+  async function handleChangeAssignee(taskId: string, member: CrmProjectMember | null): Promise<boolean> {
+    if (!isConnectedCrm || taskId.startsWith("task-")) return false;
+    try {
+      await ideCrmClient.setTaskAssignees(taskId, member ? [member.userId] : []);
+      const existing = tasks.find((task) => task.id === taskId);
+      const patch = {
+        assigneeId: member?.userId,
+        assignee: member?.user.name || member?.user.email || undefined,
+        assigneeAvatar: member?.user.avatarUrl || undefined,
+      };
+      setTasks((previous) => previous.map((task) => task.id === taskId ? { ...task, ...patch } : task));
+      if (existing) updateCachedTask({ ...existing, ...patch });
+      return true;
+    } catch {
+      setSyncError("Não foi possível salvar o responsável no CRM. Tente novamente.");
+      return false;
     }
   }
 
@@ -959,6 +1009,11 @@ export function TaskApp() {
             selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
+          {!isConnectedCrm && (
+            <div role="status" className="mb-4 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
+              Modo de demonstração: alterações locais não são salvas no CRM.
+            </div>
+          )}
           {syncError && (
             <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
               {syncError}
@@ -1041,6 +1096,9 @@ export function TaskApp() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         task={selectedTask}
+        syncError={syncError}
+        members={projectMembers && selectedTask && projectMembers.projectId === selectedTask.projectId ? projectMembers.members : []}
+        onChangeAssignee={projectMembers && selectedTask && projectMembers.projectId === selectedTask.projectId ? handleChangeAssignee : undefined}
         initialStatus={modalInitialStatus}
         onSave={handleSaveFromModal}
         onUpdateTask={handleUpdateTask}

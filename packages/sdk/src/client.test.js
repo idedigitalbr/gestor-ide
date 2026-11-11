@@ -40,3 +40,17 @@ test("distingue sessão expirada de falha do CRM", async () => {
   globalThis.fetch = async () => Response.json({ error: "Indisponível" }, { status: 503 });
   await expect(client.getSession()).rejects.toBeInstanceOf(IdeCrmApiError);
 });
+
+test("envia IDs de responsáveis sem alterar outros campos", async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return Response.json({ task: { id: "t1" } });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => null });
+  await client.setTaskAssignees("t1", ["u1"]);
+  expect(request.method).toBe("PATCH");
+  expect(JSON.parse(request.body)).toEqual({ assigneeIds: ["u1"] });
+  await client.setTaskAssignees("t1", []);
+  expect(JSON.parse(request.body)).toEqual({ assigneeIds: [] });
+});

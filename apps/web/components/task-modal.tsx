@@ -17,6 +17,7 @@ import type {
   CanonicalTaskStatus,
   CanonicalTaskPriority,
 } from "@/types/task";
+import type { CrmProjectMember } from "@gestor-ide/core";
 import {
   normalizeTaskStatus,
   normalizeTaskPriority,
@@ -102,6 +103,9 @@ interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   task: Task | null;
+  syncError?: string | null;
+  members?: CrmProjectMember[];
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   initialStatus?: TaskStatus;
   onSave: (
     task: Omit<Task, "id" | "createdAt" | "code"> & {
@@ -119,6 +123,9 @@ interface TaskModalProps {
 
 interface TaskModalContentProps {
   task: Task | null;
+  syncError?: string | null;
+  members?: CrmProjectMember[];
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   initialStatus?: TaskStatus;
   onClose: () => void;
   onSave: (
@@ -379,6 +386,9 @@ const TaskModalContent = forwardRef<
 >(function TaskModalContent(
   {
     task,
+    syncError,
+    members = [],
+    onChangeAssignee,
     initialStatus = "A Fazer",
     onClose,
     onSave,
@@ -421,6 +431,8 @@ const TaskModalContent = forwardRef<
   const [assigneeAvatar, setAssigneeAvatar] = useState(
     task?.assigneeAvatar || ""
   );
+  const [assigneeId, setAssigneeId] = useState(task?.assigneeId ?? "");
+  const [isSavingAssignee, setIsSavingAssignee] = useState(false);
   const [tags, setTags] = useState<string[]>(
     task?.tags && task.tags.length > 0
       ? task.tags
@@ -607,14 +619,34 @@ const TaskModalContent = forwardRef<
     syncTaskField({ priority: norm });
   }
 
-  function handleSelectAssignee(member: { name: string; avatar: string }) {
-    setAssignee(member.name);
-    setAssigneeAvatar(member.avatar);
-    syncTaskField({
-      assignee: member.name,
-      assigneeAvatar: member.avatar,
-    });
+  async function handleSelectAssignee(member: CrmProjectMember | null) {
+    if (!task || !onChangeAssignee || isSavingAssignee) return;
+    setIsSavingAssignee(true);
+    try {
+      if (await onChangeAssignee(task.id, member)) {
+        setAssigneeId(member?.userId ?? "");
+        setAssignee(member?.user.name || member?.user.email || "");
+        setAssigneeAvatar(member?.user.avatarUrl ?? "");
+      }
+    } finally {
+      setIsSavingAssignee(false);
+    }
   }
+
+  const assigneeMenuItems = (
+    <>
+      {members.map((member) => (
+        <DropdownMenuItem key={member.userId} onSelect={() => void handleSelectAssignee(member)}>
+          <span className="flex-1 truncate">{member.user.name || member.user.email}</span>
+          {assigneeId === member.userId && <Check className="h-4 w-4" />}
+        </DropdownMenuItem>
+      ))}
+      <DropdownMenuItem onSelect={() => void handleSelectAssignee(null)}>
+        <span className="flex-1">Sem responsável</span>
+        {!assigneeId && <Check className="h-4 w-4" />}
+      </DropdownMenuItem>
+    </>
+  );
 
   function handleRemoveTag(tagToRemove: string) {
     const next = tags.filter((t) => t !== tagToRemove);
@@ -798,6 +830,7 @@ const TaskModalContent = forwardRef<
     <div className="flex flex-col w-full bg-[#141522] text-[#f3f4f8] select-none">
       <DialogTitle className="sr-only">{title}</DialogTitle>
       <DialogDescription className="sr-only">{subtitle}</DialogDescription>
+      {syncError && <div role="alert" className="m-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">{syncError}</div>}
 
       {/* =================================================================== */}
       {/* 1. TOP HEADER BAR                                                   */}
@@ -1472,8 +1505,8 @@ const TaskModalContent = forwardRef<
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled
-                    title="Alteração de responsável ainda não disponível"
+                    disabled={!task || !onChangeAssignee || isSavingAssignee}
+                    title={!task ? "Salve a tarefa antes de atribuir" : "Alterar responsável"}
                     className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] pl-1 pr-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
                   >
                     {assigneeAvatar ? <img
@@ -1489,42 +1522,7 @@ const TaskModalContent = forwardRef<
                   align="start"
                   className="w-44 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
                 >
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setAssignee("Will");
-                      setAssigneeAvatar("/avatars/will.png");
-                      syncTaskField({ assignee: "Will", assigneeAvatar: "/avatars/will.png" });
-                    }}
-                    className="text-xs gap-2 justify-between cursor-pointer rounded-md px-2 py-1.5"
-                  >
-                    <span className="flex items-center gap-2">
-                      <img
-                        src="/avatars/will.png"
-                        alt="Will"
-                        className="w-4 h-4 rounded-full object-cover"
-                      />
-                      <span>Will</span>
-                    </span>
-                    {assignee === "Will" && (
-                      <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                    )}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setAssignee("");
-                      setAssigneeAvatar("");
-                      syncTaskField({ assignee: "", assigneeAvatar: "" });
-                    }}
-                    className="text-xs gap-2 justify-between cursor-pointer rounded-md px-2 py-1.5 text-[#8e92ab]"
-                  >
-                    <span className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      <span>Sem responsável</span>
-                    </span>
-                    {!assignee && (
-                      <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                    )}
-                  </DropdownMenuItem>
+                  {assigneeMenuItems}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -1750,8 +1748,8 @@ const TaskModalContent = forwardRef<
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          disabled
-                          title="Alteração de responsável ainda não disponível"
+                          disabled={!task || !onChangeAssignee || isSavingAssignee}
+                          title={!task ? "Salve a tarefa antes de atribuir" : "Alterar responsável"}
                           className="w-full h-[28px] rounded-full border border-[#292c42] bg-[#161826] pl-1.5 pr-3 flex items-center justify-between text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
                         >
                           <div className="flex items-center gap-2 truncate">
@@ -1769,42 +1767,7 @@ const TaskModalContent = forwardRef<
                         align="start"
                         className="w-48 bg-[#1a1c2d] border-[#2c2f48] text-white p-1"
                       >
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setAssignee("Will");
-                            setAssigneeAvatar("/avatars/will.png");
-                            syncTaskField({ assignee: "Will", assigneeAvatar: "/avatars/will.png" });
-                          }}
-                          className="text-xs gap-2 justify-between cursor-pointer rounded-md px-2 py-1.5"
-                        >
-                          <span className="flex items-center gap-2 truncate">
-                            <img
-                              src="/avatars/will.png"
-                              alt="Will"
-                              className="w-4 h-4 rounded-full object-cover"
-                            />
-                            <span className="truncate">Will</span>
-                          </span>
-                          {assignee === "Will" && (
-                            <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setAssignee("");
-                            setAssigneeAvatar("");
-                            syncTaskField({ assignee: "", assigneeAvatar: "" });
-                          }}
-                          className="text-xs gap-2 justify-between cursor-pointer rounded-md px-2 py-1.5 text-[#8e92ab]"
-                        >
-                          <span className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            <span>Sem responsável</span>
-                          </span>
-                          {!assignee && (
-                            <Check className="w-3.5 h-3.5 text-[#7c5dfa]" />
-                          )}
-                        </DropdownMenuItem>
+                        {assigneeMenuItems}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1952,10 +1915,8 @@ const TaskModalContent = forwardRef<
           <div className="mt-2.5 rounded-[11px] border border-[#282b3e] bg-[#1c1e2b] px-3.5 py-2.5 text-[13px] leading-[1.55] transition-colors focus-within:border-[#5e43d8]">
             <Textarea
               value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                syncTaskField({ description: e.target.value });
-              }}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => syncTaskField({ description })}
               placeholder="Adicione uma descrição detalhada da tarefa..."
               rows={4}
               className="w-full bg-transparent border-0 p-0 text-[13px] leading-[1.55] text-[#d8dbe8] placeholder:text-[#6e728c] focus-visible:ring-0 resize-none shadow-none"
@@ -2585,6 +2546,9 @@ export function TaskModal(props: TaskModalProps) {
             ref={contentRef}
             onClose={props.onClose}
             task={props.task}
+            syncError={props.syncError}
+            members={props.members}
+            onChangeAssignee={props.onChangeAssignee}
             initialStatus={props.initialStatus}
             onSave={props.onSave}
             onUpdateTask={props.onUpdateTask}
