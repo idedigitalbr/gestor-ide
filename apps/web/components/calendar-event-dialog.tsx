@@ -15,6 +15,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  toExclusiveAllDayEndDate,
+  toInclusiveAllDayEndDate,
+} from "@/lib/calendar-date";
 
 function localDateTimeInput(date: Date) {
   const d = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -59,10 +63,9 @@ export function CalendarEventDialog({
       const startDay =
         event?.allDayStartDate?.slice(0, 10) ||
         (event?.startsAt ? localDateInput(initial) : localDateInput(new Date()));
-      const endDay =
-        event?.allDayEndDate?.slice(0, 10) ||
-        event?.allDayStartDate?.slice(0, 10) ||
-        startDay;
+      const endDay = event?.isAllDay
+        ? toInclusiveAllDayEndDate(startDay, event.allDayEndDate)
+        : startDay;
 
       setTitle(event?.title ?? "");
       setIsAllDay(allDayFlag);
@@ -106,15 +109,13 @@ export function CalendarEventDialog({
       };
 
       if (isAllDay) {
-        if (!allDayStart || !allDayEnd || allDayEnd < allDayStart) {
-          throw new Error("Informe uma data final igual ou posterior à inicial.");
-        }
+        const exclusiveEndDate = toExclusiveAllDayEndDate(allDayStart, allDayEnd);
         payloadDates = {
           isAllDay: true,
           startsAt: null,
           endsAt: null,
           allDayStartDate: allDayStart,
-          allDayEndDate: allDayEnd,
+          allDayEndDate: exclusiveEndDate,
         };
       } else {
         const begins = new Date(start);
@@ -167,7 +168,7 @@ export function CalendarEventDialog({
     try {
       await ideCrmClient.deleteCalendarEvent(
         event.id,
-        event.seriesId ? "OCCURRENCE" : undefined
+        event.seriesId ? "OCCURRENCE" : "SERIES"
       );
       await onSaved();
       onOpenChange(false);

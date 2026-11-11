@@ -83,3 +83,19 @@ test("envia IDs de responsáveis sem alterar outros campos", async () => {
   await client.setTaskAssignees("t1", []);
   expect(JSON.parse(request.body)).toEqual({ assigneeIds: [] });
 });
+
+test("deleteCalendarEvent omite scope OCCURRENCE em eventos avulsos e respeita scope explícito", async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, ...options };
+    return Response.json({ ok: true });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => null });
+  await client.deleteCalendarEvent("evt-1");
+  expect(request.method).toBe("DELETE");
+  expect(request.url).toBe("/api/crm/projects/calendar/evt-1");
+  expect(request.body).toBeUndefined();
+
+  await client.deleteCalendarEvent("evt-1__2026-11-12", "OCCURRENCE");
+  expect(JSON.parse(request.body)).toEqual({ scope: "OCCURRENCE" });
+});

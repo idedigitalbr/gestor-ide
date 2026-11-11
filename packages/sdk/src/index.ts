@@ -168,8 +168,14 @@ export class IdeCrmClient {
   async saveCalendarEvent(data: Record<string, unknown>, id?: string): Promise<void> {
     await this.request(id ? `/projects/calendar/${encodeURIComponent(id)}` : "/projects/calendar", { method: id ? "PATCH" : "POST", body: JSON.stringify(data) }, !id);
   }
-  async deleteCalendarEvent(id: string, scope = "OCCURRENCE"): Promise<void> {
-    await this.request(`/projects/calendar/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ scope }) });
+  async deleteCalendarEvent(
+    id: string,
+    scope?: "OCCURRENCE" | "FOLLOWING" | "SERIES"
+  ): Promise<void> {
+    await this.request(`/projects/calendar/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      ...(scope ? { body: JSON.stringify({ scope }) } : {}),
+    });
   }
   async getSettings(): Promise<{ settings: Record<string, unknown> }> { return this.request("/settings"); }
   async saveSettings(settings: Record<string, unknown>): Promise<void> { await this.request("/settings", { method: "POST", body: JSON.stringify({ settings }) }); }
