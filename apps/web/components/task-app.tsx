@@ -289,6 +289,8 @@ export function TaskApp() {
   // Dispara o carregamento enterprise apenas quando o usuário entra em uma aba empresarial
   useEffect(() => {
     if (activeModule !== "tasks" && isConnectedCrm) {
+      // O efeito inicia uma consulta externa; o estado é atualizado após a resposta.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadEnterpriseData();
     }
   }, [activeModule, isConnectedCrm, loadEnterpriseData]);
@@ -372,6 +374,8 @@ export function TaskApp() {
   );
 
   useEffect(() => {
+    // A sessão vem de uma API externa e só pode ser validada no cliente.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void syncWithIdeCrm(selectedProjectId, selectedManagementId);
     // Executa apenas uma vez na montagem inicial
     // eslint-disable-next-line react-hooks/exhaustive-deps

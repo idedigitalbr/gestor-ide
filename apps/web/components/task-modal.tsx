@@ -678,7 +678,7 @@ const TaskModalContent = forwardRef<
 
   function handleAddChildSubtaskItem(parentId: string, group?: string) {
     const newChild: Subtask = {
-      id: `st-${Date.now()}`,
+      id: `st-${crypto.randomUUID()}`,
       parentId,
       title: "Novo item de checklist",
       completed: false,

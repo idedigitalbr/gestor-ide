@@ -180,26 +180,22 @@ export function NotionDatePicker({
   const [tempEnd, setTempEnd] = useState<Date | null>(parsedEnd);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
 
-  const [manualInput, setManualInput] = useState<string>("");
+  const [manualDraft, setManualDraft] = useState<string | null>(null);
+  const manualInput = manualDraft ?? (tempStart
+    ? tempEnd && hasEndDate
+      ? `${toPtBrDisplayDate(tempStart)} → ${toPtBrDisplayDate(tempEnd)}`
+      : toPtBrDisplayDate(tempStart)
+    : "");
 
-  useEffect(() => {
+  const openPicker = () => {
+    if (disabled) return;
     setTempStart(parsedStart);
     setTempEnd(parsedEnd);
     setHasEndDate(Boolean(parsedEnd && parsedStart && parsedEnd.getTime() !== parsedStart.getTime()));
-    if (parsedStart) {
-      setViewDate(parsedStart);
-    }
-  }, [parsedStart, parsedEnd]);
-
-  useEffect(() => {
-    if (tempStart && tempEnd && hasEndDate) {
-      setManualInput(`${toPtBrDisplayDate(tempStart)} → ${toPtBrDisplayDate(tempEnd)}`);
-    } else if (tempStart) {
-      setManualInput(toPtBrDisplayDate(tempStart));
-    } else {
-      setManualInput("");
-    }
-  }, [tempStart, tempEnd, hasEndDate]);
+    if (parsedStart) setViewDate(parsedStart);
+    setManualDraft(null);
+    setIsOpen(true);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -249,6 +245,7 @@ export function NotionDatePicker({
   };
 
   const applySelection = (start: Date | null, end: Date | null) => {
+    setManualDraft(null);
     setTempStart(start);
     setTempEnd(end);
 
@@ -264,6 +261,7 @@ export function NotionDatePicker({
   };
 
   const handleDayClick = (dayDate: Date) => {
+    setManualDraft(null);
     if (!hasEndDate) {
       applySelection(dayDate, null);
       return;
@@ -284,6 +282,7 @@ export function NotionDatePicker({
   };
 
   const handleToggleRange = (enabled: boolean) => {
+    setManualDraft(null);
     setHasEndDate(enabled);
     if (!enabled && tempStart) {
       applySelection(tempStart, null);
@@ -291,6 +290,7 @@ export function NotionDatePicker({
   };
 
   const handleClear = () => {
+    setManualDraft(null);
     setTempStart(null);
     setTempEnd(null);
     void onChange({
@@ -349,13 +349,13 @@ export function NotionDatePicker({
           isOpen,
           hasDate,
           isUrgent,
-          open: () => !disabled && setIsOpen(true),
+          open: openPicker,
         })
       ) : (
         <button
           type="button"
           disabled={disabled}
-          onClick={() => setIsOpen((prev) => !prev)}
+          onClick={() => isOpen ? setIsOpen(false) : openPicker()}
           aria-label={
             ariaLabel ||
             (hasDate
@@ -427,7 +427,7 @@ export function NotionDatePicker({
             <input
               type="text"
               value={manualInput}
-              onChange={(e) => setManualInput(e.target.value)}
+              onChange={(e) => setManualDraft(e.target.value)}
               onBlur={handleManualInputCommit}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
