@@ -402,17 +402,9 @@ const TaskModalContent = forwardRef<
 ) {
   const isEditing = Boolean(task);
 
-  const defaultTitle =
-    task?.code === "IDE-104" || !task?.title
-      ? "4.1 — Refinamento UI/UX"
-      : task.title;
-  const defaultSubtitle =
-    task?.subtitle ||
-    "Aprimorar a interface e a experiência do usuário com base nos feedbacks da primeira rodada.";
-  const defaultDescription =
-    task?.description && task.description.length > 90
-      ? task.description
-      : "Revisar e refinar a experiência de uso (UI/UX) com base nos feedbacks das últimas iterações, garantindo consistência visual, clareza na navegação e melhoria da usabilidade nas principais páginas do sistema.";
+  const defaultTitle = task?.title ?? "";
+  const defaultSubtitle = task?.subtitle ?? "";
+  const defaultDescription = task?.description ?? "";
 
   const [title, setTitle] = useState(defaultTitle);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -434,10 +426,10 @@ const TaskModalContent = forwardRef<
     task?.projectName || ""
   );
   const [assignee, setAssignee] = useState(
-    task?.assignee || "Will"
+    task?.assignee || ""
   );
   const [assigneeAvatar, setAssigneeAvatar] = useState(
-    task?.assigneeAvatar || "/avatars/will.png"
+    task?.assigneeAvatar || ""
   );
   const [tags, setTags] = useState<string[]>(
     task?.tags && task.tags.length > 0
@@ -452,32 +444,6 @@ const TaskModalContent = forwardRef<
   const [estimate, setEstimate] = useState(
     task?.estimate ?? ""
   );
-
-  // Sincroniza estado interno caso a tarefa selecionada mude externamente
-  useEffect(() => {
-    if (task) {
-      setTitle(task.title ?? "");
-      setSubtitle(task.subtitle ?? "");
-      setDescription(task.description ?? "");
-      setStatus(normalizeTaskStatus(task.status));
-      setPriority(normalizeTaskPriority(task.priority));
-      setDueDate(task.dueDate ?? "");
-      setProjectName(task.projectName ?? "");
-      setAssignee(task.assignee || "Will");
-      setAssigneeAvatar(task.assigneeAvatar || "/avatars/will.png");
-      setTags(task.tags && task.tags.length > 0 ? task.tags : task.tag ? [task.tag] : []);
-      setEstimate(task.estimate ?? "");
-      if (task.coverUrl !== undefined) setCoverUrl(task.coverUrl);
-      if (task.icon !== undefined) setIcon(task.icon);
-      if (task.subtasks) setLocalSubtasks(ensureGroupedSubtasks(task.subtasks));
-      if (task.comments) setLocalComments(task.comments);
-      const taskHasSubtasks = Boolean(task.subtasks && task.subtasks.length > 0);
-      setIsPropertiesExpanded(!taskHasSubtasks);
-      setIsChecklistOpen(taskHasSubtasks);
-      setIsDescOpen(false);
-      setIsBottomOpen(false);
-    }
-  }, [task]);
 
   // Capa & Ícone estilo Notion
   // Toda tarefa vem sem ícone e sem capa por padrão
@@ -540,25 +506,11 @@ const TaskModalContent = forwardRef<
     "activities"
   );
   const [localComments, setLocalComments] = useState<TaskComment[]>(() =>
-    task?.comments && task.comments.length > 0
-      ? task.comments
-      : [
-          {
-            id: "c-1",
-            author: "Will",
-            avatar: "/avatars/will.png",
-            timeAgo: "há 2 horas",
-            content: "Checklist atualizado com os itens do refinamento. Pronto para validação.",
-            createdAt: new Date().toISOString(),
-          },
-        ]
+    task?.comments ?? []
   );
-  const activeComments = useMemo(() => {
-    if (isEditing && task?.comments && task.comments.length >= 2) {
-      return task.comments;
-    }
-    return localComments;
-  }, [isEditing, task?.comments, localComments]);
+  const activeComments = isEditing && task?.comments && task.comments.length >= 2
+    ? task.comments
+    : localComments;
 
   const [newCommentText, setNewCommentText] = useState("");
 

@@ -42,6 +42,10 @@ export async function GET(request: Request) {
             name: string | null;
             email: string;
             avatarUrl: string | null;
+            role?: string;
+            roles?: string[];
+            permissions?: string[];
+            modules?: { crm: boolean; projects: boolean; finance: boolean };
           };
         };
         if (data.account?.id) {
@@ -52,14 +56,10 @@ export async function GET(request: Request) {
               name: data.account.name,
               email: data.account.email,
               avatarUrl: data.account.avatarUrl,
-              role: "admin",
-              roles: ["admin"],
-              permissions: ["*"],
-              modules: {
-                projects: true,
-                crm: true,
-                finance: true,
-              },
+              role: data.account.role ?? "",
+              roles: data.account.roles ?? (data.account.role ? [data.account.role] : []),
+              permissions: data.account.permissions ?? [],
+              modules: data.account.modules ?? { projects: false, crm: false, finance: false },
             },
           });
         }
@@ -99,13 +99,13 @@ export async function GET(request: Request) {
               name: sessionData.user.name ?? null,
               email: sessionData.user.email ?? "",
               avatarUrl: sessionData.user.avatarUrl ?? null,
-              role: sessionData.user.role ?? "admin",
-              roles: sessionData.user.roles ?? ["admin"],
+              role: sessionData.user.role ?? "",
+              roles: sessionData.user.roles ?? (sessionData.user.role ? [sessionData.user.role] : []),
               permissions: sessionData.user.permissions ?? [],
               modules: sessionData.user.modules ?? {
-                projects: true,
-                crm: true,
-                finance: true,
+                projects: false,
+                crm: false,
+                finance: false,
               },
             },
           });
@@ -261,13 +261,13 @@ export async function POST(request: Request) {
           name: sessionData.user.name ?? email,
           email: sessionData.user.email ?? email,
           avatarUrl: sessionData.user.avatarUrl ?? null,
-          role: sessionData.user.role ?? "admin",
-          roles: sessionData.user.roles ?? ["admin"],
+          role: sessionData.user.role ?? "",
+          roles: sessionData.user.roles ?? (sessionData.user.role ? [sessionData.user.role] : []),
           permissions: sessionData.user.permissions ?? [],
           modules: sessionData.user.modules ?? {
-            projects: true,
-            crm: true,
-            finance: true,
+            projects: false,
+            crm: false,
+            finance: false,
           },
         },
       },

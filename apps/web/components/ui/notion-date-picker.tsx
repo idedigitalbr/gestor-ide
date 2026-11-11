@@ -152,15 +152,8 @@ export function NotionDatePicker({
   const parsedStart = useMemo(() => parseIsoOrDateString(startDate), [startDate]);
   const parsedEnd = useMemo(() => parseIsoOrDateString(endDate), [endDate]);
 
-  const [internalPriority, setInternalPriority] = useState<string>(priority ?? "Normal");
-
-  useEffect(() => {
-    if (priority !== undefined) {
-      setInternalPriority(priority ?? "Normal");
-    }
-  }, [priority]);
-
-  const isUrgent = isUrgentPriority(internalPriority);
+  const [internalPriority, setInternalPriority] = useState<string>("Normal");
+  const isUrgent = isUrgentPriority(priority ?? internalPriority);
 
   const handleSelectPriority = (selected: "urgent" | "normal") => {
     if (selected === "urgent") {

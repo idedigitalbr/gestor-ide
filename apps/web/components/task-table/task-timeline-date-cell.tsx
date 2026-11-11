@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Calendar, AlertCircle } from "lucide-react";
 import { NotionDatePicker } from "@/components/ui/notion-date-picker";
 import { formatNotionDate } from "@/lib/notion-date";
@@ -44,6 +44,11 @@ export function TaskTimelineDateCell({
   onUpdatePriority,
   className,
 }: TaskTimelineDateCellProps) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const normStatus = normalizeTaskStatus(status);
   const isCompleted = normStatus === "CONCLUÍDO";
   const isUrgent = priority === "Urgente" || priority === "Alta";
@@ -55,7 +60,7 @@ export function TaskTimelineDateCell({
   let isNearDue = false;
 
   if (dueDate) {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = new Date(nowMs).toISOString().slice(0, 10);
     const dueDateStr = dueDate.slice(0, 10);
     isOverdue = !isCompleted && dueDateStr < todayStr;
 
@@ -63,8 +68,6 @@ export function TaskTimelineDateCell({
       hasTimeline = true;
       const startMs = new Date(startDate).getTime();
       const dueMs = new Date(dueDate).getTime();
-      const nowMs = Date.now();
-
       if (dueMs > startMs) {
         elapsedPercent = Math.max(
           4,

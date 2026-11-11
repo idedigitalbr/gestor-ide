@@ -66,14 +66,14 @@ function getTaskKey(projectId: string | null): string {
 // GESTÕES
 // ---------------------------------------------------------------------------
 export function getCachedManagements(): CrmProjectManagement[] | null {
-  if (memoryManagements && memoryManagements.length > 0) {
+  if (memoryManagements) {
     return memoryManagements;
   }
   const raw = safeGetItem(KEY_MANAGEMENTS);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as CrmProjectManagement[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       memoryManagements = parsed;
       return parsed;
     }
@@ -83,23 +83,21 @@ export function getCachedManagements(): CrmProjectManagement[] | null {
 
 export function setCachedManagements(managements: CrmProjectManagement[]): void {
   memoryManagements = managements;
-  if (managements.length > 0) {
-    safeSetItem(KEY_MANAGEMENTS, JSON.stringify(managements));
-  }
+  safeSetItem(KEY_MANAGEMENTS, JSON.stringify(managements));
 }
 
 // ---------------------------------------------------------------------------
 // PROJETOS
 // ---------------------------------------------------------------------------
 export function getCachedProjects(): CrmProject[] | null {
-  if (memoryProjects && memoryProjects.length > 0) {
+  if (memoryProjects) {
     return memoryProjects;
   }
   const raw = safeGetItem(KEY_PROJECTS);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as CrmProject[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       memoryProjects = parsed;
       return parsed;
     }
@@ -109,9 +107,7 @@ export function getCachedProjects(): CrmProject[] | null {
 
 export function setCachedProjects(projects: CrmProject[]): void {
   memoryProjects = projects;
-  if (projects.length > 0) {
-    safeSetItem(KEY_PROJECTS, JSON.stringify(projects));
-  }
+  safeSetItem(KEY_PROJECTS, JSON.stringify(projects));
 }
 
 // ---------------------------------------------------------------------------

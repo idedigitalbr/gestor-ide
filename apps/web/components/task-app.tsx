@@ -72,6 +72,11 @@ function getHighestCodeNumber(list: Task[]): number {
 }
 
 export function TaskApp() {
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const searchParams = useSearchParams();
   const initialModal = searchParams.get("modal");
 
@@ -95,7 +100,7 @@ export function TaskApp() {
   // Renderização instantânea (0ms no F5): inicializa direto do cache
   const [tasks, setTasks] = useState<Task[]>(() => {
     try {
-      const cached = getCachedTasks(selectedProjectId);
+      const cached = selectedManagementId && !selectedProjectId ? null : getCachedTasks(selectedProjectId);
       if (cached && cached.length > 0) return cached;
     } catch {}
     return [];
@@ -122,11 +127,12 @@ export function TaskApp() {
     return getCachedSession();
   });
   const [isCrmModalOpen, setIsCrmModalOpen] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Se já temos tarefas ou gestões em cache, NÃO mostramos skeleton no F5!
   const [isSyncingTasks, setIsSyncingTasks] = useState<boolean>(() => {
     try {
-      const cached = getCachedTasks(selectedProjectId);
+      const cached = selectedManagementId && !selectedProjectId ? null : getCachedTasks(selectedProjectId);
       if (cached && cached.length > 0) return false;
       if (!selectedProjectId && !selectedManagementId && getCachedManagements()) return false;
     } catch {}
@@ -191,7 +197,7 @@ export function TaskApp() {
       silent = false
     ) => {
       const currentRequestId = ++activeRequestIdRef.current;
-      const cached = getCachedTasks(projectIdFilter);
+      const cached = managementIdFilter && !projectIdFilter ? null : getCachedTasks(projectIdFilter);
 
       // Se não há cache e não é silencioso, exibe o skeleton estrutural
       if (!silent && (!cached || cached.length === 0)) {
@@ -199,6 +205,7 @@ export function TaskApp() {
       }
 
       try {
+        setSyncError(null);
         let loadedTasks: CrmProjectTask[] = [];
 
         if (projectIdFilter) {
@@ -220,15 +227,13 @@ export function TaskApp() {
           } else if (mgmtProjects.length > 1) {
             const responses = await Promise.all(
               mgmtProjects.map((p) =>
-                ideCrmClient.listTasks({ projectId: p.id }).catch(() => ({ tasks: [] }))
+                ideCrmClient.listTasks({ projectId: p.id })
               )
             );
             if (currentRequestId !== activeRequestIdRef.current) return;
             loadedTasks = responses.flatMap((r) => r.tasks ?? []);
           } else {
-            const res = await ideCrmClient.listTasks();
-            if (currentRequestId !== activeRequestIdRef.current) return;
-            loadedTasks = res.tasks ?? [];
+            loadedTasks = [];
           }
         } else {
           // Todas as gestões
@@ -238,13 +243,14 @@ export function TaskApp() {
         }
 
         const mapped = loadedTasks.map((t, idx) => mapCrmTaskToGestorTask(t, idx));
-        const finalTasks = mapped.length > 0 ? mapped : INITIAL_TASKS;
+        const finalTasks = mapped;
         setTasks(finalTasks);
-        setCachedTasks(projectIdFilter, finalTasks);
+        if (projectIdFilter || !managementIdFilter) setCachedTasks(projectIdFilter, finalTasks);
         nextCodeNumberRef.current = getHighestCodeNumber(finalTasks) + 1;
       } catch {
         if (currentRequestId !== activeRequestIdRef.current) return;
-        setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+        setTasks(cached ?? []);
+        setSyncError("Não foi possível atualizar as tarefas do CRM. Tente novamente.");
       } finally {
         if (currentRequestId === activeRequestIdRef.current) {
           setIsSyncingTasks(false);
@@ -296,15 +302,25 @@ export function TaskApp() {
       try {
         const session = await ideCrmClient.getSession().catch(() => null);
         if (!session || !session.authenticated || !session.user) {
+          clearGestorCache();
+          setManagements([]);
+          setProjects([]);
           setIsApiReachable(Boolean(session));
           setIsConnectedCrm(false);
           setCurrentUser(null);
           setCachedSession(null);
-          setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+          setTasks(INITIAL_TASKS);
           setIsSyncingTasks(false);
           return;
         }
 
+        const previousUser = getCachedSession();
+        if (previousUser && previousUser.id !== session.user.id) {
+          clearGestorCache();
+          setManagements([]);
+          setProjects([]);
+          setTasks([]);
+        }
         setIsApiReachable(true);
         setIsConnectedCrm(true);
         setCurrentUser(session.user);
@@ -315,32 +331,37 @@ export function TaskApp() {
         // 2) Projetos
         // 3) Membros
         // 4) Tarefas do projeto atual (em modo silencioso se já houver cache)
-        const hasCached = Boolean(getCachedTasks(projectIdFilter ?? null)?.length);
+        const hasCached = !managementIdFilter || Boolean(projectIdFilter)
+          ? Boolean(getCachedTasks(projectIdFilter ?? null)?.length)
+          : false;
         const [managementsRes, projectsRes, membersRes] = await Promise.all([
           ideCrmClient.listManagements().catch(() => null),
           ideCrmClient.listProjects().catch(() => null),
           ideCrmClient.listProjectMembers(projectIdFilter ?? undefined).catch(() => null),
-          loadTasks(
-            projectIdFilter ?? null,
-            managementIdFilter ?? null,
-            undefined,
-            hasCached // Se já tiver cache, roda silenciosamente (0ms de tela preta)
-          ),
         ]);
 
         const loadedManagements = managementsRes?.managements ?? [];
         const loadedProjects = projectsRes?.projects ?? [];
 
-        if (loadedManagements.length > 0) {
+        if (managementsRes) {
           setManagements(loadedManagements);
           setCachedManagements(loadedManagements);
         }
-        if (loadedProjects.length > 0) {
+        if (projectsRes) {
           setProjects(loadedProjects);
           setCachedProjects(loadedProjects);
         }
         if (membersRes?.members) {
           setMembers(membersRes.members);
+        }
+        if (managementIdFilter && !projectIdFilter && !projectsRes) {
+          setSyncError("Não foi possível carregar os projetos da gestão. Tente novamente.");
+          setIsSyncingTasks(false);
+        } else {
+          await loadTasks(projectIdFilter ?? null, managementIdFilter ?? null, loadedProjects, hasCached);
+          if (!managementsRes || !projectsRes) {
+            setSyncError("Não foi possível atualizar todas as gestões e projetos do CRM.");
+          }
         }
       } catch {
         setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
@@ -369,12 +390,12 @@ export function TaskApp() {
   }, []);
 
   const effectiveManagements = useMemo(() => {
-    return managements.length > 0 ? managements : INITIAL_MANAGEMENTS;
-  }, [managements]);
+    return isConnectedCrm ? managements : INITIAL_MANAGEMENTS;
+  }, [managements, isConnectedCrm]);
 
   const effectiveProjects = useMemo(() => {
-    return projects.length > 0 ? projects : INITIAL_PROJECTS;
-  }, [projects]);
+    return isConnectedCrm ? projects : INITIAL_PROJECTS;
+  }, [projects, isConnectedCrm]);
 
   function handleSelectManagement(managementId: string | null) {
     setSelectedManagementId(managementId);
@@ -388,7 +409,7 @@ export function TaskApp() {
       localStorage.removeItem("gestor_selected_project_id");
     } catch {}
 
-    const cached = getCachedTasks(null);
+    const cached = managementId ? null : getCachedTasks(null);
     if (cached && cached.length > 0) {
       setTasks(cached);
       setIsSyncingTasks(false);
@@ -419,7 +440,7 @@ export function TaskApp() {
     }
 
     // Transição instantânea (0ms): se o projeto já está em cache, exibe imediatamente
-    const cached = getCachedTasks(projectId);
+    const cached = !projectId && selectedManagementId ? null : getCachedTasks(projectId);
     if (cached && cached.length > 0) {
       setTasks(cached);
       setIsSyncingTasks(false);
@@ -545,7 +566,7 @@ export function TaskApp() {
 
       // Filtro de Data de Vencimento
       if (filters.dueDateCategory && filters.dueDateCategory !== "all") {
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = new Date(currentTime).toISOString().slice(0, 10);
         if (filters.dueDateCategory === "no_date") {
           if (task.dueDate) return false;
         } else if (filters.dueDateCategory === "has_date") {
@@ -565,7 +586,7 @@ export function TaskApp() {
         } else if (filters.dueDateCategory === "this_week") {
           if (!task.dueDate) return false;
           const taskDate = task.dueDate.slice(0, 10);
-          const inSevenDays = new Date(Date.now() + 7 * 86400000)
+          const inSevenDays = new Date(currentTime + 7 * 86400000)
             .toISOString()
             .slice(0, 10);
           if (taskDate < todayStr || taskDate > inSevenDays) return false;
@@ -588,7 +609,7 @@ export function TaskApp() {
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks]);
+  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks, currentTime]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -613,6 +634,10 @@ export function TaskApp() {
         ? projects.find((p) => p.projectManagementId === selectedManagementId)?.id
         : null) ||
       projects[0]?.id;
+    if (isConnectedCrm && !targetProjectId) {
+      setSyncError("Selecione um projeto antes de criar uma tarefa no CRM.");
+      return;
+    }
     const newTask: Task = {
       ...data,
       id: tempId,
@@ -635,11 +660,12 @@ export function TaskApp() {
                 t.id === tempId ? finalTask : t
               )
             );
-            updateCachedTask(finalTask);
+            removeCachedTask(tempId);
+            addCachedTask(finalTask);
           }
         })
         .catch(() => {
-          // Mantém estado local caso falhe
+          setSyncError("A tarefa não foi salva no CRM. Atualize os dados antes de tentar novamente.");
         });
     }
   }
@@ -654,7 +680,7 @@ export function TaskApp() {
       void ideCrmClient
         .updateTask(updatedTask.id, mapGestorTaskToCrmUpdateInput(updatedTask))
         .catch(() => {
-          // Mantém atualização otimista
+          setSyncError("A alteração não foi salva no CRM. Atualize os dados antes de tentar novamente.");
         });
     }
   }
@@ -669,7 +695,7 @@ export function TaskApp() {
 
     if (isConnectedCrm && !id.startsWith("task-")) {
       void ideCrmClient.deleteTask(id).catch(() => {
-        // Silencia erro de rede se já removido
+        setSyncError("Não foi possível excluir a tarefa no CRM. Atualize os dados para recuperá-la.");
       });
     }
   }
@@ -716,7 +742,7 @@ export function TaskApp() {
           draggedTaskId,
           mapGestorTaskToCrmUpdateInput(updatedDragged)
         )
-        .catch(() => null);
+        .catch(() => setSyncError("Não foi possível atualizar o status no CRM. Atualize os dados para conferir."));
     }
   }
 
@@ -758,7 +784,7 @@ export function TaskApp() {
                 );
               }
             })
-            .catch(() => null);
+            .catch(() => setSyncError("Não foi possível criar o item de checklist no CRM."));
         }
       } else if (subtasks.length < prevItems.length) {
         const removed = prevItems.find(
@@ -767,7 +793,7 @@ export function TaskApp() {
         if (removed && !removed.id.startsWith("st-")) {
           void ideCrmClient
             .deleteChecklistItem(taskId, removed.id)
-            .catch(() => null);
+            .catch(() => setSyncError("Não foi possível excluir o item de checklist no CRM."));
         }
       } else {
         const toggled = subtasks.find((item) => {
@@ -780,7 +806,7 @@ export function TaskApp() {
               completed: toggled.completed,
               title: toggled.title,
             })
-            .catch(() => null);
+            .catch(() => setSyncError("Não foi possível atualizar o item de checklist no CRM."));
         }
       }
     }
@@ -805,7 +831,7 @@ export function TaskApp() {
     if (isConnectedCrm && !taskId.startsWith("task-")) {
       void ideCrmClient
         .createTaskComment(taskId, comment.content)
-        .catch(() => null);
+        .catch(() => setSyncError("Não foi possível salvar o comentário no CRM."));
     }
   }
 
@@ -816,10 +842,9 @@ export function TaskApp() {
     }
   ) {
     if (taskData.id) {
-      setTasks((prev) =>
-        prev.map((t) => {
-          if (t.id !== taskData.id) return t;
-          const merged: Task = {
+      const t = tasks.find((task) => task.id === taskData.id);
+      if (t) {
+        const merged: Task = {
             ...t,
             title: taskData.title,
             subtitle: taskData.subtitle ?? t.subtitle,
@@ -838,15 +863,9 @@ export function TaskApp() {
             subtasks: taskData.subtasks ?? t.subtasks ?? [],
             comments: taskData.comments ?? t.comments ?? [],
             updatedAt: new Date().toISOString(),
-          };
-          if (isConnectedCrm && !merged.id.startsWith("task-")) {
-            void ideCrmClient
-              .updateTask(merged.id, mapGestorTaskToCrmUpdateInput(merged))
-              .catch(() => null);
-          }
-          return merged;
-        })
-      );
+        };
+        handleUpdateTask(merged);
+      }
     } else {
       handleAddTask(taskData);
     }
@@ -936,6 +955,14 @@ export function TaskApp() {
             selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
+          {syncError && (
+            <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
+              {syncError}
+              <button type="button" className="ml-2 underline" onClick={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}>
+                Atualizar dados
+              </button>
+            </div>
+          )}
           {activeModule !== "tasks" ? (
             <EnterpriseModulesView
               section={activeModule}

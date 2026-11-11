@@ -31,14 +31,9 @@ export function HeaderWorkspaceSelector({
   const [projectOpen, setProjectOpen] = useState(false);
   const [managementQuery, setManagementQuery] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
-  const [mounted, setMounted] = useState(false);
 
   const managementRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Fechar ao clicar fora
   useEffect(() => {
@@ -130,8 +125,7 @@ export function HeaderWorkspaceSelector({
   return (
     <>
       {/* Backdrop escurecido cobrindo a tela toda para dar foco nas opções */}
-      {mounted &&
-        (managementOpen || projectOpen) &&
+      {(managementOpen || projectOpen) &&
         createPortal(
           <div
             className="fixed inset-0 bg-black/75 backdrop-blur-[2px] z-40 transition-opacity duration-200 animate-in fade-in cursor-default"
