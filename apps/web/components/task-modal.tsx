@@ -37,10 +37,6 @@ import {
 import { NotionDatePicker } from "@/components/ui/notion-date-picker";
 import { formatNotionDate } from "@/lib/notion-date";
 import {
-  DEFAULT_CHECKLIST_SUBTASKS,
-  DEFAULT_TASK_COMMENTS,
-} from "@/lib/initial-data";
-import {
   Dialog,
   DialogContent,
   DialogTitle,
@@ -260,7 +256,7 @@ function formatDueDateBr(dateStr?: string): string {
 }
 
 function formatPillDate(dateStr?: string): string {
-  if (!dateStr) return "sex (20/nov)";
+  if (!dateStr) return "Definir prazo";
   const daysOfWeek = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
   const months = [
     "jan", "fev", "mar", "abr", "mai", "jun",
@@ -301,18 +297,11 @@ function formatPillDate(dateStr?: string): string {
     // fallback
   }
 
-  return "sex (20/nov)";
+  return dateStr;
 }
 
 function ensureGroupedSubtasks(rawSubtasks?: Subtask[]): Subtask[] {
-  if (!rawSubtasks || rawSubtasks.length === 0) {
-    return DEFAULT_CHECKLIST_SUBTASKS;
-  }
-  const hasAnyGroup = rawSubtasks.some((s) => Boolean(s.group));
-  if (hasAnyGroup) {
-    return rawSubtasks;
-  }
-  return DEFAULT_CHECKLIST_SUBTASKS;
+  return rawSubtasks ?? [];
 }
 
 function StatusHexagonIcon({ className }: { className?: string }) {
@@ -422,6 +411,7 @@ const TaskModalContent = forwardRef<
     normalizeTaskPriority(task?.priority ?? "Normal")
   );
   const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
+  const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const [projectName, setProjectName] = useState(
     task?.projectName || ""
   );
@@ -479,11 +469,8 @@ const TaskModalContent = forwardRef<
     ensureGroupedSubtasks(task?.subtasks)
   );
   const activeSubtasks = useMemo(() => {
-    if (isEditing && task?.subtasks && task.subtasks.some((s) => s.group)) {
-      return task.subtasks;
-    }
-    return localSubtasks;
-  }, [isEditing, task?.subtasks, localSubtasks]);
+    return isEditing && onUpdateSubtasks ? task?.subtasks ?? [] : localSubtasks;
+  }, [isEditing, onUpdateSubtasks, task?.subtasks, localSubtasks]);
 
   // Collapsible groups state
   const [collapsedGroups, setCollapsedGroups] = useState<
@@ -508,9 +495,7 @@ const TaskModalContent = forwardRef<
   const [localComments, setLocalComments] = useState<TaskComment[]>(() =>
     task?.comments ?? []
   );
-  const activeComments = isEditing && task?.comments && task.comments.length >= 2
-    ? task.comments
-    : localComments;
+  const activeComments = isEditing && onAddComment ? task?.comments ?? [] : localComments;
 
   const [newCommentText, setNewCommentText] = useState("");
 
@@ -523,6 +508,7 @@ const TaskModalContent = forwardRef<
       description,
       status,
       priority,
+      startDate,
       dueDate,
       projectName,
       assignee,
@@ -548,6 +534,7 @@ const TaskModalContent = forwardRef<
         description: description.trim(),
         status,
         priority,
+        startDate,
         dueDate,
         projectName,
         assignee,
@@ -761,8 +748,7 @@ const TaskModalContent = forwardRef<
     if (!trimmed) return;
     const newComment: TaskComment = {
       id: `c-${Date.now()}`,
-      author: "Will (Você)",
-      avatar: "/avatars/user-composer.png",
+      author: "Você",
       timeAgo: "agora mesmo",
       content: trimmed,
       createdAt: new Date().toISOString(),
@@ -1414,7 +1400,8 @@ const TaskModalContent = forwardRef<
 
               {/* 3. Prazo Pill */}
               <NotionDatePicker
-                startDate={dueDate}
+                startDate={startDate || dueDate}
+                endDate={startDate ? dueDate : undefined}
                 priority={priority}
                 onPriorityChange={(p) => {
                   const norm = normalizeTaskPriority(p);
@@ -1423,10 +1410,12 @@ const TaskModalContent = forwardRef<
                 }}
                 allowRange
                 placeholder="Definir prazo"
-                onChange={({ startDate }) => {
-                  const val = startDate || "";
-                  setDueDate(val);
-                  syncTaskField({ dueDate: val });
+                onChange={({ startDate: selectedStart, endDate }) => {
+                  const nextStart = endDate ? selectedStart || "" : "";
+                  const nextDue = endDate || selectedStart || "";
+                  setStartDate(nextStart);
+                  setDueDate(nextDue);
+                  syncTaskField({ startDate: nextStart, dueDate: nextDue });
                 }}
                 triggerClassName="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
                 renderTrigger={({ open }) => (
@@ -1436,7 +1425,7 @@ const TaskModalContent = forwardRef<
                     className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
                   >
                     <Calendar className="w-3.5 h-3.5 text-[#8e92ab]" />
-                    <span>{formatPillDate(dueDate)}</span>
+                    <span>{formatNotionDate(startDate || dueDate, startDate ? dueDate : undefined) || "Definir prazo"}</span>
                   </button>
                 )}
               />
@@ -1446,11 +1435,13 @@ const TaskModalContent = forwardRef<
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
+                    disabled
+                    title="Alteração de projeto ainda não disponível"
                     className="h-[26px] rounded-full border border-[#3e2e6e] bg-[#241b42] hover:brightness-110 px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#e9d5ff] transition-all cursor-pointer outline-none shrink-0"
                   >
                     <Layers className="w-3.5 h-3.5 text-[#8b5cf6] shrink-0" />
                     <span className="truncate max-w-[150px]">
-                      {projectName || "Site - Graci (Power RH)"}
+                      {projectName || "Projeto atual"}
                     </span>
                   </button>
                 </DropdownMenuTrigger>
@@ -1481,14 +1472,16 @@ const TaskModalContent = forwardRef<
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
+                    disabled
+                    title="Alteração de responsável ainda não disponível"
                     className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] hover:border-[#3d4160] pl-1 pr-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white transition-colors cursor-pointer outline-none shrink-0"
                   >
-                    <img
-                      src="/avatars/will.png"
-                      alt={assignee || "Will"}
+                    {assigneeAvatar ? <img
+                      src={assigneeAvatar}
+                      alt={assignee}
                       className="w-[20px] h-[20px] rounded-full object-cover border border-[#2e324a] shrink-0"
-                    />
-                    <span>{assignee || "Will"}</span>
+                    /> : <User className="w-4 h-4" />}
+                    <span>{assignee || "Sem responsável"}</span>
                     <ChevronDown className="w-3 h-3 text-[#8e92ab]" />
                   </button>
                 </DropdownMenuTrigger>
@@ -1668,7 +1661,8 @@ const TaskModalContent = forwardRef<
                   </div>
                   <div className="mt-1.5">
                     <NotionDatePicker
-                      startDate={dueDate}
+                      startDate={startDate || dueDate}
+                      endDate={startDate ? dueDate : undefined}
                       priority={priority}
                       onPriorityChange={(p) => {
                         const norm = normalizeTaskPriority(p);
@@ -1677,10 +1671,12 @@ const TaskModalContent = forwardRef<
                       }}
                       allowRange
                       placeholder="Definir prazo"
-                      onChange={({ startDate }) => {
-                        const val = startDate || "";
-                        setDueDate(val);
-                        syncTaskField({ dueDate: val });
+                      onChange={({ startDate: selectedStart, endDate }) => {
+                        const nextStart = endDate ? selectedStart || "" : "";
+                        const nextDue = endDate || selectedStart || "";
+                        setStartDate(nextStart);
+                        setDueDate(nextDue);
+                        syncTaskField({ startDate: nextStart, dueDate: nextDue });
                       }}
                       triggerClassName="h-[26px] rounded-full border border-[#292c42] bg-[#161826] px-3 inline-flex items-center text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
                       renderTrigger={({ open }) => (
@@ -1690,7 +1686,7 @@ const TaskModalContent = forwardRef<
                           className="h-[26px] rounded-full border border-[#292c42] bg-[#161826] px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
                         >
                           <Calendar className="w-3.5 h-3.5 text-[#8e92ab]" />
-                          <span>{formatPillDate(dueDate)}</span>
+                          <span>{formatNotionDate(startDate || dueDate, startDate ? dueDate : undefined) || "Definir prazo"}</span>
                         </button>
                       )}
                     />
@@ -1708,6 +1704,8 @@ const TaskModalContent = forwardRef<
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
+                          disabled
+                          title="Alteração de projeto ainda não disponível"
                           className="h-[26px] max-w-full rounded-full border border-[#3e2e6e] bg-[#241b42] px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#e9d5ff] hover:brightness-110 transition-all truncate cursor-pointer outline-none"
                         >
                           <Layers className="w-3.5 h-3.5 text-[#8b5cf6] shrink-0" />
@@ -1752,15 +1750,17 @@ const TaskModalContent = forwardRef<
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
+                          disabled
+                          title="Alteração de responsável ainda não disponível"
                           className="w-full h-[28px] rounded-full border border-[#292c42] bg-[#161826] pl-1.5 pr-3 flex items-center justify-between text-[11.5px] font-semibold text-white hover:border-[#3d4160] transition-colors cursor-pointer outline-none"
                         >
                           <div className="flex items-center gap-2 truncate">
-                            <img
-                              src="/avatars/will.png"
-                              alt={assignee || "Will"}
+                            {assigneeAvatar ? <img
+                              src={assigneeAvatar}
+                              alt={assignee}
                               className="w-[20px] h-[20px] rounded-full object-cover border border-[#2e324a] shrink-0"
-                            />
-                            <span className="truncate">{assignee || "Will"}</span>
+                            /> : <User className="w-4 h-4" />}
+                            <span className="truncate">{assignee || "Sem responsável"}</span>
                           </div>
                           <ChevronDown className="w-3.5 h-3.5 text-[#8e92ab] shrink-0 ml-1" />
                         </button>
@@ -2312,6 +2312,8 @@ const TaskModalContent = forwardRef<
             <div className="mt-2.5 flex items-center justify-between">
               <button
                 type="button"
+                disabled={!task}
+                title={!task ? "Feche e salve a tarefa antes de adicionar itens" : undefined}
                 onClick={() => setShowAddChecklistItem((prev) => !prev)}
                 className="h-[30px] px-3 rounded-[9px] border border-[#5e43d8] bg-[#1e1938] hover:bg-[#28214a] text-[#c4b5fd] text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer"
               >
@@ -2437,24 +2439,8 @@ const TaskModalContent = forwardRef<
         {isBottomOpen && (
           <div className="mt-3">
             {bottomTab === "activities" && (
-              <div className="space-y-2 py-1 text-xs text-[#8e92ab]">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#7c5dfa]" />
-                  <span>
-                    Tarefa criada por <strong className="text-white">Will</strong>
-                  </span>
-                  <span className="text-[10px] text-[#696d84] ml-auto">há 1 dia</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span>
-                    Status definido como{" "}
-                    <strong className="text-white">
-                      {getStatusDefinition(status).label}
-                    </strong>
-                  </span>
-                  <span className="text-[10px] text-[#696d84] ml-auto">recente</span>
-                </div>
+              <div className="py-1 text-xs text-muted-foreground">
+                Histórico de atividades indisponível.
               </div>
             )}
 
@@ -2474,7 +2460,8 @@ const TaskModalContent = forwardRef<
                   <div className="flex-1 flex items-center rounded-[10px] border border-[#282b3e] bg-[#181a28] pl-3 pr-1.5 py-1 focus-within:border-[#5e43d8] transition-colors">
                     <input
                       type="text"
-                      placeholder="Adicionar um comentário..."
+                      disabled={!task}
+                      placeholder={task ? "Adicionar um comentário..." : "Salve a tarefa antes de comentar"}
                       value={newCommentText}
                       onChange={(e) => setNewCommentText(e.target.value)}
                       className="flex-1 bg-transparent text-[12.5px] text-white placeholder:text-[#7c809a] outline-none"
@@ -2500,6 +2487,7 @@ const TaskModalContent = forwardRef<
                       </button>
                       <button
                         type="submit"
+                        disabled={!task}
                         aria-label="Enviar comentário"
                         className="w-6 h-6 rounded-[7px] bg-[#6e51f9] hover:bg-[#7c5dfa] text-white flex items-center justify-center shadow-sm ml-1 transition-colors cursor-pointer"
                       >

@@ -854,6 +854,7 @@ export function TaskApp() {
             description: taskData.description,
             status: taskData.status,
             priority: taskData.priority,
+            startDate: taskData.startDate,
             dueDate: taskData.dueDate,
             tag: taskData.tag,
             tags: taskData.tags ?? t.tags,
