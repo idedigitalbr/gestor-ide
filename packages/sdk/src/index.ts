@@ -149,11 +149,11 @@ export class IdeCrmClient {
   // --------------------------------------------------------------------------
 
   async listManagements(): Promise<{ managements: CrmProjectManagement[] }> {
-    return this.request("/projects/managements?limit=100");
+    return this.request("/projects/managements");
   }
 
   async listProjects(search?: string): Promise<{ projects: CrmProject[] }> {
-    const query = search ? `?limit=100&search=${encodeURIComponent(search)}` : "?limit=100";
+    const query = search ? `?search=${encodeURIComponent(search)}` : "";
     return this.request(`/projects/items${query}`);
   }
 
@@ -163,7 +163,6 @@ export class IdeCrmClient {
     search?: string;
   }): Promise<{ tasks: CrmProjectTask[] }> {
     const searchParams = new URLSearchParams();
-    searchParams.set("limit", "100");
     searchParams.set("include", "hierarchy,checklists,summary");
     if (params?.projectId) searchParams.set("projectId", params.projectId);
     if (params?.status) searchParams.set("status", params.status);

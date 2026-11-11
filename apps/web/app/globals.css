@@ -134,6 +134,16 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+html {
+  zoom: 1.1;
+}
+
+@supports not (zoom: 1.1) {
+  html {
+    font-size: 110%;
+  }
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

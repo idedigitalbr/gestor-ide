@@ -17,11 +17,7 @@ const STORAGE_KEYS = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [coloredChrome, setColoredChromeState] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try { return localStorage.getItem(STORAGE_KEYS.COLORED_CHROME) === "true"; }
-    catch { return false; }
-  });
+  const [coloredChrome, setColoredChromeState] = useState<boolean>(false);
   const setColoredChrome = useCallback((enabled: boolean) => {
     setColoredChromeState(enabled);
     try { localStorage.setItem(STORAGE_KEYS.COLORED_CHROME, String(enabled)); }
@@ -29,34 +25,30 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // 1. Modos de aparência estritamente binários: "dark" ou "light" (sem auto/sistema)
-  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>(() => {
-    if (typeof window === "undefined") return "dark";
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.MODE);
-      if (stored === "light") return "light";
-      return "dark";
-    } catch {}
-    return "dark";
-  });
+  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>("dark");
 
   // 2. IDs de temas ativos por modo (padrão Dark = all-black, padrão Light = clean-white)
-  const [darkThemeId, setDarkThemeId] = useState<string>(() => {
-    if (typeof window === "undefined") return "all-black";
-    try {
-      return localStorage.getItem(STORAGE_KEYS.DARK_THEME) || "all-black";
-    } catch {
-      return "all-black";
-    }
-  });
+  const [darkThemeId, setDarkThemeId] = useState<string>("all-black");
+  const [lightThemeId, setLightThemeId] = useState<string>("clean-white");
 
-  const [lightThemeId, setLightThemeId] = useState<string>(() => {
-    if (typeof window === "undefined") return "clean-white";
+  // Hidrata preferências salvas no cliente sem causar divergência no SSR
+  useEffect(() => {
     try {
-      return localStorage.getItem(STORAGE_KEYS.LIGHT_THEME) || "clean-white";
-    } catch {
-      return "clean-white";
-    }
-  });
+      const storedChrome = localStorage.getItem(STORAGE_KEYS.COLORED_CHROME);
+      if (storedChrome === "true") setColoredChromeState(true);
+
+      const storedMode = localStorage.getItem(STORAGE_KEYS.MODE);
+      if (storedMode === "light" || storedMode === "dark") {
+        setAppearanceModeState(storedMode);
+      }
+
+      const storedDark = localStorage.getItem(STORAGE_KEYS.DARK_THEME);
+      if (storedDark) setDarkThemeId(storedDark);
+
+      const storedLight = localStorage.getItem(STORAGE_KEYS.LIGHT_THEME);
+      if (storedLight) setLightThemeId(storedLight);
+    } catch {}
+  }, []);
 
   // 3. Modo resolvido direto (sempre "dark" ou "light")
   const resolvedMode: "dark" | "light" = appearanceMode;

@@ -169,18 +169,6 @@ export function Sidebar({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-
-          {/* Botão de Recolher Sidebar */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-            title="Recolher barra lateral (Ctrl+B)"
-            aria-label="Recolher barra lateral"
-          >
-            <PanelLeftClose className="w-4 h-4" />
-          </Button>
         </div>
 
         <Separator className="bg-sidebar-border" />

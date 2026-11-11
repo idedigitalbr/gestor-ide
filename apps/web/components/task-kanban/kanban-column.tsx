@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import type { Task, TaskStatus } from "@/types/task";
 import { KanbanCard } from "./kanban-card";
-import { StatusIcon } from "../task-status-icon";
+import { StatusIcon, getStatusDefinition } from "../task-status-icon";
 import { Plus, ChevronsLeftRight, EyeOff, ChevronsRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -115,7 +115,7 @@ export function KanbanColumn({
         {/* Vertical text label */}
         <div className="flex-1 flex items-center justify-center py-4">
           <span className="[writing-mode:vertical-lr] rotate-180 text-xs font-medium text-muted-foreground group-hover:text-foreground tracking-wide whitespace-nowrap">
-            {status} · {tasks.length}
+            {getStatusDefinition(status).label} · {tasks.length}
           </span>
         </div>
 
@@ -141,7 +141,7 @@ export function KanbanColumn({
         <div className="flex items-center gap-2">
           <StatusIcon status={status} />
           <h3 className="font-medium text-xs text-foreground tracking-tight">
-            {status}
+            {getStatusDefinition(status).label}
           </h3>
           <span className="text-xs font-mono text-muted-foreground">
             {tasks.length}

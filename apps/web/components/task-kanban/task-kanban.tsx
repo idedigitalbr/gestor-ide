@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import type { Task, TaskStatus } from "@/types/task";
+import type { Task, TaskStatus, CanonicalTaskStatus } from "@/types/task";
+import { normalizeTaskStatus } from "@/types/task";
+import { ALL_CANONICAL_STATUSES, getStatusDefinition } from "../task-status-icon";
 import { KanbanColumn } from "./kanban-column";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Eye } from "lucide-react";
@@ -14,7 +16,7 @@ interface TaskKanbanProps {
   onQuickAdd: (status: TaskStatus) => void;
 }
 
-const KANBAN_COLUMNS: TaskStatus[] = ["A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
+const KANBAN_COLUMNS: CanonicalTaskStatus[] = ALL_CANONICAL_STATUSES;
 
 export function TaskKanban({
   tasks,
@@ -67,7 +69,9 @@ export function TaskKanban({
           </span>
           <div className="flex items-center gap-1.5">
             {hiddenColumns.map((status) => {
-              const count = tasks.filter((t) => t.status === status).length;
+              const count = tasks.filter(
+                (t) => normalizeTaskStatus(t.status) === status
+              ).length;
               return (
                 <button
                   key={status}
@@ -90,9 +94,11 @@ export function TaskKanban({
 
       {/* Main Board Scroll Area */}
       <ScrollArea className="w-full pb-4">
-        <div className="flex gap-3 items-start min-w-[1000px] xl:min-w-0">
+        <div className="flex gap-3 items-start min-w-[1200px] xl:min-w-0">
           {visibleColumns.map((colStatus) => {
-            const colTasks = tasks.filter((t) => t.status === colStatus);
+            const colTasks = tasks.filter(
+              (t) => normalizeTaskStatus(t.status) === colStatus
+            );
             const isCollapsed = Boolean(collapsedColumns[colStatus]);
 
             return (

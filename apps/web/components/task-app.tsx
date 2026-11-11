@@ -6,6 +6,8 @@ import {
   mapCrmTaskToGestorTask,
   mapGestorTaskToCrmCreateInput,
   mapGestorTaskToCrmUpdateInput,
+  normalizeTaskStatus,
+  normalizeTaskPriority,
   type AppModuleSection,
   type CrmCompany,
   type CrmContact,
@@ -15,22 +17,47 @@ import {
   type CrmProject,
   type CrmProjectManagement,
   type CrmProjectMember,
+  type CrmProjectTask,
   type CrmUserProfile,
   type Task,
   type TaskFilter,
   type TaskStatus,
   type ViewMode,
+  type TaskGroupBy,
+  type GroupOrder,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
-import { INITIAL_TASKS } from "@/lib/initial-data";
+import {
+  INITIAL_TASKS,
+  INITIAL_MANAGEMENTS,
+  INITIAL_PROJECTS,
+} from "@/lib/initial-data";
+import {
+  getCachedManagements,
+  setCachedManagements,
+  getCachedProjects,
+  setCachedProjects,
+  getCachedTasks,
+  setCachedTasks,
+  updateCachedTask,
+  addCachedTask,
+  removeCachedTask,
+  getCachedSession,
+  setCachedSession,
+  clearGestorCache,
+} from "@/lib/gestor-cache";
 import { Sidebar } from "@/components/sidebar";
-import { AppHeader } from "@/components/app-header";
+import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
+import { ManagementsGridView } from "@/components/managements-grid-view";
+import { ManagementProjectsView } from "@/components/management-projects-view";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
 import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
 import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
 import { EnterpriseModulesView } from "@/components/enterprise-modules-view";
+import { TaskTableSkeleton, TaskKanbanSkeleton } from "@/components/task-skeleton";
+import { cn } from "@/lib/utils";
 
 function getHighestCodeNumber(list: Task[]): number {
   let max = 100;
@@ -46,39 +73,83 @@ function getHighestCodeNumber(list: Task[]): number {
 
 export function TaskApp() {
   const searchParams = useSearchParams();
-  const initialView: ViewMode =
-    searchParams.get("view") === "table" ? "table" : "kanban";
   const initialModal = searchParams.get("modal");
 
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
-  const [viewMode, setViewMode] = useState<ViewMode>(initialView);
+  // Estados de gestão e projeto com persistência
+  const [selectedManagementId, setSelectedManagementId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("gestor_selected_management_id") || null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("gestor_selected_project_id") || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Renderização instantânea (0ms no F5): inicializa direto do cache
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const cached = getCachedTasks(selectedProjectId);
+      if (cached && cached.length > 0) return cached;
+    } catch {}
+    return [];
+  });
+
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [activeModule, setActiveModule] = useState<AppModuleSection>("tasks");
+
+  // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
+  const [subtaskMode, setSubtaskMode] = useState<SubtaskDisplayMode>("collapsed");
+  const [showClosedTasks, setShowClosedTasks] = useState(true);
+  const [showClosedSubtasks, setShowClosedSubtasks] = useState(true);
+  const [isFieldsModalOpen, setIsFieldsModalOpen] = useState(false);
 
   // Barra lateral retrátil (shadcn/ui Sidebar): PADRÃO FECHADA (false) conforme solicitado
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Estado de Integração com a API Central do IDE CRM
   const [isApiReachable, setIsApiReachable] = useState(false);
-  const [isConnectedCrm, setIsConnectedCrm] = useState(false);
-  const [currentUser, setCurrentUser] = useState<CrmUserProfile | null>(null);
+  const [isConnectedCrm, setIsConnectedCrm] = useState<boolean>(() => {
+    return Boolean(getCachedSession());
+  });
+  const [currentUser, setCurrentUser] = useState<CrmUserProfile | null>(() => {
+    return getCachedSession();
+  });
   const [isCrmModalOpen, setIsCrmModalOpen] = useState(false);
 
-  // Dados sincronizados do IDE CRM
-  const [managements, setManagements] = useState<CrmProjectManagement[]>([]);
-  const [selectedManagementId, setSelectedManagementId] = useState<string | null>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("gestor_selected_management_id") || null;
-    }
-    return null;
+  // Se já temos tarefas ou gestões em cache, NÃO mostramos skeleton no F5!
+  const [isSyncingTasks, setIsSyncingTasks] = useState<boolean>(() => {
+    try {
+      const cached = getCachedTasks(selectedProjectId);
+      if (cached && cached.length > 0) return false;
+      if (!selectedProjectId && !selectedManagementId && getCachedManagements()) return false;
+    } catch {}
+    return true;
   });
-  const [projects, setProjects] = useState<CrmProject[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Dados sincronizados do IDE CRM (carregados do cache primeiro)
+  const [managements, setManagements] = useState<CrmProjectManagement[]>(() => {
+    return getCachedManagements() || [];
+  });
+  const [projects, setProjects] = useState<CrmProject[]>(() => {
+    return getCachedProjects() || [];
+  });
+
   const [contacts, setContacts] = useState<CrmContact[]>([]);
   const [companies, setCompanies] = useState<CrmCompany[]>([]);
   const [leads, setLeads] = useState<CrmLead[]>([]);
   const [financeSummary, setFinanceSummary] = useState<CrmFinancialSummary | null>(null);
   const [financeEntries, setFinanceEntries] = useState<CrmFinancialEntry[]>([]);
   const [members, setMembers] = useState<CrmProjectMember[]>([]);
+
+  // Contador de requisições ativas para cancelar/ignorar respostas obsoletas (race condition)
+  const activeRequestIdRef = useRef(0);
 
   // Monotonic collision-free code counter initialized above existing tasks
   const nextCodeNumberRef = useRef(getHighestCodeNumber(INITIAL_TASKS) + 1);
@@ -88,7 +159,17 @@ export function TaskApp() {
     search: "",
     status: "Todos",
     priority: "Todas",
+    statuses: [],
+    assignees: [],
+    priorities: [],
+    tags: [],
+    dueDateCategory: "all",
+    taskType: "all",
   });
+
+  // Agrupamento: Padrão é "Nenhum" ("none") conforme solicitado
+  const [groupBy, setGroupBy] = useState<TaskGroupBy>("none");
+  const [groupOrder, setGroupOrder] = useState<GroupOrder>("asc");
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(Boolean(initialModal));
@@ -99,80 +180,181 @@ export function TaskApp() {
     }
     return null;
   });
-  const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>("A Fazer");
+  const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>("PENDENTE");
 
-  const syncWithIdeCrm = useCallback(
-    async (projectIdFilter?: string | null) => {
+  // Busca direcionada e rápida de tarefas baseada no projeto ou gestão selecionados (com SWR)
+  const loadTasks = useCallback(
+    async (
+      projectIdFilter: string | null,
+      managementIdFilter: string | null,
+      availableProjects?: CrmProject[],
+      silent = false
+    ) => {
+      const currentRequestId = ++activeRequestIdRef.current;
+      const cached = getCachedTasks(projectIdFilter);
+
+      // Se não há cache e não é silencioso, exibe o skeleton estrutural
+      if (!silent && (!cached || cached.length === 0)) {
+        setIsSyncingTasks(true);
+      }
+
       try {
-        const health = await ideCrmClient.health().catch(() => null);
-        setIsApiReachable(Boolean(health?.status === "ok"));
+        let loadedTasks: CrmProjectTask[] = [];
 
-        const session = await ideCrmClient.getSession();
-        if (!session.authenticated || !session.user) {
+        if (projectIdFilter) {
+          // Busca direcionada para o projeto selecionado
+          const res = await ideCrmClient.listTasks({ projectId: projectIdFilter });
+          if (currentRequestId !== activeRequestIdRef.current) return;
+          loadedTasks = res.tasks ?? [];
+        } else if (managementIdFilter) {
+          // Busca as tarefas dos projetos daquela gestão
+          const currentProjects = availableProjects ?? projects;
+          const mgmtProjects = currentProjects.filter(
+            (p) => p.projectManagementId === managementIdFilter
+          );
+
+          if (mgmtProjects.length === 1 && mgmtProjects[0]?.id) {
+            const res = await ideCrmClient.listTasks({ projectId: mgmtProjects[0].id });
+            if (currentRequestId !== activeRequestIdRef.current) return;
+            loadedTasks = res.tasks ?? [];
+          } else if (mgmtProjects.length > 1) {
+            const responses = await Promise.all(
+              mgmtProjects.map((p) =>
+                ideCrmClient.listTasks({ projectId: p.id }).catch(() => ({ tasks: [] }))
+              )
+            );
+            if (currentRequestId !== activeRequestIdRef.current) return;
+            loadedTasks = responses.flatMap((r) => r.tasks ?? []);
+          } else {
+            const res = await ideCrmClient.listTasks();
+            if (currentRequestId !== activeRequestIdRef.current) return;
+            loadedTasks = res.tasks ?? [];
+          }
+        } else {
+          // Todas as gestões
+          const res = await ideCrmClient.listTasks();
+          if (currentRequestId !== activeRequestIdRef.current) return;
+          loadedTasks = res.tasks ?? [];
+        }
+
+        const mapped = loadedTasks.map((t, idx) => mapCrmTaskToGestorTask(t, idx));
+        const finalTasks = mapped.length > 0 ? mapped : INITIAL_TASKS;
+        setTasks(finalTasks);
+        setCachedTasks(projectIdFilter, finalTasks);
+        nextCodeNumberRef.current = getHighestCodeNumber(finalTasks) + 1;
+      } catch {
+        if (currentRequestId !== activeRequestIdRef.current) return;
+        setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+      } finally {
+        if (currentRequestId === activeRequestIdRef.current) {
+          setIsSyncingTasks(false);
+        }
+      }
+    },
+    [projects]
+  );
+
+  // Carregamento lazy dos módulos enterprise (contatos, leads, financeiro)
+  // para NÃO bloquear a abertura do quadro de tarefas no F5 ou navegação
+  const loadEnterpriseData = useCallback(async () => {
+    try {
+      const [
+        contactsRes,
+        companiesRes,
+        leadsRes,
+        finSummaryRes,
+        finEntriesRes,
+      ] = await Promise.all([
+        ideCrmClient.listContacts().catch(() => null),
+        ideCrmClient.listCompanies().catch(() => null),
+        ideCrmClient.listLeads().catch(() => null),
+        ideCrmClient.getFinanceSummary().catch(() => null),
+        ideCrmClient.listFinanceEntries().catch(() => null),
+      ]);
+
+      if (contactsRes?.contacts) setContacts(contactsRes.contacts);
+      if (companiesRes?.companies) setCompanies(companiesRes.companies);
+      if (leadsRes?.leads) setLeads(leadsRes.leads);
+      if (finSummaryRes) setFinanceSummary(finSummaryRes);
+      if (finEntriesRes?.entries) setFinanceEntries(finEntriesRes.entries);
+    } catch {}
+  }, []);
+
+  // Dispara o carregamento enterprise apenas quando o usuário entra em uma aba empresarial
+  useEffect(() => {
+    if (activeModule !== "tasks" && isConnectedCrm) {
+      void loadEnterpriseData();
+    }
+  }, [activeModule, isConnectedCrm, loadEnterpriseData]);
+
+  // Sincronização global ultra-otimizada (paralela e sem travar a UI)
+  const syncWithIdeCrm = useCallback(
+    async (
+      projectIdFilter?: string | null,
+      managementIdFilter?: string | null
+    ) => {
+      try {
+        const session = await ideCrmClient.getSession().catch(() => null);
+        if (!session || !session.authenticated || !session.user) {
+          setIsApiReachable(Boolean(session));
           setIsConnectedCrm(false);
           setCurrentUser(null);
+          setCachedSession(null);
+          setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+          setIsSyncingTasks(false);
           return;
         }
 
+        setIsApiReachable(true);
         setIsConnectedCrm(true);
         setCurrentUser(session.user);
+        setCachedSession(session.user);
 
-        const [
-          managementsRes,
-          projectsRes,
-          tasksRes,
-          contactsRes,
-          companiesRes,
-          leadsRes,
-          finSummaryRes,
-          finEntriesRes,
-          membersRes,
-        ] = await Promise.all([
-          ideCrmClient.listManagements().catch(() => ({ managements: [] })),
-          ideCrmClient.listProjects().catch(() => ({ projects: [] })),
-          ideCrmClient
-            .listTasks({
-              projectId: projectIdFilter ?? undefined,
-            })
-            .catch(() => null),
-          ideCrmClient.listContacts().catch(() => ({ contacts: [] })),
-          ideCrmClient.listCompanies().catch(() => ({ companies: [] })),
-          ideCrmClient.listLeads().catch(() => ({ leads: [] })),
-          ideCrmClient.getFinanceSummary().catch(() => null),
-          ideCrmClient.listFinanceEntries().catch(() => ({ entries: [] })),
-          ideCrmClient
-            .listProjectMembers(projectIdFilter ?? undefined)
-            .catch(() => ({ members: [] })),
+        // Dispara em paralelo sem waterfalls bloqueantes:
+        // 1) Gestões
+        // 2) Projetos
+        // 3) Membros
+        // 4) Tarefas do projeto atual (em modo silencioso se já houver cache)
+        const hasCached = Boolean(getCachedTasks(projectIdFilter ?? null)?.length);
+        const [managementsRes, projectsRes, membersRes] = await Promise.all([
+          ideCrmClient.listManagements().catch(() => null),
+          ideCrmClient.listProjects().catch(() => null),
+          ideCrmClient.listProjectMembers(projectIdFilter ?? undefined).catch(() => null),
+          loadTasks(
+            projectIdFilter ?? null,
+            managementIdFilter ?? null,
+            undefined,
+            hasCached // Se já tiver cache, roda silenciosamente (0ms de tela preta)
+          ),
         ]);
 
-        setManagements(managementsRes.managements ?? []);
-        setProjects(projectsRes.projects ?? []);
-        if (tasksRes && Array.isArray(tasksRes.tasks)) {
-          const mapped = tasksRes.tasks.map((t, idx) =>
-            mapCrmTaskToGestorTask(t, idx)
-          );
-          setTasks(mapped);
-          nextCodeNumberRef.current = getHighestCodeNumber(mapped) + 1;
+        const loadedManagements = managementsRes?.managements ?? [];
+        const loadedProjects = projectsRes?.projects ?? [];
+
+        if (loadedManagements.length > 0) {
+          setManagements(loadedManagements);
+          setCachedManagements(loadedManagements);
         }
-        setContacts(contactsRes.contacts ?? []);
-        setCompanies(companiesRes.companies ?? []);
-        setLeads(leadsRes.leads ?? []);
-        setFinanceSummary(finSummaryRes);
-        setFinanceEntries(finEntriesRes.entries ?? []);
-        setMembers(membersRes.members ?? []);
+        if (loadedProjects.length > 0) {
+          setProjects(loadedProjects);
+          setCachedProjects(loadedProjects);
+        }
+        if (membersRes?.members) {
+          setMembers(membersRes.members);
+        }
       } catch {
-        // Permanece em modo local caso a API não esteja ativa no momento
+        setTasks((prev) => (prev.length > 0 ? prev : INITIAL_TASKS));
+        setIsSyncingTasks(false);
       }
     },
-    []
+    [loadTasks]
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void syncWithIdeCrm(selectedProjectId);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [syncWithIdeCrm, selectedProjectId]);
+    void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+    // Executa apenas uma vez na montagem inicial
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Atalho de teclado: Ctrl+B ou Cmd+B para abrir/fechar a barra lateral
   useEffect(() => {
@@ -186,21 +368,66 @@ export function TaskApp() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const effectiveManagements = useMemo(() => {
+    return managements.length > 0 ? managements : INITIAL_MANAGEMENTS;
+  }, [managements]);
+
+  const effectiveProjects = useMemo(() => {
+    return projects.length > 0 ? projects : INITIAL_PROJECTS;
+  }, [projects]);
+
   function handleSelectManagement(managementId: string | null) {
     setSelectedManagementId(managementId);
-    if (typeof window !== "undefined") {
+    setSelectedProjectId(null); // Ao selecionar ou trocar de gestão, exibe os projetos da gestão (Nível 2)
+    try {
       if (managementId) {
         localStorage.setItem("gestor_selected_management_id", managementId);
       } else {
         localStorage.removeItem("gestor_selected_management_id");
       }
+      localStorage.removeItem("gestor_selected_project_id");
+    } catch {}
+
+    const cached = getCachedTasks(null);
+    if (cached && cached.length > 0) {
+      setTasks(cached);
+      setIsSyncingTasks(false);
+      void loadTasks(null, managementId, undefined, true);
+    } else {
+      void loadTasks(null, managementId, undefined, false);
     }
-    // Se o projeto selecionado não pertencer à nova gestão, volta para ver todos daquela gestão
-    if (managementId && selectedProjectId) {
-      const p = projects.find((item) => item.id === selectedProjectId);
-      if (p && p.projectManagementId !== managementId) {
-        setSelectedProjectId(null);
+  }
+
+  function handleSelectProject(projectId: string | null) {
+    setSelectedProjectId(projectId);
+    try {
+      if (projectId) {
+        localStorage.setItem("gestor_selected_project_id", projectId);
+      } else {
+        localStorage.removeItem("gestor_selected_project_id");
       }
+    } catch {}
+
+    if (projectId) {
+      const proj = effectiveProjects.find((p) => p.id === projectId);
+      if (proj && proj.projectManagementId && proj.projectManagementId !== selectedManagementId) {
+        setSelectedManagementId(proj.projectManagementId);
+        try {
+          localStorage.setItem("gestor_selected_management_id", proj.projectManagementId);
+        } catch {}
+      }
+    }
+
+    // Transição instantânea (0ms): se o projeto já está em cache, exibe imediatamente
+    const cached = getCachedTasks(projectId);
+    if (cached && cached.length > 0) {
+      setTasks(cached);
+      setIsSyncingTasks(false);
+      // Revalida em background sem tela preta / skeleton
+      void loadTasks(projectId, selectedManagementId, undefined, true);
+    } else {
+      setIsSyncingTasks(true);
+      void loadTasks(projectId, selectedManagementId, undefined, false);
     }
   }
 
@@ -213,33 +440,38 @@ export function TaskApp() {
     setProjects([]);
     setSelectedProjectId(null);
     setTasks(INITIAL_TASKS);
+    clearGestorCache();
   }
 
   // Active selected task derived reactively from current tasks state
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
-    return tasks.find((t) => t.id === selectedTaskId) ?? null;
+    return (
+      tasks.find((t) => t.id === selectedTaskId) ??
+      INITIAL_TASKS.find((t) => t.id === selectedTaskId || t.code === selectedTaskId) ??
+      null
+    );
   }, [tasks, selectedTaskId]);
 
   const currentManagement = useMemo(() => {
     if (!selectedManagementId) return null;
-    return managements.find((m) => m.id === selectedManagementId) ?? null;
-  }, [managements, selectedManagementId]);
+    return effectiveManagements.find((m) => m.id === selectedManagementId) ?? null;
+  }, [effectiveManagements, selectedManagementId]);
 
   const currentProject = useMemo(() => {
     if (!selectedProjectId) return null;
-    return projects.find((p) => p.id === selectedProjectId) ?? null;
-  }, [projects, selectedProjectId]);
+    return effectiveProjects.find((p) => p.id === selectedProjectId) ?? null;
+  }, [effectiveProjects, selectedProjectId]);
 
   // Filtered tasks computation respeitando a Hierarquia: Gestão -> Projeto -> Filtros
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
-      // 1. Filtro por Projeto Ativo
-      if (selectedProjectId) {
+      // 1. Filtro por Projeto Ativo (só filtra quando os projetos do CRM já carregaram ou quando a tarefa já possui projectId correspondente)
+      if (selectedProjectId && projects.length > 0) {
         if (task.projectId && task.projectId !== selectedProjectId) {
           return false;
         }
-      } else if (selectedManagementId) {
+      } else if (selectedManagementId && projects.length > 0) {
         // Se estiver em "Todos os Projetos" de uma Gestão específica,
         // exibe apenas tarefas cujos projetos pertençam àquela gestão
         const allowedProjectIds = new Set(
@@ -260,17 +492,103 @@ export function TaskApp() {
         if (!matchesTitle && !matchesDesc && !matchesCode) return false;
       }
 
-      if (filters.status !== "Todos" && task.status !== filters.status) {
+      // Filtro de Status
+      if (
+        filters.status !== "Todos" &&
+        normalizeTaskStatus(task.status) !== normalizeTaskStatus(filters.status)
+      ) {
         return false;
       }
+      if (filters.statuses && filters.statuses.length > 0) {
+        if (!filters.statuses.includes(task.status)) {
+          return false;
+        }
+      }
 
-      if (filters.priority !== "Todas" && task.priority !== filters.priority) {
+      // Filtro de Prioridade
+      if (
+        filters.priority !== "Todas" &&
+        normalizeTaskPriority(task.priority) !== normalizeTaskPriority(filters.priority)
+      ) {
         return false;
+      }
+      if (filters.priorities && filters.priorities.length > 0) {
+        if (!filters.priorities.includes(task.priority)) {
+          return false;
+        }
+      }
+
+      // Filtro de Responsável
+      if (filters.assignees && filters.assignees.length > 0) {
+        const isUnassigned = !task.assignee || !task.assignee.trim();
+        const matchesAssignee = isUnassigned
+          ? filters.assignees.includes("unassigned")
+          : filters.assignees.includes(task.assignee!);
+        if (!matchesAssignee) return false;
+      }
+
+      // Filtro de Etiquetas
+      if (filters.tags && filters.tags.length > 0) {
+        const isUntagged =
+          (!task.tag || !task.tag.trim()) &&
+          (!task.tags || task.tags.length === 0);
+        if (isUntagged) {
+          if (!filters.tags.includes("untagged")) return false;
+        } else {
+          const taskTags = [task.tag, ...(task.tags || [])].filter(Boolean);
+          const hasMatchingTag = taskTags.some((t) =>
+            filters.tags!.includes(t!)
+          );
+          if (!hasMatchingTag) return false;
+        }
+      }
+
+      // Filtro de Data de Vencimento
+      if (filters.dueDateCategory && filters.dueDateCategory !== "all") {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (filters.dueDateCategory === "no_date") {
+          if (task.dueDate) return false;
+        } else if (filters.dueDateCategory === "has_date") {
+          if (!task.dueDate) return false;
+        } else if (filters.dueDateCategory === "overdue") {
+          if (
+            !task.dueDate ||
+            task.dueDate.slice(0, 10) >= todayStr ||
+            task.status === "CONCLUÍDO" ||
+            task.status === "Concluído"
+          ) {
+            return false;
+          }
+        } else if (filters.dueDateCategory === "today") {
+          if (!task.dueDate || task.dueDate.slice(0, 10) !== todayStr)
+            return false;
+        } else if (filters.dueDateCategory === "this_week") {
+          if (!task.dueDate) return false;
+          const taskDate = task.dueDate.slice(0, 10);
+          const inSevenDays = new Date(Date.now() + 7 * 86400000)
+            .toISOString()
+            .slice(0, 10);
+          if (taskDate < todayStr || taskDate > inSevenDays) return false;
+        }
+      }
+
+      // Filtro de Tipo de Tarefa
+      if (filters.taskType && filters.taskType !== "all") {
+        const subtasksCount = task.subtasks?.length ?? 0;
+        if (filters.taskType === "with_subtasks" && subtasksCount === 0)
+          return false;
+        if (filters.taskType === "simple" && subtasksCount > 0) return false;
+      }
+
+      // Filtro de Tarefas Fechadas (ClickUp "Mostrar rapidamente tarefas fechadas")
+      if (!showClosedTasks) {
+        const canonical = normalizeTaskStatus(task.status);
+        if (canonical === "CONCLUÍDO") return false;
       }
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId, selectedManagementId, projects]);
+  }, [tasks, filters, selectedProjectId, selectedManagementId, projects, showClosedTasks]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -303,6 +621,7 @@ export function TaskApp() {
       createdAt: new Date().toISOString(),
     };
     setTasks((prev) => [newTask, ...prev]);
+    addCachedTask(newTask);
 
     if (isConnectedCrm && targetProjectId) {
       void ideCrmClient
@@ -310,11 +629,13 @@ export function TaskApp() {
         .then((res) => {
           if (res?.task) {
             const synced = mapCrmTaskToGestorTask(res.task, 0);
+            const finalTask = { ...synced, code: newTask.code };
             setTasks((prev) =>
               prev.map((t) =>
-                t.id === tempId ? { ...synced, code: newTask.code } : t
+                t.id === tempId ? finalTask : t
               )
             );
+            updateCachedTask(finalTask);
           }
         })
         .catch(() => {
@@ -327,6 +648,7 @@ export function TaskApp() {
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     );
+    updateCachedTask(updatedTask);
 
     if (isConnectedCrm && !updatedTask.id.startsWith("task-")) {
       void ideCrmClient
@@ -339,6 +661,7 @@ export function TaskApp() {
 
   function handleDeleteTask(id: string) {
     setTasks((prev) => prev.filter((t) => t.id !== id));
+    removeCachedTask(id);
     if (selectedTaskId === id) {
       setSelectedTaskId(null);
       setIsModalOpen(false);
@@ -367,15 +690,19 @@ export function TaskApp() {
 
     setTasks((prev) => {
       const withoutDragged = prev.filter((t) => t.id !== draggedTaskId);
+      let next: Task[];
       if (!targetTaskId) {
-        return [...withoutDragged, updatedDragged];
+        next = [...withoutDragged, updatedDragged];
+      } else {
+        const targetIndex = withoutDragged.findIndex((t) => t.id === targetTaskId);
+        if (targetIndex === -1) {
+          next = [...withoutDragged, updatedDragged];
+        } else {
+          next = [...withoutDragged];
+          next.splice(targetIndex, 0, updatedDragged);
+        }
       }
-      const targetIndex = withoutDragged.findIndex((t) => t.id === targetTaskId);
-      if (targetIndex === -1) {
-        return [...withoutDragged, updatedDragged];
-      }
-      const next = [...withoutDragged];
-      next.splice(targetIndex, 0, updatedDragged);
+      setCachedTasks(selectedProjectId, next);
       return next;
     });
 
@@ -395,13 +722,15 @@ export function TaskApp() {
 
   function handleUpdateTaskSubtasks(taskId: string, subtasks: Task["subtasks"]) {
     const previousTask = tasks.find((t) => t.id === taskId);
-    setTasks((prev) =>
-      prev.map((t) =>
+    setTasks((prev) => {
+      const next = prev.map((t) =>
         t.id === taskId
           ? { ...t, subtasks, updatedAt: new Date().toISOString() }
           : t
-      )
-    );
+      );
+      setCachedTasks(selectedProjectId, next);
+      return next;
+    });
 
     if (isConnectedCrm && !taskId.startsWith("task-") && subtasks) {
       const prevItems = previousTask?.subtasks ?? [];
@@ -493,14 +822,21 @@ export function TaskApp() {
           const merged: Task = {
             ...t,
             title: taskData.title,
+            subtitle: taskData.subtitle ?? t.subtitle,
             description: taskData.description,
             status: taskData.status,
             priority: taskData.priority,
             dueDate: taskData.dueDate,
             tag: taskData.tag,
+            tags: taskData.tags ?? t.tags,
             estimate: taskData.estimate,
-            subtasks: t.subtasks ?? [],
-            comments: t.comments ?? [],
+            projectName: taskData.projectName ?? t.projectName,
+            assignee: taskData.assignee ?? t.assignee,
+            assigneeAvatar: taskData.assigneeAvatar ?? t.assigneeAvatar,
+            coverUrl: taskData.coverUrl !== undefined ? taskData.coverUrl : t.coverUrl,
+            icon: taskData.icon !== undefined ? taskData.icon : t.icon,
+            subtasks: taskData.subtasks ?? t.subtasks ?? [],
+            comments: taskData.comments ?? t.comments ?? [],
             updatedAt: new Date().toISOString(),
           };
           if (isConnectedCrm && !merged.id.startsWith("task-")) {
@@ -517,7 +853,7 @@ export function TaskApp() {
     setIsModalOpen(false);
   }
 
-  function handleOpenNewTask(initialStatus: TaskStatus = "A Fazer") {
+  function handleOpenNewTask(initialStatus: TaskStatus = "PENDENTE") {
     setSelectedTaskId(null);
     setModalInitialStatus(initialStatus);
     setIsModalOpen(true);
@@ -533,36 +869,42 @@ export function TaskApp() {
       search: "",
       status: "Todos",
       priority: "Todas",
+      statuses: [],
+      assignees: [],
+      priorities: [],
+      tags: [],
+      dueDateCategory: "all",
+      taskType: "all",
     });
   }
 
   const isFiltered = Boolean(
-    filters.search || filters.status !== "Todos" || filters.priority !== "Todas"
+    filters.search ||
+      filters.status !== "Todos" ||
+      filters.priority !== "Todas" ||
+      (filters.statuses && filters.statuses.length > 0) ||
+      (filters.assignees && filters.assignees.length > 0) ||
+      (filters.priorities && filters.priorities.length > 0) ||
+      (filters.tags && filters.tags.length > 0) ||
+      (filters.dueDateCategory && filters.dueDateCategory !== "all") ||
+      (filters.taskType && filters.taskType !== "all")
   );
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      {/* Sidebar Retrátil (Padrão: Fechada) */}
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        managements={managements}
-        selectedManagementId={selectedManagementId}
-        onSelectManagement={handleSelectManagement}
-        projects={projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={setSelectedProjectId}
-        isConnectedCrm={isConnectedCrm}
-        onOpenCrmModal={() => setIsCrmModalOpen(true)}
-      />
-
-      {/* Main Content Area */}
+      {/* Main Content Area (Sidebar desativada conforme solicitado) */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <AppHeader
           isSidebarOpen={isSidebarOpen}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          managements={effectiveManagements}
+          projects={effectiveProjects}
           currentManagementName={currentManagement?.name}
           currentProjectName={currentProject?.name}
+          selectedManagementId={selectedManagementId}
+          selectedProjectId={selectedProjectId}
+          onSelectManagement={handleSelectManagement}
+          onSelectProject={handleSelectProject}
           activeModule={activeModule}
           onModuleChange={setActiveModule}
           viewMode={viewMode}
@@ -570,13 +912,30 @@ export function TaskApp() {
           filters={filters}
           onFilterChange={setFilters}
           onOpenNewTaskModal={() => handleOpenNewTask("A Fazer")}
-          onOpenCrmModal={() => setIsCrmModalOpen(true)}
-          isConnectedCrm={isConnectedCrm}
           totalTasks={filteredTasks.length}
+          groupBy={groupBy}
+          groupOrder={groupOrder}
+          onGroupByChange={setGroupBy}
+          onGroupOrderChange={setGroupOrder}
+          tasks={tasks}
+          currentUser={currentUser}
+          members={members}
+          subtaskMode={subtaskMode}
+          onSubtaskModeChange={setSubtaskMode}
+          showClosedTasks={showClosedTasks}
+          onToggleShowClosedTasks={setShowClosedTasks}
+          showClosedSubtasks={showClosedSubtasks}
+          onToggleShowClosedSubtasks={setShowClosedSubtasks}
+          onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
         />
 
         {/* View Content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-5">
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto",
+            selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
+          )}
+        >
           {activeModule !== "tasks" ? (
             <EnterpriseModulesView
               section={activeModule}
@@ -587,11 +946,28 @@ export function TaskApp() {
               financeSummary={financeSummary}
               financeEntries={financeEntries}
               members={members}
-              onRefresh={() => void syncWithIdeCrm(selectedProjectId)}
+              onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
               onOpenConnectModal={() => setIsCrmModalOpen(true)}
             />
-          ) : filteredTasks.length === 0 && tasks.length === 0 ? (
-            <EmptyState onAddTask={() => handleOpenNewTask("A Fazer")} />
+          ) : selectedManagementId === null ? (
+            /* Nível 1: Cards de Todas as Gestões */
+            <ManagementsGridView
+              managements={effectiveManagements}
+              onSelectManagement={(id) => handleSelectManagement(id)}
+              onOpenCreateManagement={() => setIsCrmModalOpen(true)}
+            />
+          ) : selectedProjectId === null && currentManagement ? (
+            /* Nível 2: Cards dos Projetos da Gestão Selecionada */
+            <ManagementProjectsView
+              management={currentManagement}
+              projects={effectiveProjects}
+              tasks={tasks}
+              onBack={() => handleSelectManagement(null)}
+              onSelectProject={(id) => handleSelectProject(id)}
+              onOpenNewProject={() => handleOpenNewTask("A Fazer")}
+            />
+          ) : isSyncingTasks ? (
+            <TaskTableSkeleton />
           ) : filteredTasks.length === 0 ? (
             <EmptyState
               onAddTask={() => handleOpenNewTask("A Fazer")}
@@ -609,12 +985,21 @@ export function TaskApp() {
           ) : (
             <TaskTable
               tasks={filteredTasks}
+              groupBy={groupBy}
+              groupOrder={groupOrder}
+              onGroupByChange={setGroupBy}
+              onGroupOrderChange={setGroupOrder}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               onOpenDetails={handleOpenDetails}
               onAddTask={handleAddTask}
               onUpdateSubtasks={handleUpdateTaskSubtasks}
               onReorderTasks={handleReorderTask}
+              isFieldsModalOpen={isFieldsModalOpen}
+              onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
+              onCloseFieldsModal={() => setIsFieldsModalOpen(false)}
+              subtaskMode={subtaskMode}
+              showClosedSubtasks={showClosedSubtasks}
             />
           )}
         </main>
@@ -627,6 +1012,7 @@ export function TaskApp() {
         task={selectedTask}
         initialStatus={modalInitialStatus}
         onSave={handleSaveFromModal}
+        onUpdateTask={handleUpdateTask}
         onDelete={handleDeleteTask}
         onUpdateSubtasks={handleUpdateTaskSubtasks}
         onAddComment={handleAddTaskComment}
@@ -639,7 +1025,7 @@ export function TaskApp() {
         isConnected={isConnectedCrm}
         isApiReachable={isApiReachable}
         currentUser={currentUser}
-        onSuccessConnect={() => syncWithIdeCrm(selectedProjectId)}
+        onSuccessConnect={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
         onDisconnect={handleDisconnectCrm}
       />
     </div>

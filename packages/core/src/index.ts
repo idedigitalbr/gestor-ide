@@ -1,8 +1,23 @@
 // @gestor-ide/core — Contratos de domínio e mapeadores bidirecionais (IDE Gestor <-> IDE CRM)
 
-export type TaskStatus = "A Fazer" | "Em Andamento" | "Em Revisão" | "Concluído";
+export type CanonicalTaskStatus =
+  | "PENDENTE"
+  | "FAZENDO AGORA"
+  | "AGUARDANDO FEEDBACK"
+  | "BLOQUEADO"
+  | "CONCLUÍDO";
 
-export type TaskPriority = "Baixa" | "Média" | "Alta" | "Urgente";
+export type TaskStatus =
+  | CanonicalTaskStatus
+  | "A Fazer"
+  | "Em Andamento"
+  | "Em Revisão"
+  | "Concluído"
+  | "Refação";
+
+export type CanonicalTaskPriority = "Baixa" | "Normal" | "Alta" | "Urgente";
+
+export type TaskPriority = CanonicalTaskPriority | "Média";
 
 export type ViewMode = "table" | "kanban";
 
@@ -17,12 +32,20 @@ export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  group?: string;
+  inProgress?: boolean;
+  dueDate?: string;
+  assignee?: string;
+  assigneeAvatar?: string;
+  parentId?: string;
+  items?: Subtask[];
 }
 
 export interface TaskComment {
   id: string;
   author: string;
   avatar?: string;
+  timeAgo?: string;
   content: string;
   createdAt: string;
 }
@@ -31,24 +54,51 @@ export interface Task {
   id: string;
   code: string;
   title: string;
+  subtitle?: string;
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  startDate?: string;
   dueDate?: string;
   tag?: string;
+  tags?: string[];
   estimate?: string;
   projectId?: string;
   projectName?: string;
+  assignee?: string;
+  assigneeAvatar?: string;
+  coverUrl?: string;
+  icon?: string;
+  itemType?: string;
+  parentTaskId?: string;
+  customGroup?: string;
   subtasks?: Subtask[];
   comments?: TaskComment[];
   createdAt: string;
   updatedAt?: string;
 }
 
+export type TaskGroupBy =
+  | "none"
+  | "status"
+  | "assignee"
+  | "priority"
+  | "tag"
+  | "dueDate"
+  | "taskType";
+
+export type GroupOrder = "asc" | "desc";
+
 export type TaskFilter = {
   search: string;
   status: TaskStatus | "Todos";
   priority: TaskPriority | "Todas";
+  statuses?: string[];
+  assignees?: string[];
+  priorities?: string[];
+  tags?: string[];
+  dueDateCategory?: string | null;
+  taskType?: string | null;
 };
 
 // ============================================================================
@@ -75,9 +125,24 @@ export interface CrmUserProfile {
 export interface CrmProjectManagement {
   id: string;
   name: string;
+  code?: string | null;
   description?: string | null;
   color?: string | null;
+  coverPath?: string | null;
+  visibility?: string;
   status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  members?: Array<{
+    userId?: string;
+    role?: string;
+    user?: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      avatarUrl?: string | null;
+    };
+  }>;
   _count?: {
     projects?: number;
     members?: number;
@@ -92,12 +157,25 @@ export interface CrmProject {
   status: string;
   priority?: string;
   color?: string | null;
+  coverPath?: string | null;
+  visibility?: string;
+  dueDate?: string | null;
   projectManagementId: string;
   projectManagement?: {
     id: string;
     name: string;
     color?: string | null;
   } | null;
+  members?: Array<{
+    userId?: string;
+    role?: string;
+    user?: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      avatarUrl?: string | null;
+    };
+  }>;
   _count?: {
     tasks?: number;
     members?: number;
@@ -265,76 +343,91 @@ export interface CrmProjectMember {
 // Mapeadores Bidirecionais (IDE CRM <-> IDE Gestor)
 // ============================================================================
 
-export function mapCrmStatusToGestor(crmStatus?: string | null): TaskStatus {
-  const normalized = (crmStatus ?? "pending").toLowerCase().trim();
+export function normalizeTaskStatus(status?: string | null): CanonicalTaskStatus {
+  if (!status) return "PENDENTE";
+  const normalized = status.toUpperCase().trim();
   if (
-    normalized === "completed" ||
-    normalized === "concluido" ||
-    normalized === "concluído" ||
-    normalized === "done"
+    normalized.includes("CONCLU") ||
+    normalized === "COMPLETED" ||
+    normalized === "DONE"
   ) {
-    return "Concluído";
+    return "CONCLUÍDO";
   }
   if (
-    normalized === "in_review" ||
-    normalized === "review" ||
-    normalized === "em_revisao" ||
-    normalized === "em revisão" ||
-    normalized === "testing"
+    normalized.includes("BLOQUE") ||
+    normalized.includes("BLOCK") ||
+    normalized.includes("REFA")
   ) {
-    return "Em Revisão";
+    return "BLOQUEADO";
   }
   if (
-    normalized === "in_progress" ||
-    normalized === "doing" ||
-    normalized === "em_andamento" ||
-    normalized === "em andamento" ||
-    normalized === "active"
+    normalized.includes("FEEDBACK") ||
+    normalized.includes("REVIS") ||
+    normalized === "IN_REVIEW" ||
+    normalized === "REVIEW"
   ) {
-    return "Em Andamento";
+    return "AGUARDANDO FEEDBACK";
   }
-  return "A Fazer";
+  if (
+    normalized.includes("FAZENDO") ||
+    normalized.includes("ANDAMENTO") ||
+    normalized.includes("INICIAD") ||
+    normalized === "STARTED" ||
+    normalized === "IN_PROGRESS" ||
+    normalized === "DOING" ||
+    normalized === "ACTIVE"
+  ) {
+    return "FAZENDO AGORA";
+  }
+  return "PENDENTE";
+}
+
+export function normalizeTaskPriority(priority?: string | null): CanonicalTaskPriority {
+  if (!priority) return "Normal";
+  const normalized = priority.toLowerCase().trim();
+  if (normalized.includes("urg") || normalized.includes("crit")) return "Urgente";
+  if (normalized.includes("alt") || normalized.includes("high")) return "Alta";
+  if (normalized.includes("baix") || normalized.includes("low")) return "Baixa";
+  return "Normal";
+}
+
+export function mapCrmStatusToGestor(crmStatus?: string | null): CanonicalTaskStatus {
+  return normalizeTaskStatus(crmStatus);
 }
 
 export function mapGestorStatusToCrm(status: TaskStatus): string {
-  switch (status) {
-    case "Concluído":
+  const norm = normalizeTaskStatus(status);
+  switch (norm) {
+    case "CONCLUÍDO":
       return "completed";
-    case "Em Revisão":
+    case "BLOQUEADO":
+      return "blocked";
+    case "AGUARDANDO FEEDBACK":
       return "in_review";
-    case "Em Andamento":
+    case "FAZENDO AGORA":
       return "in_progress";
-    case "A Fazer":
+    case "PENDENTE":
     default:
       return "pending";
   }
 }
 
-export function mapCrmPriorityToGestor(crmPriority?: string | null): TaskPriority {
-  const normalized = (crmPriority ?? "medium").toLowerCase().trim();
-  if (normalized === "urgent" || normalized === "urgente" || normalized === "critical") {
-    return "Urgente";
-  }
-  if (normalized === "high" || normalized === "alta") {
-    return "Alta";
-  }
-  if (normalized === "low" || normalized === "baixa") {
-    return "Baixa";
-  }
-  return "Média";
+export function mapCrmPriorityToGestor(crmPriority?: string | null): CanonicalTaskPriority {
+  return normalizeTaskPriority(crmPriority);
 }
 
 export function mapGestorPriorityToCrm(
   priority: TaskPriority
 ): "low" | "medium" | "high" | "urgent" {
-  switch (priority) {
+  const norm = normalizeTaskPriority(priority);
+  switch (norm) {
     case "Urgente":
       return "urgent";
     case "Alta":
       return "high";
     case "Baixa":
       return "low";
-    case "Média":
+    case "Normal":
     default:
       return "medium";
   }
@@ -390,6 +483,7 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
 
   const tags = Array.isArray(crmTask.tags) ? crmTask.tags : [];
   const primaryTag = tags[0] ?? crmTask.project?.name;
+  const firstAssignee = crmTask.assignees?.[0]?.user;
 
   const subtasks: Subtask[] = (crmTask.checklistItems ?? []).map((item) => ({
     id: item.id,
@@ -414,9 +508,12 @@ export function mapCrmTaskToGestorTask(crmTask: CrmProjectTask, index = 0): Task
     priority: mapCrmPriorityToGestor(crmTask.priority),
     dueDate,
     tag: primaryTag,
+    tags: tags.length > 0 ? tags : undefined,
     estimate: formatEstimateFromMinutes(crmTask.estimateMinutes),
     projectId: crmTask.projectId,
     projectName: crmTask.project?.name,
+    assignee: firstAssignee?.name || undefined,
+    assigneeAvatar: firstAssignee?.avatarUrl || undefined,
     subtasks,
     comments,
     createdAt: crmTask.createdAt,

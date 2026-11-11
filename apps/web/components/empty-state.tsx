@@ -22,7 +22,7 @@ export function EmptyState({ onAddTask, isFiltered, onClearFilters }: EmptyState
       <p className="text-[11px] text-muted-foreground max-w-xs mb-3">
         {isFiltered
           ? "Ajuste os filtros de status, prioridade ou a busca textual."
-          : "Comece adicionando uma tarefa para acompanhar no Quadro e na Tabela."}
+          : "Comece adicionando uma tarefa para acompanhar na Tabela."}
       </p>
 
       <div className="flex items-center gap-2">

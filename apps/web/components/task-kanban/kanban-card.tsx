@@ -2,8 +2,19 @@
 
 import React from "react";
 import type { Task, TaskPriority, TaskStatus } from "@/types/task";
-import { StatusIcon } from "../task-status-icon";
-import { PriorityIcon } from "../task-priority-icon";
+import { normalizeTaskStatus, normalizeTaskPriority } from "@/types/task";
+import {
+  StatusIcon,
+  StatusDropdownContent,
+  ALL_CANONICAL_STATUSES,
+  getStatusDefinition,
+} from "../task-status-icon";
+import { TaskItemTypeIcon } from "../task-item-type-selector";
+import { isTaskContentFilled } from "@/lib/task-item-type";
+import {
+  PriorityIcon,
+  ALL_CANONICAL_PRIORITIES,
+} from "../task-priority-icon";
 import { formatDateDeterministic } from "@/lib/initial-data";
 import {
   Clock,
@@ -37,8 +48,8 @@ interface KanbanCardProps {
   onDragStart?: (e: React.DragEvent, taskId: string) => void;
 }
 
-const STATUS_ORDER: TaskStatus[] = ["A Fazer", "Em Andamento", "Em Revisão", "Concluído"];
-const PRIORITIES: TaskPriority[] = ["Baixa", "Média", "Alta", "Urgente"];
+const STATUS_ORDER = ALL_CANONICAL_STATUSES;
+const PRIORITIES = ALL_CANONICAL_PRIORITIES;
 
 export function KanbanCard({
   task,
@@ -47,7 +58,8 @@ export function KanbanCard({
   onOpenDetails,
   onDragStart,
 }: KanbanCardProps) {
-  const currentIndex = STATUS_ORDER.indexOf(task.status);
+  const normStatus = normalizeTaskStatus(task.status);
+  const currentIndex = STATUS_ORDER.indexOf(normStatus);
   const canMoveLeft = currentIndex > 0;
   const canMoveRight = currentIndex < STATUS_ORDER.length - 1;
 
@@ -168,25 +180,11 @@ export function KanbanCard({
                   <StatusIcon status={task.status} />
                   <span>Alterar status</span>
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-44 bg-card border-border shadow-md">
-                  {STATUS_ORDER.map((st) => (
-                    <DropdownMenuItem
-                      key={st}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSetStatus(st);
-                      }}
-                      className="justify-between cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <StatusIcon status={st} />
-                        <span>{st}</span>
-                      </span>
-                      {task.status === st && (
-                        <Check className="w-3.5 h-3.5 text-primary" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
+                <DropdownMenuSubContent className="p-0 bg-transparent border-none shadow-none">
+                  <StatusDropdownContent
+                    currentStatus={task.status}
+                    onSelectStatus={(st) => handleSetStatus(st)}
+                  />
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
@@ -231,10 +229,14 @@ export function KanbanCard({
         </div>
       </div>
 
-      {/* Middle row: Status Icon + Title */}
+      {/* Middle row: Task Icon + Title */}
       <div className="flex items-start gap-2 mb-2">
         <span className="mt-0.5 shrink-0">
-          <StatusIcon status={task.status} />
+          <TaskItemTypeIcon
+            type={task.itemType ?? "TASK"}
+            hasContent={isTaskContentFilled(task.description)}
+            size={14}
+          />
         </span>
         <h4 className="text-xs font-normal text-card-foreground leading-snug line-clamp-2">
           {task.title}

@@ -31,7 +31,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: antiFlashScript }} />
       </head>
-      <body className="min-h-screen bg-background text-foreground antialiased select-none">
+      <body
+        className="min-h-screen bg-background text-foreground antialiased select-none"
+        suppressHydrationWarning
+      >
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

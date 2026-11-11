@@ -47,6 +47,7 @@ async function forwardToIdeCrm(request: Request, context: RouteContext) {
       headers,
       body: bodyText && bodyText.length > 0 ? bodyText : undefined,
       cache: "no-store",
+      keepalive: true,
     });
 
     const responseText = await upstreamRes.text();
