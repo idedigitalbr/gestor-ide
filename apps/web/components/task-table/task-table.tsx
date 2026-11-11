@@ -31,12 +31,13 @@ import {
   type ProjectTaskItemType,
 } from "@/lib/task-item-type";
 import {
+  ArrowUpFromLine,
   Calendar,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   CircleDashed,
+  FolderTree,
   GripVertical,
   MoreHorizontal,
   Package,
@@ -45,8 +46,14 @@ import {
   Tag,
   Trash2,
   User,
+  UserCheck,
   X,
 } from "lucide-react";
+import { MemberAvatarContent } from "@/components/member-avatar-content";
+import {
+  canReparentTask,
+  type TaskDropMode,
+} from "@/lib/task-hierarchy";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -79,6 +86,29 @@ import { TaskAssigneeCell } from "./task-assignee-cell";
 import { CreateGroupPopover } from "./create-group-popover";
 import { getLocalFreeGroups, setLocalFreeGroups } from "@/lib/gestor-cache";
 
+function CollapsibleSection({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      aria-hidden={!open}
+      inert={!open ? true : undefined}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        open
+          ? "grid-rows-[1fr] opacity-100"
+          : "grid-rows-[0fr] opacity-0 pointer-events-none"
+      )}
+    >
+      <div className="overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
 interface TaskTableProps {
   tasks: Task[];
   onUpdateTask: (task: Task) => void;
@@ -92,7 +122,8 @@ interface TaskTableProps {
   onReorderTasks?: (
     draggedTaskId: string,
     targetTaskId: string | null,
-    targetStatus: TaskStatus
+    targetStatus: TaskStatus,
+    options?: { mode?: TaskDropMode; customGroup?: string }
   ) => void;
   groupBy?: TaskGroupBy;
   groupOrder?: GroupOrder;
@@ -305,7 +336,10 @@ export function TaskTable({
 
   // Drag & drop inline
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dragOverState, setDragOverState] = useState<{
+    taskId: string;
+    mode: "before" | "nest";
+  } | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
 
   // Edição inline de título de tarefa
@@ -382,15 +416,27 @@ export function TaskTable({
 
   function handleDragEnd() {
     setDraggedTaskId(null);
-    setDragOverTaskId(null);
+    setDragOverState(null);
     setDragOverGroup(null);
   }
 
-  function handleDragOverRow(e: React.DragEvent, targetTaskId: string) {
+  function handleDragOverRow(e: React.DragEvent, targetTask: Task) {
     e.preventDefault();
-    if (draggedTaskId && draggedTaskId !== targetTaskId) {
-      setDragOverTaskId(targetTaskId);
-    }
+    e.stopPropagation();
+    if (!draggedTaskId || draggedTaskId === targetTask.id) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const nextMode: "before" | "nest" =
+      relY >= rect.height * 0.42 &&
+      canReparentTask(tasks, draggedTaskId, targetTask.id)
+        ? "nest"
+        : "before";
+    setDragOverGroup(null);
+    setDragOverState((prev) =>
+      prev?.taskId === targetTask.id && prev.mode === nextMode
+        ? prev
+        : { taskId: targetTask.id, mode: nextMode }
+    );
   }
 
   function handleDropOnRow(
@@ -399,15 +445,22 @@ export function TaskTable({
     targetStatus: TaskStatus
   ) {
     e.preventDefault();
+    e.stopPropagation();
     const sourceId = draggedTaskId || e.dataTransfer.getData("text/plain");
+    const dropMode =
+      dragOverState?.taskId === targetTask.id ? dragOverState.mode : "before";
     setDraggedTaskId(null);
-    setDragOverTaskId(null);
+    setDragOverState(null);
     setDragOverGroup(null);
 
     if (!sourceId || sourceId === targetTask.id) return;
 
+    if (dropMode === "nest") {
+      setExpandedTasks((prev) => ({ ...prev, [targetTask.id]: true }));
+    }
+
     if (onReorderTasks) {
-      onReorderTasks(sourceId, targetTask.id, targetStatus);
+      onReorderTasks(sourceId, targetTask.id, targetStatus, { mode: dropMode });
     } else {
       const sourceTask = tasks.find((t) => t.id === sourceId);
       if (
@@ -419,17 +472,25 @@ export function TaskTable({
     }
   }
 
-  function handleDropOnGroup(e: React.DragEvent, targetStatus: TaskStatus) {
+  function handleDropOnGroup(
+    e: React.DragEvent,
+    targetStatus: TaskStatus,
+    customGroup?: string
+  ) {
     e.preventDefault();
+    e.stopPropagation();
     const sourceId = draggedTaskId || e.dataTransfer.getData("text/plain");
     setDraggedTaskId(null);
-    setDragOverTaskId(null);
+    setDragOverState(null);
     setDragOverGroup(null);
 
     if (!sourceId) return;
 
     if (onReorderTasks) {
-      onReorderTasks(sourceId, null, targetStatus);
+      onReorderTasks(sourceId, null, targetStatus, {
+        mode: "root",
+        customGroup,
+      });
     } else {
       const sourceTask = tasks.find((t) => t.id === sourceId);
       if (
@@ -442,6 +503,9 @@ export function TaskTable({
   }
 
   function openQuickAdd(groupId: string) {
+    setCollapsedGroups((prev) =>
+      prev[groupId] ? { ...prev, [groupId]: false } : prev
+    );
     setAddingInGroup(groupId);
     setQuickTitle("");
     setQuickPriority("Normal");
@@ -496,6 +560,89 @@ export function TaskTable({
     }
     setSelectedIds(new Set());
   }
+
+  function handleBulkRemoveTag(tagToRemove: string) {
+    for (const id of selectedIds) {
+      const task = tasks.find((item) => item.id === id);
+      if (task) {
+        const currentTags = task.tags ?? (task.tag ? [task.tag] : []);
+        const nextTags = currentTags.filter((item) => item !== tagToRemove);
+        if (nextTags.length !== currentTags.length) {
+          onUpdateTask({ ...task, tag: nextTags[0], tags: nextTags });
+        }
+      }
+    }
+    setSelectedIds(new Set());
+  }
+
+  async function handleBulkAssigneeChange(member: CrmProjectMember | null) {
+    const ids = Array.from(selectedIds);
+    setSelectedIds(new Set());
+    for (const id of ids) {
+      if (onChangeAssignee && !id.startsWith("task-")) {
+        await onChangeAssignee(id, member);
+      } else {
+        const task = tasks.find((item) => item.id === id);
+        if (task) {
+          onUpdateTask({
+            ...task,
+            assigneeId: member?.userId,
+            assigneeIds: member ? [member.userId] : [],
+            assignee: member?.user.name || member?.user.email || undefined,
+            assigneeAvatar: member?.user.avatarUrl || undefined,
+          });
+        }
+      }
+    }
+  }
+
+  function handleBulkReparent(parentTaskId: string | undefined) {
+    for (const id of selectedIds) {
+      const task = tasks.find((item) => item.id === id);
+      if (!task) continue;
+      if (!canReparentTask(tasks, id, parentTaskId)) continue;
+      if ((task.parentTaskId ?? undefined) === parentTaskId) continue;
+      onUpdateTask({
+        ...task,
+        parentTaskId,
+        ...(parentTaskId ? { customGroup: undefined } : {}),
+      });
+    }
+    if (parentTaskId) {
+      setExpandedTasks((prev) => ({ ...prev, [parentTaskId]: true }));
+    }
+    setSelectedIds(new Set());
+  }
+
+  const selectedAssignedTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const id of selectedIds) {
+      const task = tasks.find((item) => item.id === id);
+      if (!task) continue;
+      for (const t of task.tags ?? (task.tag ? [task.tag] : [])) {
+        if (t.trim()) tagSet.add(t.trim());
+      }
+    }
+    return Array.from(tagSet).sort();
+  }, [selectedIds, tasks]);
+
+  const hasSelectedChildTasks = useMemo(
+    () =>
+      Array.from(selectedIds).some((id) =>
+        Boolean(tasks.find((item) => item.id === id)?.parentTaskId)
+      ),
+    [selectedIds, tasks]
+  );
+
+  const eligibleBulkParents = useMemo(() => {
+    if (selectedIds.size === 0) return [];
+    const selectedArray = Array.from(selectedIds);
+    return tasks.filter(
+      (candidate) =>
+        !selectedIds.has(candidate.id) &&
+        selectedArray.some((id) => canReparentTask(tasks, id, candidate.id))
+    );
+  }, [selectedIds, tasks]);
 
   function handleBulkDelete() {
     if (selectedIds.size === 0) return;
@@ -850,7 +997,9 @@ export function TaskTable({
     const isSelected = selectedIds.has(task.id);
     const isDragged = draggedTaskId === task.id;
     const isDragTarget =
-      dragOverTaskId === task.id && draggedTaskId !== task.id;
+      dragOverState?.taskId === task.id && draggedTaskId !== task.id;
+    const isDragBefore = isDragTarget && dragOverState?.mode === "before";
+    const isDragNest = isDragTarget && dragOverState?.mode === "nest";
 
     // Filhos desta tarefa na árvore
     const childTasks = sortTasksList(
@@ -879,7 +1028,7 @@ export function TaskTable({
           draggable={!isEditing}
           onDragStart={(e) => handleDragStart(e, task.id)}
           onDragEnd={handleDragEnd}
-          onDragOver={(e) => handleDragOverRow(e, task.id)}
+          onDragOver={(e) => handleDragOverRow(e, task)}
           onDrop={(e) => handleDropOnRow(e, task, task.status)}
           className={cn(
             "flex items-center justify-between h-[50px] min-h-[50px] pr-3 transition-colors group/row relative border-b border-border/50",
@@ -887,7 +1036,8 @@ export function TaskTable({
               ? "bg-accent"
               : "hover:bg-accent/40",
             isDragged && "opacity-40",
-            isDragTarget && "border-t-2 border-t-primary"
+            isDragBefore && "border-t-2 border-t-primary",
+            isDragNest && "bg-primary/10 ring-1 ring-inset ring-primary/50"
           )}
           style={{ paddingLeft: `${depth * 36 + 14}px` }}
         >
@@ -951,11 +1101,12 @@ export function TaskTable({
                   isTaskExpanded ? "Recolher descendentes" : "Expandir descendentes"
                 }
               >
-                {isTaskExpanded ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-                )}
+                <ChevronRight
+                  className={cn(
+                    "w-3.5 h-3.5 text-muted-foreground transition-transform duration-200",
+                    isTaskExpanded && "rotate-90"
+                  )}
+                />
               </button>
             ) : (
               <span className="w-5 shrink-0" />
@@ -1025,6 +1176,12 @@ export function TaskTable({
 
                 {/* Progresso Segmentado Imediatamente Após o Título */}
                 <TaskSegmentedProgress task={task} allTasks={tasks} />
+
+                {isDragNest && (
+                  <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    Soltar como subtarefa
+                  </span>
+                )}
 
                 {/* Botões Rápidos Inline no Hover (+ Subtarefa, Tag, Lápis) */}
                 <div className="absolute right-2 z-10 opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus-within:opacity-100 flex items-center gap-1 rounded-md bg-card transition-opacity">
@@ -1201,60 +1358,62 @@ export function TaskTable({
           </div>
         </div>
 
-        {/* Itens Descendentes (Child Tasks e Subtasks) quando Expandido */}
-        {isTaskExpanded && (
-          <div className="relative motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
-            {hasDescendants && <div aria-hidden="true" className="absolute top-0 bottom-0 w-px bg-border pointer-events-none" style={{ left: `${depth * 36 + 18}px` }} />}
-            {/* 1. Renderizar Child Tasks recursivamente */}
-            {childTasks.map((child) =>
-              renderTaskRow(child, depth + 1, stripeColor)
-            )}
+        {/* Itens Descendentes (Child Tasks e Subtasks) com transição suave */}
+        {(hasDescendants || addingSubtaskForId === task.id) && (
+          <CollapsibleSection open={isTaskExpanded}>
+            <div className="relative">
+              {hasDescendants && <div aria-hidden="true" className="absolute top-0 bottom-0 w-px bg-border pointer-events-none" style={{ left: `${depth * 36 + 18}px` }} />}
+              {/* 1. Renderizar Child Tasks recursivamente */}
+              {childTasks.map((child) =>
+                renderTaskRow(child, depth + 1, stripeColor)
+              )}
 
-            {/* 2. Renderizar Subtarefas / Checklists diretas */}
-            {subtasks.length > 0 &&
-              renderSubtasksList(task, depth + 1, stripeColor)}
+              {/* 2. Renderizar Subtarefas / Checklists diretas */}
+              {subtasks.length > 0 &&
+                renderSubtasksList(task, depth + 1, stripeColor)}
 
-            {/* 3. Form inline para adicionar subelemento */}
-            {addingSubtaskForId === task.id && (
-              <div
-                className="py-2 pr-3 bg-muted/40 flex items-center gap-2 border-b border-border/50"
-                style={{ paddingLeft: `${(depth + 1) * 36 + 14}px` }}
-              >
-                <form
-                  onSubmit={(e) => handleSaveNewSubtask(e, task)}
-                  className="flex items-center gap-2 w-full max-w-xl"
+              {/* 3. Form inline para adicionar subelemento */}
+              {addingSubtaskForId === task.id && (
+                <div
+                  className="py-2 pr-3 bg-muted/40 flex items-center gap-2 border-b border-border/50"
+                  style={{ paddingLeft: `${(depth + 1) * 36 + 14}px` }}
                 >
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Título do novo subelemento / checklist..."
-                    value={newSubtaskTitle}
-                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") setAddingSubtaskForId(null);
-                    }}
-                    className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-                  />
-                  <Button
-                    type="submit"
-                    size="sm"
-                    className="h-7 px-3 text-xs cursor-pointer"
+                  <form
+                    onSubmit={(e) => handleSaveNewSubtask(e, task)}
+                    className="flex items-center gap-2 w-full max-w-xl"
                   >
-                    Adicionar
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAddingSubtaskForId(null)}
-                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    Cancelar
-                  </Button>
-                </form>
-              </div>
-            )}
-          </div>
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Título do novo subelemento / checklist..."
+                      value={newSubtaskTitle}
+                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setAddingSubtaskForId(null);
+                      }}
+                      className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="h-7 px-3 text-xs cursor-pointer"
+                    >
+                      Adicionar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAddingSubtaskForId(null)}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Cancelar
+                    </Button>
+                  </form>
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
         )}
       </React.Fragment>
     );
@@ -1588,6 +1747,32 @@ export function TaskTable({
       {/* --------------------------------------------------------------------- */}
       {groupBy === "none" && naturalGroups && (
         <div className="space-y-6">
+          {draggedTaskId && tasks.find((t) => t.id === draggedTaskId)?.parentTaskId && (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (dragOverGroup !== "__promote_root__") {
+                  setDragOverGroup("__promote_root__");
+                  setDragOverState(null);
+                }
+              }}
+              onDrop={(e) => {
+                const dragged = tasks.find((t) => t.id === draggedTaskId);
+                handleDropOnGroup(e, dragged?.status ?? "PENDENTE", "");
+              }}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-3 text-xs font-medium transition-colors",
+                dragOverGroup === "__promote_root__"
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-muted/40 text-muted-foreground"
+              )}
+            >
+              <ArrowUpFromLine className="w-3.5 h-3.5" />
+              <span>Soltar aqui para mover para o nível raiz</span>
+            </div>
+          )}
+
           {naturalGroups.specialRootTasks.length > 0 && (
             <section aria-label="Projeto" className="rounded-2xl border border-border bg-card/30 p-3 space-y-3">
               {renderColumnHeader(naturalGroups.specialRootTasks)}
@@ -1637,7 +1822,19 @@ export function TaskTable({
             return (
               <div
                 key={group.name}
-                className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (dragOverGroup !== `free:${group.name}`) {
+                    setDragOverGroup(`free:${group.name}`);
+                    setDragOverState(null);
+                  }
+                }}
+                onDrop={(e) => handleDropOnGroup(e, "PENDENTE", group.name)}
+                className={cn(
+                  "bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4 transition-all",
+                  dragOverGroup === `free:${group.name}` && "ring-2 ring-primary/50"
+                )}
               >
                 {/* Faixa Lateral */}
                 <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-primary rounded-l-2xl z-20 pointer-events-none" />
@@ -1664,15 +1861,17 @@ export function TaskTable({
 
                     <button
                       type="button"
+                      aria-expanded={!isCollapsed}
                       onClick={() => toggleGroup(group.name)}
                       className="flex items-center gap-2 cursor-pointer focus:outline-none"
                     >
                       <span className="text-muted-foreground hover:text-foreground">
-                        {isCollapsed ? (
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        )}
+                        <ChevronRight
+                          className={cn(
+                            "w-3.5 h-3.5 transition-transform duration-200",
+                            !isCollapsed && "rotate-90"
+                          )}
+                        />
                       </span>
 
                       <span className="font-semibold text-xs text-primary">
@@ -1696,8 +1895,8 @@ export function TaskTable({
                   </div>
                 </div>
 
-                {/* Conteúdo do Grupo Livre */}
-                {!isCollapsed && (
+                {/* Conteúdo do Grupo Livre com transição suave */}
+                <CollapsibleSection open={!isCollapsed}>
                   <div>
                     {groupTasks.map((t) => renderTaskRow(t, 0, "var(--primary)"))}
 
@@ -1746,7 +1945,7 @@ export function TaskTable({
                       </button>
                     )}
                   </div>
-                )}
+                </CollapsibleSection>
               </div>
             );
           })}
@@ -1786,10 +1985,16 @@ export function TaskTable({
                 key={group.id}
                 onDragOver={(e) => {
                   e.preventDefault();
-                  if (dragOverGroup !== group.id) setDragOverGroup(group.id);
+                  if (dragOverGroup !== group.id) {
+                    setDragOverGroup(group.id);
+                    setDragOverState(null);
+                  }
                 }}
                 onDrop={(e) => handleDropOnGroup(e, group.defaultStatus)}
-                className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4 transition-all"
+                className={cn(
+                  "bg-card border border-border rounded-2xl shadow-sm overflow-hidden relative mb-4 transition-all",
+                  dragOverGroup === group.id && "ring-2 ring-primary/50"
+                )}
               >
                 {/* Faixa Fina Colorida na Lateral Esquerda (3.5px) */}
                 <div
@@ -1818,15 +2023,17 @@ export function TaskTable({
 
                     <button
                       type="button"
+                      aria-expanded={!isCollapsed}
                       onClick={() => toggleGroup(group.id)}
                       className="flex items-center gap-2 cursor-pointer focus:outline-none"
                     >
                       <span className="text-muted-foreground hover:text-foreground">
-                        {isCollapsed ? (
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5" />
-                        )}
+                        <ChevronRight
+                          className={cn(
+                            "w-3.5 h-3.5 transition-transform duration-200",
+                            !isCollapsed && "rotate-90"
+                          )}
+                        />
                       </span>
 
                       {group.icon}
@@ -1852,8 +2059,8 @@ export function TaskTable({
                   </div>
                 </div>
 
-                {/* Lista de Tarefas do Bloco */}
-                {!isCollapsed && (
+                {/* Lista de Tarefas do Bloco com transição suave */}
+                <CollapsibleSection open={!isCollapsed}>
                   <div>
                     {groupTasks.map((task) =>
                       renderTaskRow(task, 0, stripeColor)
@@ -1906,7 +2113,7 @@ export function TaskTable({
                       </button>
                     )}
                   </div>
-                )}
+                </CollapsibleSection>
               </div>
             );
           })}
@@ -1929,7 +2136,7 @@ export function TaskTable({
       {/* Barra Flutuante de Ações em Lote */}
       {/* --------------------------------------------------------------------- */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl animate-in fade-in slide-in-from-bottom-3 duration-150">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex w-max flex-wrap justify-center max-w-[calc(100vw-2rem)] items-center gap-2 px-4 py-2.5 rounded-2xl border border-border bg-popover text-popover-foreground shadow-xl animate-in fade-in slide-in-from-bottom-3 duration-150">
           <Badge variant="default" className="text-xs px-2.5 py-0.5">
             {selectedIds.size} selecionada(s)
           </Badge>
@@ -1982,8 +2189,9 @@ export function TaskTable({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs cursor-pointer">
-                Adicionar tag
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1 cursor-pointer">
+                <Tag className="w-3 h-3" />
+                <span>Adicionar tag</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="center">
@@ -1992,6 +2200,90 @@ export function TaskTable({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {selectedAssignedTags.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs cursor-pointer">
+                  Remover tag
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center">
+                {selectedAssignedTags.map((tag) => (
+                  <DropdownMenuItem key={tag} onSelect={() => handleBulkRemoveTag(tag)}>
+                    Remover #{tag}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {projectMembers.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1 cursor-pointer">
+                  <UserCheck className="w-3 h-3" />
+                  <span>Responsável</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="max-h-60 overflow-y-auto w-56">
+                <DropdownMenuItem onSelect={() => void handleBulkAssigneeChange(null)}>
+                  Sem responsável
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {projectMembers.map((member) => (
+                  <DropdownMenuItem
+                    key={member.userId}
+                    onSelect={() => void handleBulkAssigneeChange(member)}
+                    className="gap-2"
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[9px] font-semibold">
+                      <MemberAvatarContent
+                        name={member.user.name}
+                        src={member.user.avatarUrl}
+                      />
+                    </span>
+                    <span className="truncate">{member.user.name || member.user.email}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {(hasSelectedChildTasks || eligibleBulkParents.length > 0) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1 cursor-pointer">
+                  <FolderTree className="w-3 h-3" />
+                  <span>Organizar</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="max-h-64 overflow-y-auto w-60">
+                {hasSelectedChildTasks && (
+                  <DropdownMenuItem onSelect={() => handleBulkReparent(undefined)}>
+                    <ArrowUpFromLine className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Tornar tarefa(s) raiz</span>
+                  </DropdownMenuItem>
+                )}
+                {hasSelectedChildTasks && eligibleBulkParents.length > 0 && <DropdownMenuSeparator />}
+                {eligibleBulkParents.length > 0 && (
+                  <>
+                    <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+                      Mover para pai...
+                    </DropdownMenuLabel>
+                    {eligibleBulkParents.slice(0, 12).map((parent) => (
+                      <DropdownMenuItem
+                        key={parent.id}
+                        onSelect={() => handleBulkReparent(parent.id)}
+                      >
+                        <span className="truncate">{parent.title}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           <Button
             type="button"

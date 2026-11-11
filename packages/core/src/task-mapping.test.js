@@ -49,4 +49,6 @@ test("envia datas e múltiplas etiquetas e permite limpar etiquetas", () => {
   expect(input.assigneeIds).toEqual(["user-1"]);
   expect(input.tags).toEqual(["primeira", "segunda"]);
   expect(mapGestorTaskToCrmUpdateInput({ tags: [] }).tags).toEqual([]);
+  expect(mapGestorTaskToCrmUpdateInput({ parentTaskId: "parent-2" }).parentTaskId).toBe("parent-2");
+  expect(mapGestorTaskToCrmUpdateInput({ parentTaskId: undefined }).parentTaskId).toBeNull();
 });

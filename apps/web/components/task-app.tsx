@@ -8,12 +8,6 @@ import {
   mapGestorTaskToCrmUpdateInput,
   normalizeTaskStatus,
   normalizeTaskPriority,
-  type AppModuleSection,
-  type CrmCompany,
-  type CrmContact,
-  type CrmFinancialEntry,
-  type CrmFinancialSummary,
-  type CrmLead,
   type CrmProject,
   type CrmProjectManagement,
   type CrmProjectMember,
@@ -54,13 +48,16 @@ import { ManagementProjectsView } from "@/components/management-projects-view";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { NewManagementDialog } from "@/components/new-management-dialog";
 import type { ListDisplayMode } from "@/lib/list-view-options";
+import {
+  applyTaskDragAndDrop,
+  type TaskDropMode,
+} from "@/lib/task-hierarchy";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
 import { TaskAdditionalView } from "@/components/task-additional-view";
 import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
 import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
-import { EnterpriseModulesView } from "@/components/enterprise-modules-view";
 import { TaskTableSkeleton } from "@/components/task-skeleton";
 import { cn } from "@/lib/utils";
 import { useCalendarDialog } from "@/components/calendar-dialog-context";
@@ -83,8 +80,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const isSecondaryPage = pathname !== "/";
   const isCalendarPage = pathname === "/projects/calendar";
   const {
-    setOpen: setCalendarDialogOpen,
-    setEditing: setCalendarEditing,
+    openCreateDialog,
     canCreate: canCreateCalendarEvent,
   } = useCalendarDialog();
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
@@ -141,7 +137,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   });
 
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [activeModule] = useState<AppModuleSection>("tasks");
 
   // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
   const [subtaskMode, setSubtaskMode] = useState<SubtaskDisplayMode>("collapsed");
@@ -181,12 +176,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return getCachedProjects() || [];
   });
 
-  const [contacts, setContacts] = useState<CrmContact[]>([]);
-  const [companies, setCompanies] = useState<CrmCompany[]>([]);
-  const [leads, setLeads] = useState<CrmLead[]>([]);
-  const [financeSummary, setFinanceSummary] = useState<CrmFinancialSummary | null>(null);
-  const [financeEntries, setFinanceEntries] = useState<CrmFinancialEntry[]>([]);
-  const [members, setMembers] = useState<CrmProjectMember[]>([]);
   const [projectMembers, setProjectMembers] = useState<{
     projectId: string;
     members: CrmProjectMember[];
@@ -383,41 +372,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     []
   );
 
-  // Carregamento lazy dos módulos enterprise (contatos, leads, financeiro)
-  // para NÃO bloquear a abertura do quadro de tarefas no F5 ou navegação
-  const loadEnterpriseData = useCallback(async () => {
-    try {
-      const [
-        contactsRes,
-        companiesRes,
-        leadsRes,
-        finSummaryRes,
-        finEntriesRes,
-      ] = await Promise.all([
-        ideCrmClient.listContacts().catch(() => null),
-        ideCrmClient.listCompanies().catch(() => null),
-        ideCrmClient.listLeads().catch(() => null),
-        ideCrmClient.getFinanceSummary().catch(() => null),
-        ideCrmClient.listFinanceEntries().catch(() => null),
-      ]);
-
-      if (contactsRes?.contacts) setContacts(contactsRes.contacts);
-      if (companiesRes?.companies) setCompanies(companiesRes.companies);
-      if (leadsRes?.leads) setLeads(leadsRes.leads);
-      if (finSummaryRes) setFinanceSummary(finSummaryRes);
-      if (finEntriesRes?.entries) setFinanceEntries(finEntriesRes.entries);
-    } catch {}
-  }, []);
-
-  // Dispara o carregamento enterprise apenas quando o usuário entra em uma aba empresarial
-  useEffect(() => {
-    if (activeModule !== "tasks" && isConnectedCrm) {
-      // O efeito inicia uma consulta externa; o estado é atualizado após a resposta.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void loadEnterpriseData();
-    }
-  }, [activeModule, isConnectedCrm, loadEnterpriseData]);
-
   // Sincronização global ultra-otimizada (paralela e sem travar a UI)
   const syncWithIdeCrm = useCallback(
     async (
@@ -520,7 +474,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           }
         }
         if (membersRes?.members) {
-          setMembers(membersRes.members);
           if (!projectIdFilter) {
             const uid = session.user.id;
             setProjectMembership({
@@ -1011,48 +964,58 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   function handleReorderTask(
     draggedTaskId: string,
     targetTaskId: string | null,
-    targetStatus: TaskStatus
+    targetStatus: TaskStatus,
+    options?: { mode?: TaskDropMode; customGroup?: string }
   ) {
-    const dragged = tasks.find((t) => t.id === draggedTaskId);
-    if (!dragged) return;
+    const mode = options?.mode ?? "before";
+    const preview = applyTaskDragAndDrop(tasks, {
+      draggedTaskId,
+      targetTaskId,
+      targetStatus,
+      mode,
+      customGroup: options?.customGroup,
+    });
+    if (!preview.updatedDragged) return;
 
-    const updatedDragged: Task = {
-      ...dragged,
-      status: targetStatus,
-      updatedAt: new Date().toISOString(),
-    };
+    const updatedDragged = preview.updatedDragged;
+    if (options?.customGroup !== undefined || preview.changedParent) {
+      setLocalTaskPresentation(updatedDragged.id, {
+        itemType: updatedDragged.itemType,
+        customGroup: updatedDragged.customGroup,
+      });
+    }
 
     setTasks((prev) => {
-      const withoutDragged = prev.filter((t) => t.id !== draggedTaskId);
-      let next: Task[];
-      if (!targetTaskId) {
-        next = [...withoutDragged, updatedDragged];
-      } else {
-        const targetIndex = withoutDragged.findIndex((t) => t.id === targetTaskId);
-        if (targetIndex === -1) {
-          next = [...withoutDragged, updatedDragged];
-        } else {
-          next = [...withoutDragged];
-          next.splice(targetIndex, 0, updatedDragged);
-        }
-      }
+      const applied = applyTaskDragAndDrop(prev, {
+        draggedTaskId,
+        targetTaskId,
+        targetStatus,
+        mode,
+        customGroup: options?.customGroup,
+      });
       if (selectedProjectId || !selectedManagementId) {
-        setCachedTasks(selectedProjectId, next);
+        setCachedTasks(selectedProjectId, applied.nextTasks);
       }
-      return next;
+      return applied.nextTasks;
     });
 
     if (
       isConnectedCrm &&
       !draggedTaskId.startsWith("task-") &&
-      normalizeTaskStatus(dragged.status) !== normalizeTaskStatus(targetStatus)
+      (preview.changedStatus || preview.changedParent)
     ) {
+      const payload: Record<string, unknown> = {};
+      if (preview.changedStatus) {
+        payload.status = mapGestorTaskToCrmUpdateInput({ status: updatedDragged.status }).status;
+      }
+      if (preview.changedParent) {
+        payload.parentTaskId = updatedDragged.parentTaskId ?? null;
+      }
       void ideCrmClient
-        .updateTask(
-          draggedTaskId,
-          mapGestorTaskToCrmUpdateInput(updatedDragged)
-        )
-        .catch(() => setSyncError("Não foi possível atualizar o status no CRM. Atualize os dados para conferir."));
+        .updateTask(draggedTaskId, payload)
+        .catch(() =>
+          setSyncError("Não foi possível salvar a movimentação no CRM. Atualize os dados para conferir.")
+        );
     }
   }
 
@@ -1284,7 +1247,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         <AppHeader
           isProjectPage={isSecondaryPage}
           isCalendarPage={isCalendarPage}
-          onOpenNewEvent={() => { setCalendarEditing(null); setCalendarDialogOpen(true); }}
+          onOpenNewEvent={() => openCreateDialog()}
           canCreateCalendarEvent={canCreateCalendarEvent}
           onHome={() => { if (isSecondaryPage) router.push("/"); }}
           managements={effectiveManagements}
@@ -1365,19 +1328,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           )}
           {isSecondaryPage ? (
             children
-          ) : activeModule !== "tasks" ? (
-            <EnterpriseModulesView
-              section={activeModule}
-              isConnected={isConnectedCrm}
-              contacts={contacts}
-              companies={companies}
-              leads={leads}
-              financeSummary={financeSummary}
-              financeEntries={financeEntries}
-              members={members}
-              onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
-              onOpenConnectModal={() => setIsCrmModalOpen(true)}
-            />
           ) : isBootstrapping ? (
             <TaskTableSkeleton />
           ) : selectedManagementId === null ? (

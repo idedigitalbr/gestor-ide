@@ -1,15 +1,46 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { CrmAccount, CrmCalendarEvent, CrmProjectsDashboard } from "@gestor-ide/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import type {
+  CrmAccount,
+  CrmCalendarEvent,
+  CrmCalendarEventType,
+  CrmCalendarTaskItem,
+  CrmProject,
+  CrmProjectsDashboard,
+} from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarEventDialog } from "@/components/calendar-event-dialog";
 import { useCalendarDialog } from "@/components/calendar-dialog-context";
+import { CalendarEventDetailDialog } from "@/components/calendar/calendar-event-detail-dialog";
+import {
+  CalendarAgendaList,
+  CalendarDaySchedule,
+  CalendarMonthGrid,
+  CalendarWeekGrid,
+  type CalendarEntry,
+} from "@/components/calendar/calendar-views";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
+import {
+  computeCalendarQueryRange,
+  formatCalendarPeriodLabel,
+  getEventDateSpanKeys,
+  getTaskDateSpanKeys,
+  type CalendarViewMode,
+} from "@/lib/calendar-date";
+import { CALENDAR_EVENT_TYPE_LABELS } from "@/lib/calendar-labels";
 
 function Shell({
   title,
@@ -540,66 +571,109 @@ export function SettingsPage() {
   );
 }
 
+const ALL_PROJECTS_VALUE = "__all__";
+type CalendarTypeFilter = "ALL" | "TASK" | CrmCalendarEventType;
+
 export function CalendarPage() {
   const [date, setDate] = useState(() => new Date());
-  const [items, setItems] = useState<
-    Array<{ id: string; title: string; date: string; event?: CrmCalendarEvent }>
-  >([]);
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
+  const [projectFilter, setProjectFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<CalendarTypeFilter>("ALL");
+  const [projects, setProjects] = useState<CrmProject[]>([]);
+  const [rawEvents, setRawEvents] = useState<CrmCalendarEvent[]>([]);
+  const [rawTasks, setRawTasks] = useState<CrmCalendarTaskItem[]>([]);
+  const [selectedEvent, setSelectedEvent] = useState<CrmCalendarEvent | null>(null);
+  const [selectedTask, setSelectedTask] = useState<CrmCalendarTaskItem | null>(null);
   const [error, setError] = useState("");
   const [fallback, setFallback] = useState(false);
   const [loading, setLoading] = useState(true);
   const requestVersion = useRef(0);
-  const { open: dialog, setOpen: setDialog, editing, setEditing, setCanCreate } =
-    useCalendarDialog();
+  const {
+    open: dialog,
+    setOpen: setDialog,
+    editing,
+    setEditing,
+    initialDate,
+    defaultProjectId,
+    setDefaultProjectId,
+    canCreate,
+    setCanCreate,
+    openCreateDialog,
+  } = useCalendarDialog();
+
+  useEffect(() => {
+    let cancelled = false;
+    void ideCrmClient
+      .listProjects()
+      .then((res) => {
+        if (!cancelled) setProjects(res.projects ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const queryRange = useMemo(
+    () => computeCalendarQueryRange(date, viewMode),
+    [date, viewMode]
+  );
 
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
     setLoading(true);
     setError("");
     setFallback(false);
-    const start = new Date(date.getFullYear(), date.getMonth(), 1);
-    const end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
     try {
-      const r = await ideCrmClient.getCalendar(start.toISOString(), end.toISOString());
-      if (version !== requestVersion.current) return;
-      setItems(
-        [
-          ...(r.events ?? []).map((e) => ({
-            id: `e${e.id}`,
-            title: e.title,
-            date: e.allDayStartDate ?? e.startsAt ?? "",
-            event: e,
-          })),
-          ...(r.tasks ?? []).map((t) => ({
-            id: `t${t.id}`,
-            title: t.title,
-            date: t.dueDate ?? t.startDate ?? "",
-          })),
-        ]
-          .filter((i) => i.date)
-          .sort((a, b) => a.date.localeCompare(b.date))
+      const r = await ideCrmClient.getCalendar(
+        queryRange.start.toISOString(),
+        queryRange.end.toISOString(),
+        projectFilter || null
       );
+      if (version !== requestVersion.current) return;
+      setRawEvents(r.events ?? []);
+      setRawTasks(r.tasks ?? []);
     } catch {
       if (version !== requestVersion.current) return;
       try {
-        const result = await ideCrmClient.listCalendarFallbackTasks();
+        const result = await ideCrmClient.listCalendarFallbackTasks(projectFilter || null);
         if (version !== requestVersion.current) return;
-        setItems(
+        setRawEvents([]);
+        setRawTasks(
           result.tasks
-            .flatMap((task) => {
-              const taskDate = task.dueDate ?? task.startDate;
-              return taskDate?.slice(0, 7) === month
-                ? [{ id: `t${task.id}`, title: task.title, date: taskDate }]
-                : [];
-            })
-            .sort((a, b) => a.date.localeCompare(b.date))
+            .filter((task) => (task.dueDate ?? task.startDate)?.slice(0, 7) === month)
+            .map((task) => ({
+              id: task.id,
+              projectId: task.projectId,
+              title: task.title,
+              description: task.description ?? null,
+              status: task.status,
+              priority: task.priority,
+              startDate: task.startDate ?? null,
+              dueDate: task.dueDate ?? null,
+              project: task.project ?? null,
+              assignees: task.assignees?.flatMap((a) =>
+                a.user
+                  ? [
+                      {
+                        user: {
+                          id: a.user.id,
+                          name: a.user.name,
+                          avatarUrl: a.user.avatarUrl,
+                        },
+                      },
+                    ]
+                  : []
+              ),
+            }))
         );
         setFallback(true);
       } catch (reason) {
         if (version !== requestVersion.current) return;
-        setItems([]);
+        setRawEvents([]);
+        setRawTasks([]);
         setError(
           reason instanceof Error ? reason.message : "Não foi possível carregar as tarefas."
         );
@@ -607,7 +681,7 @@ export function CalendarPage() {
     } finally {
       if (version === requestVersion.current) setLoading(false);
     }
-  }, [date]);
+  }, [date, queryRange, projectFilter]);
 
   useEffect(() => {
     void Promise.resolve().then(load);
@@ -618,31 +692,173 @@ export function CalendarPage() {
     return () => setCanCreate(false);
   }, [loading, fallback, error, setCanCreate]);
 
+  const entries = useMemo<CalendarEntry[]>(() => {
+    const eventEntries: CalendarEntry[] =
+      typeFilter === "TASK"
+        ? []
+        : rawEvents
+            .filter((ev) => typeFilter === "ALL" || ev.type === typeFilter)
+            .flatMap((ev) => {
+              const span = getEventDateSpanKeys(ev);
+              if (!span) return [];
+              const sortDate = ev.startsAt ?? `${span.startKey}T00:00:00`;
+              return [
+                {
+                  kind: "event" as const,
+                  key: `e-${ev.id}`,
+                  title: ev.title,
+                  sortDate,
+                  span,
+                  event: ev,
+                },
+              ];
+            });
+
+    const taskEntries: CalendarEntry[] =
+      typeFilter === "ALL" || typeFilter === "TASK"
+        ? rawTasks.flatMap((task) => {
+            const span = getTaskDateSpanKeys(task);
+            if (!span) return [];
+            const sortDate = task.dueDate ?? task.startDate ?? span.startKey;
+            return [
+              {
+                kind: "task" as const,
+                key: `t-${task.id}`,
+                title: task.title,
+                sortDate,
+                span,
+                task,
+              },
+            ];
+          })
+        : [];
+
+    return [...eventEntries, ...taskEntries].sort((a, b) =>
+      a.sortDate.localeCompare(b.sortDate)
+    );
+  }, [rawEvents, rawTasks, typeFilter]);
+
+  function stepPeriod(direction: -1 | 1) {
+    if (viewMode === "day") {
+      setDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + direction));
+      return;
+    }
+    if (viewMode === "week") {
+      setDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + direction * 7));
+      return;
+    }
+    setDate(new Date(date.getFullYear(), date.getMonth() + direction, 1));
+  }
+
+  function handleOpenDay(dayKey: string) {
+    const [y, m, d] = dayKey.split("-").map(Number);
+    if (y && m && d) setDate(new Date(y, m - 1, d));
+    setViewMode("day");
+  }
+
+  function handleCreateForDay(dayKey: string) {
+    openCreateDialog({
+      dateKey: dayKey,
+      projectId: projectFilter || null,
+    });
+  }
+
+  function handleEditEvent(ev: CrmCalendarEvent) {
+    setEditing(ev);
+    setDialog(true);
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Mês anterior"
-          onClick={() => setDate(new Date(date.getFullYear(), date.getMonth() - 1, 1))}
-        >
-          <ChevronLeft />
-        </Button>
-        <h2 className="min-w-40 text-center font-semibold [&::first-letter]:uppercase">
-          {date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
-        </h2>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Próximo mês"
-          onClick={() => setDate(new Date(date.getFullYear(), date.getMonth() + 1, 1))}
-        >
-          <ChevronRight />
-        </Button>
-        <Button variant="outline" onClick={() => setDate(new Date())}>
-          Hoje
-        </Button>
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Período anterior"
+            onClick={() => stepPeriod(-1)}
+          >
+            <ChevronLeft />
+          </Button>
+          <h2 className="min-w-44 text-center font-semibold [&::first-letter]:uppercase">
+            {formatCalendarPeriodLabel(date, viewMode)}
+          </h2>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Próximo período"
+            onClick={() => stepPeriod(1)}
+          >
+            <ChevronRight />
+          </Button>
+          <Button variant="outline" onClick={() => setDate(new Date())}>
+            Hoje
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Atualizar agenda"
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={loading ? "animate-spin" : undefined} />
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs
+            value={viewMode}
+            onValueChange={(value) => setViewMode(value as CalendarViewMode)}
+          >
+            <TabsList>
+              <TabsTrigger value="month">Mês</TabsTrigger>
+              <TabsTrigger value="week">Semana</TabsTrigger>
+              <TabsTrigger value="day">Dia</TabsTrigger>
+              <TabsTrigger value="agenda">Agenda</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <Select
+            value={projectFilter || ALL_PROJECTS_VALUE}
+            onValueChange={(value) => {
+              const next = value === ALL_PROJECTS_VALUE ? "" : value;
+              setProjectFilter(next);
+              setDefaultProjectId(next || null);
+            }}
+          >
+            <SelectTrigger className="w-48" aria-label="Filtrar por projeto">
+              <SelectValue placeholder="Todos os projetos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PROJECTS_VALUE}>Todos os projetos</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={project.id}>
+                  {project.code ? `[${project.code}] ${project.name}` : project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={typeFilter}
+            onValueChange={(value) => setTypeFilter(value as CalendarTypeFilter)}
+          >
+            <SelectTrigger className="w-40" aria-label="Filtrar por tipo">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Tudo</SelectItem>
+              <SelectItem value="TASK">Tarefas</SelectItem>
+              {(Object.keys(CALENDAR_EVENT_TYPE_LABELS) as CrmCalendarEventType[]).map(
+                (key) => (
+                  <SelectItem key={key} value={key}>
+                    {CALENDAR_EVENT_TYPE_LABELS[key]}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Feedback message={error} />
@@ -664,66 +880,74 @@ export function CalendarPage() {
         </div>
       )}
 
-      <Panel title="Agenda do mês">
-        {loading ? (
+      {loading ? (
+        <Panel title="Carregando calendário">
           <p role="status" className="text-sm text-muted-foreground">
             Carregando agenda...
           </p>
-        ) : error ? (
+        </Panel>
+      ) : error ? (
+        <Panel title="Calendário">
           <p className="text-sm text-muted-foreground">A agenda não pôde ser carregada.</p>
-        ) : items.length ? (
-          items.map((item) => {
-            const isTimedEvent = Boolean(item.event && !item.event.isAllDay && item.date.includes("T"));
-            const parsedDate =
-              isTimedEvent
-                ? new Date(item.date)
-                : new Date(`${item.date.slice(0, 10)}T12:00:00`);
-            const formattedDate = Number.isFinite(parsedDate.getTime())
-              ? parsedDate.toLocaleDateString("pt-BR")
-              : item.date;
-            const formattedTime =
-              isTimedEvent && Number.isFinite(parsedDate.getTime())
-                ? parsedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-                : item.event?.isAllDay
-                  ? "Dia inteiro"
-                  : null;
+        </Panel>
+      ) : viewMode === "month" ? (
+        <CalendarMonthGrid
+          anchorDate={date}
+          gridStartKey={queryRange.gridStartKey}
+          entries={entries}
+          canCreate={canCreate}
+          onCreateForDay={handleCreateForDay}
+          onSelectEvent={setSelectedEvent}
+          onSelectTask={setSelectedTask}
+          onOpenDay={handleOpenDay}
+        />
+      ) : viewMode === "week" ? (
+        <CalendarWeekGrid
+          gridStartKey={queryRange.gridStartKey}
+          entries={entries}
+          canCreate={canCreate}
+          onCreateForDay={handleCreateForDay}
+          onSelectEvent={setSelectedEvent}
+          onSelectTask={setSelectedTask}
+          onOpenDay={handleOpenDay}
+        />
+      ) : viewMode === "day" ? (
+        <CalendarDaySchedule
+          anchorDate={date}
+          entries={entries}
+          canCreate={canCreate}
+          onCreateForDay={handleCreateForDay}
+          onSelectEvent={setSelectedEvent}
+          onSelectTask={setSelectedTask}
+          onEditEvent={handleEditEvent}
+        />
+      ) : (
+        <Panel title="Agenda do mês">
+          <CalendarAgendaList
+            entries={entries}
+            fallback={fallback}
+            onSelectEvent={setSelectedEvent}
+            onSelectTask={setSelectedTask}
+            onEditEvent={handleEditEvent}
+          />
+        </Panel>
+      )}
 
-            return (
-              <div
-                key={item.id}
-                className="flex flex-wrap items-center gap-4 border-b border-border py-3 text-sm last:border-0"
-              >
-                <span className="shrink-0 text-muted-foreground tabular-nums">
-                  {formattedDate}
-                  {formattedTime ? ` · ${formattedTime}` : ""}
-                </span>
-                <span className="flex-1">{item.title}</span>
-                {item.event && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setEditing(item.event!);
-                      setDialog(true);
-                    }}
-                  >
-                    Editar
-                  </Button>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {fallback
-              ? "Nenhuma tarefa com prazo ou início neste mês."
-              : "Nenhum evento ou tarefa neste mês."}
-          </p>
-        )}
-      </Panel>
+      <CalendarEventDetailDialog
+        event={selectedEvent}
+        task={selectedTask}
+        onClose={() => {
+          setSelectedEvent(null);
+          setSelectedTask(null);
+        }}
+        onEditEvent={handleEditEvent}
+      />
 
       <CalendarEventDialog
         event={editing}
+        initialDate={initialDate}
+        defaultProjectId={defaultProjectId}
+        projects={projects}
         open={dialog}
         onOpenChange={setDialog}
         onSaved={load}

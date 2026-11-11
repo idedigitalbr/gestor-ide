@@ -99,3 +99,32 @@ test("deleteCalendarEvent omite scope OCCURRENCE em eventos avulsos e respeita s
   await client.deleteCalendarEvent("evt-1__2026-11-12", "OCCURRENCE");
   expect(JSON.parse(request.body)).toEqual({ scope: "OCCURRENCE" });
 });
+
+test("consulta calendário por projeto, participantes e disponibilidade", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, method: options?.method ?? "GET", body: options?.body });
+    return Response.json({ events: [], tasks: [], participants: [], results: [], busy: [], suggestions: [] });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => null });
+
+  await client.getCalendar("2026-11-01T00:00:00.000Z", "2026-12-01T00:00:00.000Z", "proj-1");
+  expect(calls[0].url).toContain("projectId=proj-1");
+
+  await client.listCalendarParticipants("proj-1");
+  expect(calls[1].url).toBe("/api/crm/projects/calendar/participants?projectId=proj-1");
+
+  await client.checkCalendarAvailability({ title: "Reunião", participantIds: ["u1"] });
+  expect(calls[2].url).toBe("/api/crm/projects/calendar/availability");
+  expect(calls[2].method).toBe("POST");
+
+  await client.suggestCalendarSlots({
+    start: "2026-11-12T00:00:00.000Z",
+    end: "2026-11-15T00:00:00.000Z",
+    durationMinutes: 60,
+    projectId: "proj-1",
+    participants: ["u1", "u2"],
+  });
+  expect(calls[3].url).toContain("durationMinutes=60");
+  expect(calls[3].url).toContain("participants=u1%2Cu2");
+});

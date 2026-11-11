@@ -4,7 +4,6 @@ export type {
   CanonicalTaskPriority,
   TaskPriority,
   ViewMode,
-  AppModuleSection,
   Subtask,
   TaskComment,
   Task,

@@ -21,13 +21,6 @@ export type TaskPriority = CanonicalTaskPriority | "Média";
 
 export type ViewMode = "table" | "kanban" | "calendar" | "gantt" | "workload";
 
-export type AppModuleSection =
-  | "tasks"
-  | "clients"
-  | "crm"
-  | "finance"
-  | "members";
-
 export interface Subtask {
   id: string;
   title: string;
@@ -126,11 +119,90 @@ export interface CrmUserProfile {
 
 export interface CrmAccount { id: string; name: string | null; email: string; avatarUrl: string | null }
 export interface CrmNotification { id: string; title: string; message: string | null; createdAt: string; readAt: string | null; taskId?: string | null }
+export type CrmCalendarEventType = "MEETING" | "DELIVERY" | "OTHER";
+export type CrmCalendarEventStatus = "CONFIRMED" | "TENTATIVE" | "CANCELLED";
+export type CrmCalendarEventPriority = "LOW" | "MEDIUM" | "HIGH";
+export type CrmCalendarMeetingMode = "ONLINE" | "IN_PERSON";
+export type CrmCalendarRecurrenceFrequency = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+export type CrmCalendarMutationScope = "OCCURRENCE" | "FOLLOWING" | "SERIES";
+
+export interface CrmCalendarPerson {
+  id: string;
+  name: string | null;
+  avatarUrl?: string | null;
+  role?: string | null;
+}
+
+export interface CrmCalendarRecurrenceRule {
+  frequency: CrmCalendarRecurrenceFrequency;
+  interval: number;
+  count: number;
+}
+
 export interface CrmCalendarEvent {
-  id: string; title: string; description: string | null; type: "MEETING" | "DELIVERY" | "OTHER"; status: "CONFIRMED" | "TENTATIVE" | "CANCELLED"; priority: "LOW" | "MEDIUM" | "HIGH";
-  projectId: string | null; isAllDay: boolean; startsAt: string | null; endsAt: string | null; allDayStartDate: string | null; allDayEndDate: string | null; timeZone: string;
-  meetingMode: "ONLINE" | "IN_PERSON" | null; location: string | null; meetingUrl: string | null; notes: string | null; reminderMinutes: number | null;
-  participants: Array<{ user: { id: string } }>; seriesId?: string; recurrenceRule?: { frequency: string; interval: number; count: number } | null;
+  id: string;
+  title: string;
+  description: string | null;
+  type: CrmCalendarEventType;
+  status: CrmCalendarEventStatus;
+  priority: CrmCalendarEventPriority;
+  projectId: string | null;
+  project?: { id: string; name: string; code?: string | null } | null;
+  organizer?: CrmCalendarPerson;
+  isAllDay: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  allDayStartDate: string | null;
+  allDayEndDate: string | null;
+  timeZone: string;
+  meetingMode: CrmCalendarMeetingMode | null;
+  location: string | null;
+  meetingUrl: string | null;
+  notes: string | null;
+  reminderMinutes: number | null;
+  participants: Array<{ user: CrmCalendarPerson }>;
+  seriesId?: string;
+  occurrenceKey?: string;
+  seriesStartsAt?: string | null;
+  seriesEndsAt?: string | null;
+  seriesAllDayStartDate?: string | null;
+  seriesAllDayEndDate?: string | null;
+  recurrenceRule?: CrmCalendarRecurrenceRule | null;
+}
+
+export interface CrmCalendarTaskItem {
+  id: string;
+  projectId?: string;
+  title: string;
+  description?: string | null;
+  status?: string;
+  priority?: string;
+  startDate: string | null;
+  dueDate: string | null;
+  project?: { id: string; name: string; code?: string | null } | null;
+  assignees?: Array<{ user: CrmCalendarPerson }>;
+}
+
+export interface CrmCalendarAvailabilityConflict {
+  start: string;
+  end: string;
+}
+
+export interface CrmCalendarAvailabilityResult {
+  userId: string;
+  status: "AVAILABLE" | "BUSY";
+  conflicts: CrmCalendarAvailabilityConflict[];
+}
+
+export interface CrmCalendarBusyInterval {
+  userId: string;
+  start: string;
+  end: string;
+}
+
+export interface CrmCalendarSuggestedSlot {
+  start: string;
+  end: string;
 }
 export interface CrmProjectsDashboard {
   generatedAt: string;
@@ -254,90 +326,6 @@ export interface CrmProjectTask {
       avatarUrl?: string | null;
     };
   }>;
-}
-
-export interface CrmContact {
-  id: string;
-  fullName: string;
-  email?: string | null;
-  phone?: string | null;
-  jobTitle?: string | null;
-  status?: string | null;
-  company?: {
-    id: string;
-    name: string;
-  } | null;
-  createdAt: string;
-}
-
-export interface CrmCompany {
-  id: string;
-  name: string;
-  legalName?: string | null;
-  document?: string | null;
-  industry?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  _count?: {
-    contacts?: number;
-    leads?: number;
-  };
-}
-
-export interface CrmLead {
-  id: string;
-  title: string;
-  value?: number | string | null;
-  temperature?: string | null;
-  status?: string | null;
-  stage?: {
-    id: string;
-    name: string;
-    color?: string | null;
-  } | null;
-  contact?: {
-    id: string;
-    fullName: string;
-    email?: string | null;
-  } | null;
-  company?: {
-    id: string;
-    name: string;
-  } | null;
-  createdAt: string;
-}
-
-export interface CrmFinancialEntry {
-  id: string;
-  type: "PAYABLE" | "RECEIVABLE";
-  status: "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
-  description: string;
-  amount: number | string;
-  dueDate: string;
-  category?: {
-    id: string;
-    name: string;
-  } | string | null;
-  categoryName?: string | null;
-  financialCategory?: {
-    id: string;
-    name: string;
-    color?: string | null;
-  } | null;
-  contactProfile?: {
-    id: string;
-    displayName: string;
-  } | null;
-  financialContactName?: string | null;
-}
-
-export interface CrmFinancialSummary {
-  totalReceivable?: number;
-  totalPayable?: number;
-  paidReceivable?: number;
-  paidPayable?: number;
-  balance?: number;
-  overdueCount?: number;
 }
 
 export interface CrmProjectMember {
@@ -572,6 +560,7 @@ export function mapGestorTaskToCrmUpdateInput(task: Partial<Task>) {
   if (task.priority !== undefined) payload.priority = mapGestorPriorityToCrm(task.priority);
   if (task.startDate !== undefined) payload.startDate = task.startDate || null;
   if (task.dueDate !== undefined) payload.dueDate = task.dueDate || null;
+  if ("parentTaskId" in task) payload.parentTaskId = task.parentTaskId ?? null;
   if (task.estimate !== undefined) payload.estimateMinutes = parseEstimateToMinutes(task.estimate);
   if (task.tags !== undefined) payload.tags = task.tags.map((tag) => tag.trim()).filter(Boolean);
   else if (task.tag !== undefined) payload.tags = task.tag.trim() ? [task.tag.trim()] : [];

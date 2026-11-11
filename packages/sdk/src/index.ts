@@ -1,14 +1,15 @@
 // @gestor-ide/sdk — Cliente HTTP tipado da API Central do IDE CRM
 import type {
-  CrmCompany,
   CrmAccount,
+  CrmCalendarAvailabilityResult,
+  CrmCalendarBusyInterval,
   CrmCalendarEvent,
+  CrmCalendarMutationScope,
+  CrmCalendarPerson,
+  CrmCalendarSuggestedSlot,
+  CrmCalendarTaskItem,
   CrmNotification,
   CrmProjectsDashboard,
-  CrmContact,
-  CrmFinancialEntry,
-  CrmFinancialSummary,
-  CrmLead,
   CrmProject,
   CrmProjectComment,
   CrmProjectManagement,
@@ -159,18 +160,72 @@ export class IdeCrmClient {
   async listNotifications(): Promise<{ notifications: CrmNotification[]; unreadCount: number }> { return this.request("/notifications?limit=50"); }
   async markNotificationRead(id: string): Promise<void> { await this.request(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ read: true }) }); }
   async getProjectsDashboard(): Promise<{ dashboard: CrmProjectsDashboard }> { return this.request("/projects/dashboard"); }
-  async getCalendar(start: string, end: string): Promise<{ events: CrmCalendarEvent[]; tasks: Array<{ id: string; title: string; dueDate: string | null; startDate: string | null }> }> {
-    return this.request(`/projects/calendar?${new URLSearchParams({ start, end })}`);
+  async getCalendar(
+    start: string,
+    end: string,
+    projectId?: string | null
+  ): Promise<{ events: CrmCalendarEvent[]; tasks: CrmCalendarTaskItem[] }> {
+    const params = new URLSearchParams({ start, end });
+    if (projectId) params.set("projectId", projectId);
+    return this.request(`/projects/calendar?${params}`);
   }
-  async listCalendarFallbackTasks(): Promise<{ tasks: CrmProjectTask[] }> {
-    return this.request("/projects/tasks");
+  async listCalendarFallbackTasks(projectId?: string | null): Promise<{ tasks: CrmProjectTask[] }> {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    const query = params.toString();
+    return this.request(query ? `/projects/tasks?${query}` : "/projects/tasks");
   }
-  async saveCalendarEvent(data: Record<string, unknown>, id?: string): Promise<void> {
-    await this.request(id ? `/projects/calendar/${encodeURIComponent(id)}` : "/projects/calendar", { method: id ? "PATCH" : "POST", body: JSON.stringify(data) }, !id);
+  async listCalendarParticipants(
+    projectId?: string | null
+  ): Promise<{ participants: CrmCalendarPerson[] }> {
+    const params = new URLSearchParams();
+    if (projectId) params.set("projectId", projectId);
+    const query = params.toString();
+    return this.request(
+      query ? `/projects/calendar/participants?${query}` : "/projects/calendar/participants"
+    );
+  }
+  async checkCalendarAvailability(
+    input: Record<string, unknown>
+  ): Promise<{ results: CrmCalendarAvailabilityResult[] }> {
+    return this.request("/projects/calendar/availability", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+  async suggestCalendarSlots(params: {
+    start: string;
+    end: string;
+    durationMinutes: number;
+    projectId?: string | null;
+    participants?: string[];
+  }): Promise<{
+    busy: CrmCalendarBusyInterval[];
+    suggestions: CrmCalendarSuggestedSlot[];
+    rule?: string;
+  }> {
+    const query = new URLSearchParams({
+      start: params.start,
+      end: params.end,
+      durationMinutes: String(params.durationMinutes),
+    });
+    if (params.projectId) query.set("projectId", params.projectId);
+    if (params.participants?.length) query.set("participants", params.participants.join(","));
+    return this.request(`/projects/calendar/availability?${query}`);
+  }
+  async saveCalendarEvent(
+    data: Record<string, unknown>,
+    id?: string
+  ): Promise<{ event?: CrmCalendarEvent; reminderScheduled?: boolean }> {
+    return this.request(
+      id ? `/projects/calendar/${encodeURIComponent(id)}` : "/projects/calendar",
+      { method: id ? "PATCH" : "POST", body: JSON.stringify(data) },
+      !id
+    );
   }
   async deleteCalendarEvent(
     id: string,
-    scope?: "OCCURRENCE" | "FOLLOWING" | "SERIES"
+    scope?: CrmCalendarMutationScope
   ): Promise<void> {
     await this.request(`/projects/calendar/${encodeURIComponent(id)}`, {
       method: "DELETE",
@@ -321,86 +376,6 @@ export class IdeCrmClient {
   async listProjectMembers(projectId?: string): Promise<{ members: CrmProjectMember[] }> {
     const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
     return this.request(`/projects/members${query}`);
-  }
-
-  // --------------------------------------------------------------------------
-  // Módulo: Clientes & Empresas
-  // --------------------------------------------------------------------------
-
-  async listContacts(search?: string): Promise<{ contacts: CrmContact[] }> {
-    const query = search ? `?search=${encodeURIComponent(search)}` : "";
-    const res = await this.request<{ contacts?: CrmContact[]; items?: CrmContact[] }>(
-      `/contacts${query}`
-    );
-    return { contacts: res.contacts ?? res.items ?? [] };
-  }
-
-  async listCompanies(search?: string): Promise<{ companies: CrmCompany[] }> {
-    const query = search ? `?search=${encodeURIComponent(search)}` : "";
-    const res = await this.request<{ companies?: CrmCompany[]; items?: CrmCompany[] }>(
-      `/companies${query}`
-    );
-    return { companies: res.companies ?? res.items ?? [] };
-  }
-
-  // --------------------------------------------------------------------------
-  // Módulo: CRM Comercial (Leads & Oportunidades)
-  // --------------------------------------------------------------------------
-
-  async listLeads(): Promise<{ leads: CrmLead[] }> {
-    const res = await this.request<{ leads?: CrmLead[]; items?: CrmLead[] }>("/leads");
-    return { leads: res.leads ?? res.items ?? [] };
-  }
-
-  async getCrmDashboardSummary(): Promise<{
-    totalContacts: number;
-    totalLeads: number;
-    quenteLeads: number;
-    mornoLeads: number;
-    frioLeads: number;
-    newLeads30d: number;
-  }> {
-    return this.request("/dashboard/summary");
-  }
-
-  // --------------------------------------------------------------------------
-  // Módulo: Financeiro
-  // --------------------------------------------------------------------------
-
-  async getFinanceSummary(): Promise<CrmFinancialSummary> {
-    const res = await this.request<
-      CrmFinancialSummary & {
-        summary?: {
-          pendingReceivables?: number;
-          pendingPayables?: number;
-          receivedThisMonth?: number;
-          paidThisMonth?: number;
-          netThisMonth?: number;
-          overdueTotal?: number;
-        };
-      }
-    >("/finance/summary");
-
-    if (res.summary) {
-      return {
-        totalReceivable: res.summary.pendingReceivables ?? 0,
-        totalPayable: res.summary.pendingPayables ?? 0,
-        paidReceivable: res.summary.receivedThisMonth ?? 0,
-        paidPayable: res.summary.paidThisMonth ?? 0,
-        balance: res.summary.netThisMonth ?? 0,
-        overdueCount: res.summary.overdueTotal ? 1 : 0,
-      };
-    }
-
-    return res;
-  }
-
-  async listFinanceEntries(): Promise<{ entries: CrmFinancialEntry[] }> {
-    const res = await this.request<{
-      entries?: CrmFinancialEntry[];
-      items?: CrmFinancialEntry[];
-    }>("/finance/entries");
-    return { entries: res.entries ?? res.items ?? [] };
   }
 }
 
