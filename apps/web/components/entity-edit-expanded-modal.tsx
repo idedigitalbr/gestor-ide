@@ -685,29 +685,55 @@ export function EntityEditExpandedModal({
 
             <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl border border-border/60 bg-muted/20 min-h-[46px]">
               {membersList.length > 0 ? (
-                membersList.map((m, idx) => (
-                  <div
-                    key={m.userId || idx}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-card border border-border/60 text-xs shadow-2xs"
-                    title={m.user?.name || "Membro"}
-                  >
-                    <div className="size-5 rounded-full bg-muted overflow-hidden flex items-center justify-center text-[8px] font-bold">
-                      <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                    </div>
-                    <span className="font-medium text-foreground text-[11px] truncate max-w-[110px]">
-                      {m.user?.name || "Membro"}
-                    </span>
-                    {m.role && (
-                      <span className="text-[9px] font-mono text-muted-foreground uppercase">
-                        ({m.role})
+                <>
+                  {membersList.map((m, idx) => (
+                    <div
+                      key={m.userId || idx}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-card border border-border/60 text-xs shadow-2xs"
+                      title={m.user?.name || "Membro"}
+                    >
+                      <div className="size-5 rounded-full bg-muted overflow-hidden flex items-center justify-center text-[8px] font-bold">
+                        <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
+                      </div>
+                      <span className="font-medium text-foreground text-[11px] truncate max-w-[110px]">
+                        {m.user?.name || "Membro"}
                       </span>
-                    )}
-                  </div>
-                ))
+                      {m.role && (
+                        <span className="text-[9px] font-mono text-muted-foreground uppercase">
+                          ({m.role})
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {onManageMembers && canManageMembers && (
+                    <button
+                      type="button"
+                      onClick={onManageMembers}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-border/80 bg-background hover:bg-muted text-[11px] font-medium text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                    >
+                      <Plus className="size-3" />
+                      <span>Adicionar</span>
+                    </button>
+                  )}
+                </>
               ) : (
-                <span className="text-xs text-muted-foreground">
-                  Nenhum membro vinculado individualmente.
-                </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between w-full gap-2 py-0.5">
+                  <span className="text-xs text-muted-foreground">
+                    Nenhum membro vinculado individualmente.
+                  </span>
+                  {onManageMembers && canManageMembers && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onManageMembers}
+                      className="h-7 text-xs font-semibold gap-1.5 cursor-pointer shrink-0 border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      <Plus className="size-3.5" />
+                      <span>Adicionar integrantes</span>
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </div>

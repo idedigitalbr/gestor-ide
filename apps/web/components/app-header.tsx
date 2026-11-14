@@ -211,7 +211,7 @@ export function AppHeader({
   onOnlyMyProjectsChange,
   onlyMyTasks,
   onOnlyMyTasksChange,
-  onlyMyTaskNotifications = false,
+  onlyMyTaskNotifications = true,
   onOnlyMyTaskNotificationsChange,
   onSelectTaskFromNotification,
   currentManagementName,

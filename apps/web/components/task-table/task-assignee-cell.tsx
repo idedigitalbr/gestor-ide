@@ -24,7 +24,7 @@ export function TaskAssigneeCell({ assignee, assigneeId, assigneeAvatar, members
     <div className={cn("inline-flex items-center select-none", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-secondary text-xs font-medium text-foreground hover:ring-2 hover:ring-primary" title={label ? `Responsável: ${label}` : "Atribuir responsável"} aria-label={label ? `Responsável: ${label}` : "Atribuir responsável"}>
+          <button type="button" className="inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border border-border bg-secondary text-xs font-medium text-foreground hover:scale-110 hover:ring-2 hover:ring-primary transition-all duration-200" title={label ? `Responsável: ${label}` : "Atribuir responsável"} aria-label={label ? `Responsável: ${label}` : "Atribuir responsável"}>
             {label ? <MemberAvatarContent name={label} src={assigneeAvatar || selectedMember?.user.avatarUrl} initialsLength={1} /> : <User className="h-4 w-4 text-muted-foreground" />}
           </button>
         </DropdownMenuTrigger>

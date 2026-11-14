@@ -18,7 +18,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { MemberAvatarGroup } from "@/components/member-avatar-group";
 import { EntityHeader, type HeaderKpiItem } from "@/components/entity-header";
 import { EntityCard } from "@/components/entity-card";
 import {
@@ -43,6 +43,7 @@ interface ManagementProjectsViewProps {
   management: CrmProjectManagement;
   projects: CrmProject[];
   tasks: Task[];
+  availableUsers?: TeamMemberItem[];
   currentUserId?: string | null;
   currentUserEmail?: string | null;
   isConnectedCrm?: boolean;
@@ -194,6 +195,7 @@ export function ManagementProjectsView({
   management,
   projects,
   tasks,
+  availableUsers = [],
   currentUserId = null,
   currentUserEmail = null,
   isConnectedCrm = false,
@@ -214,6 +216,7 @@ export function ManagementProjectsView({
   const [remoteMemberIds, setRemoteMemberIds] = useState<string[] | null>(null);
   const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
   const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
+  const [optimisticAddedMembers, setOptimisticAddedMembers] = useState<TeamMemberItem[]>([]);
 
   // Status atual da gestão
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
@@ -307,8 +310,42 @@ export function ManagementProjectsView({
         });
       }
     }
+
+    for (const m of optimisticAddedMembers) {
+      if (removedUserIds.has(m.userId)) continue;
+      if (!byId.has(m.userId)) {
+        byId.set(m.userId, {
+          ...m,
+          role: localRoleOverrides.get(m.userId) ?? m.role,
+        });
+      }
+    }
+
+    // Enriquece itens que possuem apenas userId com dados conhecidos de availableUsers
+    for (const [uid, item] of byId.entries()) {
+      if (!item.name || !item.email) {
+        const found = availableUsers.find((u) => u.userId === uid);
+        if (found) {
+          byId.set(uid, {
+            ...item,
+            name: item.name || found.name,
+            email: item.email || found.email,
+            avatarUrl: item.avatarUrl || found.avatarUrl,
+          });
+        }
+      }
+    }
+
     return Array.from(byId.values());
-  }, [management.members, managementProjects, remoteMemberIds, removedUserIds, localRoleOverrides]);
+  }, [
+    management.members,
+    managementProjects,
+    remoteMemberIds,
+    removedUserIds,
+    localRoleOverrides,
+    optimisticAddedMembers,
+    availableUsers,
+  ]);
 
   // Permissão efetiva para gerenciar integrantes da gestão
   const effectiveCanManageMembers = useMemo(() => {
@@ -374,16 +411,33 @@ export function ManagementProjectsView({
     }
   }
 
-  async function handleAddMember(data: { emailOrId: string; role: CanonicalMemberRole }) {
+  async function handleAddMember(data: {
+    emailOrId: string;
+    role: CanonicalMemberRole;
+    user?: TeamMemberItem;
+  }) {
+    const isEmail = data.emailOrId.includes("@");
+    const targetUserId = data.user?.userId || (!isEmail ? data.emailOrId : undefined);
+    const targetEmail = data.user?.email || (isEmail ? data.emailOrId : undefined);
+
+    const optimisticItem: TeamMemberItem = {
+      userId: targetUserId || `temp-${Date.now()}`,
+      name: data.user?.name || (targetEmail ? targetEmail.split("@")[0] : data.emailOrId),
+      email: targetEmail || (isEmail ? data.emailOrId : null),
+      avatarUrl: data.user?.avatarUrl || null,
+      role: data.role,
+    };
+    setOptimisticAddedMembers((prev) => [...prev, optimisticItem]);
+
     if (!isConnectedCrm) {
-      setRemoteMemberIds((prev) => [...(prev ?? []), data.emailOrId]);
-      setLocalRoleOverrides((prev) => new Map(prev).set(data.emailOrId, data.role));
+      setRemoteMemberIds((prev) => [...(prev ?? []), optimisticItem.userId]);
+      setLocalRoleOverrides((prev) => new Map(prev).set(optimisticItem.userId, data.role));
       return;
     }
     try {
       await ideCrmClient.addManagementMember(management.id, {
-        email: data.emailOrId.includes("@") ? data.emailOrId : undefined,
-        userId: !data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        email: targetEmail,
+        userId: targetUserId,
         role: data.role,
       });
       await handleOpenMembersDialog();
@@ -605,21 +659,18 @@ export function ManagementProjectsView({
 
                     <div className="hidden sm:flex w-28 items-center justify-center px-2">
                       {projMembers.length > 0 ? (
-                        <div className="flex -space-x-1.5 items-center">
-                          {projMembers.slice(0, 2).map((m, idx) => (
-                            <div
-                              key={m.userId || idx}
-                              className="size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground ring-1 ring-border"
-                              title={m.user?.name || "Membro"}
-                            >
-                              <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                            </div>
-                          ))}
-                          {projMembers.length > 2 && (
-                            <span className="text-[10px] text-muted-foreground font-mono pl-1">
-                              +{projMembers.length - 2}
-                            </span>
-                          )}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <MemberAvatarGroup
+                            members={projMembers.map((m) => ({
+                              userId: m.userId,
+                              name: m.user?.name,
+                              avatarUrl: m.user?.avatarUrl,
+                              role: m.role,
+                              email: m.user?.email,
+                            }))}
+                            showCount={false}
+                            isCompact
+                          />
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground/60">—</span>
@@ -747,6 +798,7 @@ export function ManagementProjectsView({
         title={`Membros de ${management.name}`}
         description="Pessoas liberadas no funil operacional desta gestão."
         members={resolvedMembers}
+        availableUsers={availableUsers}
         loading={loadingMembers}
         error={membersError}
         canManageMembers={effectiveCanManageMembers}

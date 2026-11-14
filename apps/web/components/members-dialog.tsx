@@ -122,6 +122,7 @@ interface MembersDialogProps {
   title: string;
   description?: string;
   members: TeamMemberItem[];
+  availableUsers?: TeamMemberItem[];
   loading?: boolean;
   error?: string | null;
   canManageMembers?: boolean;
@@ -136,6 +137,7 @@ interface MembersDialogProps {
   onAddMember?: (data: {
     emailOrId: string;
     role: CanonicalMemberRole;
+    user?: TeamMemberItem;
   }) => Promise<boolean | void>;
   onSelfLeave?: () => void;
 }
@@ -146,6 +148,7 @@ export function MembersDialog({
   title,
   description,
   members,
+  availableUsers = [],
   loading = false,
   error = null,
   canManageMembers = false,
@@ -160,6 +163,7 @@ export function MembersDialog({
   const [search, setSearch] = useState("");
   const [isAddingMember, setIsAddingMember] = useState(false);
   const [newMemberEmail, setNewMemberEmail] = useState("");
+  const [selectedUser, setSelectedUser] = useState<TeamMemberItem | null>(null);
   const [newMemberRole, setNewMemberRole] =
     useState<CanonicalMemberRole>("editor");
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
@@ -180,32 +184,114 @@ export function MembersDialog({
       ? "Pessoas liberadas no funil operacional deste projeto."
       : "Pessoas liberadas no funil operacional desta gestão.";
 
+  const enrichedMembers = useMemo(() => {
+    return members.map((m) => {
+      if (m.name && m.email && m.avatarUrl) return m;
+      const found = availableUsers.find((u) => u.userId === m.userId);
+      if (!found) return m;
+      return {
+        ...m,
+        name: m.name || found.name,
+        email: m.email || found.email,
+        avatarUrl: m.avatarUrl || found.avatarUrl,
+      };
+    });
+  }, [members, availableUsers]);
+
+  const candidateUsers = useMemo(() => {
+    const existingIds = new Set(enrichedMembers.map((m) => m.userId).filter(Boolean));
+    const existingEmails = new Set(
+      enrichedMembers
+        .map((m) => m.email?.toLowerCase())
+        .filter(Boolean) as string[]
+    );
+    return availableUsers.filter(
+      (u) =>
+        (!u.userId || !existingIds.has(u.userId)) &&
+        (!u.email || !existingEmails.has(u.email.toLowerCase()))
+    );
+  }, [availableUsers, enrichedMembers]);
+
+  const suggestions = useMemo(() => {
+    const q = newMemberEmail.trim().toLowerCase();
+    if (!q) {
+      return candidateUsers.slice(0, 6);
+    }
+    return candidateUsers.filter((u) => {
+      const name = (u.name ?? "").toLowerCase();
+      const email = (u.email ?? "").toLowerCase();
+      const id = (u.userId ?? "").toLowerCase();
+      return name.includes(q) || email.includes(q) || id.includes(q);
+    });
+  }, [candidateUsers, newMemberEmail]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter((member) => {
+    if (!q) return enrichedMembers;
+    return enrichedMembers.filter((member) => {
       const name = (member.name ?? "").toLowerCase();
       const email = (member.email ?? "").toLowerCase();
       const roleDef = ROLE_DEFINITIONS[normalizeMemberRole(member.role)];
       const roleLabel = roleDef.label.toLowerCase();
       return name.includes(q) || email.includes(q) || roleLabel.includes(q);
     });
-  }, [members, search]);
+  }, [enrichedMembers, search]);
 
   async function handleAddMemberSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const emailOrId = newMemberEmail.trim();
-    if (!emailOrId) {
-      setAddError("Informe o e-mail ou identificador do integrante.");
+    if (!onAddMember) return;
+
+    let targetUser = selectedUser;
+    const rawInput = newMemberEmail.trim();
+
+    if (!targetUser && rawInput) {
+      const q = rawInput.toLowerCase();
+      targetUser =
+        candidateUsers.find(
+          (u) =>
+            u.userId.toLowerCase() === q ||
+            (u.email && u.email.toLowerCase() === q) ||
+            (u.name && u.name.toLowerCase() === q)
+        ) ||
+        candidateUsers.find(
+          (u) =>
+            (u.name && u.name.toLowerCase().includes(q)) ||
+            (u.email && u.email.toLowerCase().includes(q))
+        ) ||
+        availableUsers.find(
+          (u) =>
+            (u.name && u.name.toLowerCase().includes(q)) ||
+            (u.email && u.email.toLowerCase().includes(q)) ||
+            u.userId.toLowerCase() === q
+        ) ||
+        null;
+    }
+
+    if (!targetUser && !rawInput) {
+      setAddError("Selecione um integrante ou digite o e-mail.");
       return;
     }
-    if (!onAddMember) return;
+
+    const emailOrId = targetUser?.email || targetUser?.userId || rawInput;
+    const isEmail = emailOrId.includes("@");
+
+    if (!targetUser && !isEmail) {
+      setAddError(
+        `Nenhum integrante encontrado com "${rawInput}". Digite o e-mail completo (ex: usuario@suporteide.digital) ou selecione um integrante sugerido.`
+      );
+      return;
+    }
 
     setIsSubmittingAdd(true);
     setAddError(null);
     try {
-      await onAddMember({ emailOrId, role: newMemberRole });
+      await onAddMember({
+        emailOrId,
+        role: newMemberRole,
+        user: targetUser ?? undefined,
+      });
       setNewMemberEmail("");
+      setSelectedUser(null);
       setIsAddingMember(false);
     } catch (err) {
       setAddError(
@@ -300,7 +386,13 @@ export function MembersDialog({
                   size="sm"
                   variant={isAddingMember ? "secondary" : "outline"}
                   onClick={() => {
-                    setIsAddingMember((prev) => !prev);
+                    setIsAddingMember((prev) => {
+                      if (prev) {
+                        setSelectedUser(null);
+                        setNewMemberEmail("");
+                      }
+                      return !prev;
+                    });
                     setAddError(null);
                   }}
                   className="h-8 text-xs font-semibold gap-1 px-3 border-border cursor-pointer shrink-0"
@@ -332,13 +424,38 @@ export function MembersDialog({
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2.5">
-                <Input
-                  value={newMemberEmail}
-                  onChange={(e) => setNewMemberEmail(e.target.value)}
-                  placeholder="E-mail ou ID do usuário no CRM..."
-                  className="h-8 text-xs flex-1 bg-background"
-                  autoFocus
-                />
+                {selectedUser ? (
+                  <div className="flex items-center gap-2 p-1.5 px-2.5 rounded-lg border border-primary/40 bg-primary/10 text-xs flex-1 h-8">
+                    <div className="size-5 rounded-full overflow-hidden bg-muted flex items-center justify-center text-[8px] font-bold shrink-0">
+                      <MemberAvatarContent name={selectedUser.name} src={selectedUser.avatarUrl} />
+                    </div>
+                    <span className="font-semibold text-foreground truncate">{selectedUser.name || "Usuário"}</span>
+                    {selectedUser.email && (
+                      <span className="text-muted-foreground text-[11px] truncate">({selectedUser.email})</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(null);
+                        setNewMemberEmail("");
+                      }}
+                      className="ml-auto text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <Input
+                    value={newMemberEmail}
+                    onChange={(e) => {
+                      setNewMemberEmail(e.target.value);
+                      if (addError) setAddError(null);
+                    }}
+                    placeholder="Buscar por nome ou digitar e-mail..."
+                    className="h-8 text-xs flex-1 bg-background"
+                    autoFocus
+                  />
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -381,8 +498,8 @@ export function MembersDialog({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={isSubmittingAdd || !newMemberEmail.trim()}
-                  className="h-8 text-xs font-semibold shrink-0"
+                  disabled={isSubmittingAdd || (!selectedUser && !newMemberEmail.trim())}
+                  className="h-8 text-xs font-semibold shrink-0 cursor-pointer"
                 >
                   {isSubmittingAdd ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -391,6 +508,88 @@ export function MembersDialog({
                   )}
                 </Button>
               </div>
+
+              {/* Sugestões da equipe ao digitar ou vazias */}
+              {!selectedUser && (
+                <>
+                  {newMemberEmail.trim() ? (
+                    suggestions.length > 0 && (
+                      <div className="max-h-44 overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-sm space-y-0.5">
+                        <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                          Integrantes sugeridos
+                        </div>
+                        {suggestions.map((u) => (
+                          <div
+                            key={u.userId}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setSelectedUser(u);
+                              setNewMemberEmail(u.name || u.email || "");
+                              setAddError(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedUser(u);
+                                setNewMemberEmail(u.name || u.email || "");
+                                setAddError(null);
+                              }
+                            }}
+                            className="flex items-center justify-between gap-2 p-1.5 px-2 rounded-md hover:bg-accent cursor-pointer text-xs transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="size-6 rounded-full overflow-hidden bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
+                                <MemberAvatarContent name={u.name} src={u.avatarUrl} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-foreground truncate">
+                                  {u.name || "Sem nome"}
+                                </div>
+                                {u.email && (
+                                  <div className="text-[10px] text-muted-foreground truncate">
+                                    {u.email}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-medium text-primary hover:underline shrink-0">
+                              Selecionar
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    suggestions.length > 0 && (
+                      <div className="space-y-1.5 pt-0.5">
+                        <span className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground">
+                          Integrantes da empresa:
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {suggestions.map((u) => (
+                            <button
+                              key={u.userId}
+                              type="button"
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setNewMemberEmail(u.name || u.email || "");
+                                setAddError(null);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-card hover:bg-accent border border-border text-[11px] text-foreground cursor-pointer transition-colors shadow-2xs"
+                            >
+                              <div className="size-4 rounded-full overflow-hidden bg-muted flex items-center justify-center text-[7px] font-bold shrink-0">
+                                <MemberAvatarContent name={u.name} src={u.avatarUrl} />
+                              </div>
+                              <span className="font-medium">{u.name || u.email}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
+                </>
+              )}
 
               {addError && (
                 <p className="text-xs text-destructive flex items-center gap-1.5">

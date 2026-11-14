@@ -11,7 +11,10 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Folder,
+  MoreHorizontal,
+  Copy,
+  FileText,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { MemberAvatarGroup } from "@/components/member-avatar-group";
 import type { TeamMemberItem } from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
@@ -362,18 +365,86 @@ export function EntityHeader({
 
   const showDueDate = type === "project" || dueDate !== undefined;
 
-  // Breadcrumb superior unificado (Gestão pai no projeto, ou Gestões na gestão)
-  const resolvedParentBadge = useMemo(() => {
-    if (parentBadge) return parentBadge;
-    if (onBack) {
-      return {
-        icon: <Folder className="size-3 text-blue-400 shrink-0" />,
-        label: backLabel || "Gestões",
-        onClick: onBack,
-      };
-    }
-    return null;
-  }, [parentBadge, onBack, backLabel]);
+  function renderMoreMenu() {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-8 rounded-lg border-border/80 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer shrink-0 shadow-xs"
+            title="Mais opções"
+            aria-label="Mais opções"
+          >
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground tracking-wider">
+            Opções {type === "management" ? "da gestão" : "do projeto"}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {canWrite && (
+            <DropdownMenuItem onClick={handleOpenEdit} className="text-xs cursor-pointer gap-2">
+              <Pencil className="size-3.5 text-muted-foreground" />
+              <span>Editar {type === "management" ? "gestão" : "projeto"}</span>
+            </DropdownMenuItem>
+          )}
+          {onOpenMembers && (
+            <DropdownMenuItem onClick={onOpenMembers} className="text-xs cursor-pointer gap-2">
+              <Users className="size-3.5 text-muted-foreground" />
+              <span>Gerenciar integrantes ({resolvedMemberCount})</span>
+            </DropdownMenuItem>
+          )}
+          {(onBack || parentBadge?.onClick) && (
+            <DropdownMenuItem
+              onClick={parentBadge?.onClick || onBack}
+              className="text-xs cursor-pointer gap-2"
+            >
+              <ArrowLeft className="size-3.5 text-muted-foreground" />
+              <span>
+                {parentBadge?.label
+                  ? `Voltar para ${parentBadge.label}`
+                  : backLabel || (type === "project" ? "Voltar para gestão" : "Voltar para gestões")}
+              </span>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => {
+              void navigator.clipboard.writeText(window.location.href);
+            }}
+            className="text-xs cursor-pointer gap-2"
+          >
+            <Copy className="size-3.5 text-muted-foreground" />
+            <span>Copiar link</span>
+          </DropdownMenuItem>
+          {code && (
+            <DropdownMenuItem
+              onClick={() => {
+                void navigator.clipboard.writeText(code);
+              }}
+              className="text-xs cursor-pointer gap-2"
+            >
+              <FileText className="size-3.5 text-muted-foreground" />
+              <span>Copiar código ({code})</span>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  function renderMemberAvatarsSection(isCompact?: boolean) {
+    return (
+      <MemberAvatarGroup
+        members={resolvedMembers}
+        totalCount={resolvedMemberCount}
+        isCompact={isCompact}
+      />
+    );
+  }
 
   return (
     <div className={cn("w-full transition-all", className)}>
@@ -383,7 +454,7 @@ export function EntityHeader({
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
         <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all mb-3.5">
-          {/* Esquerda: Iniciais + Folder Pill + Badge + Nome */}
+          {/* Esquerda: Iniciais + Badge + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div
               className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0 select-none"
@@ -391,18 +462,6 @@ export function EntityHeader({
             >
               {initials}
             </div>
-
-            {resolvedParentBadge && (
-              <button
-                type="button"
-                onClick={resolvedParentBadge.onClick}
-                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 hover:bg-muted/80 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
-                title={`Voltar para ${resolvedParentBadge.label}`}
-              >
-                {resolvedParentBadge.icon}
-                <span className="truncate max-w-[120px]">{resolvedParentBadge.label}</span>
-              </button>
-            )}
 
             <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground select-none">
               {badgeText}
@@ -412,8 +471,8 @@ export function EntityHeader({
             </span>
           </div>
 
-          {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down + Mais Opções */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             {/* 3 KPIs Compactos */}
             <div className="flex items-center gap-3 text-xs">
               {kpis.map((kpi) => (
@@ -428,35 +487,8 @@ export function EntityHeader({
               ))}
             </div>
 
-            {/* Avatar do Membro */}
-            {resolvedMembers.length > 0 && (
-              <div
-                onClick={onOpenMembers}
-                className="flex -space-x-1.5 items-center cursor-pointer hover:opacity-80 transition-opacity"
-                title="Ver e gerenciar integrantes"
-              >
-                {resolvedMembers.slice(0, 1).map((m, idx) => (
-                  <div
-                    key={m.userId || idx}
-                    className="size-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground select-none"
-                    title={m.name || "Membro"}
-                  >
-                    <MemberAvatarContent name={m.name} src={m.avatarUrl} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Contagem de Integrantes */}
-            <button
-              type="button"
-              onClick={onOpenMembers}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-              title={`Ver e gerenciar integrantes`}
-            >
-              <Users className="size-3.5 text-muted-foreground/80" />
-              <span className="font-semibold text-foreground text-xs">{resolvedMemberCount}</span>
-            </button>
+            {/* Integrantes com Tooltip e Animação no Hover */}
+            {renderMemberAvatarsSection(true)}
 
             {/* Toggle Chevron Down para Expandir */}
             <Button
@@ -464,18 +496,21 @@ export function EntityHeader({
               variant="ghost"
               size="icon"
               onClick={toggleHeaderExpanded}
-              className="size-7 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
+              className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
               title="Expandir cabeçalho"
               aria-label="Expandir cabeçalho"
             >
               <ChevronDown className="size-4" />
             </Button>
+
+            {/* Botão de Mais Opções (...) */}
+            {renderMoreMenu()}
           </div>
         </div>
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
         <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
-          {/* Lado Esquerdo: Avatar + [Parent Badge] + [Badge] Título + Descrição */}
+          {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             {/* Badge Quadrado com Iniciais */}
             <div
@@ -485,24 +520,9 @@ export function EntityHeader({
               {initials}
             </div>
 
-            {/* Bloco Central de Textos */}
+            {/* Bloco Central de Textos (2 linhas limpas) */}
             <div className="min-w-0 flex-1 space-y-1">
-              {/* Linha 1: Parent Breadcrumb (quando aplicável) */}
-              {resolvedParentBadge && (
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    onClick={resolvedParentBadge.onClick}
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/80 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    title={`Voltar para ${resolvedParentBadge.label}`}
-                  >
-                    {resolvedParentBadge.icon}
-                    <span className="truncate max-w-[280px]">{resolvedParentBadge.label}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Linha 2: Badge [Projeto/Gestão] + Nome (com lápis discreto apenas no hover) */}
+              {/* Linha 1: Badge [Projeto/Gestão] + Nome (com lápis discreto apenas no hover) */}
               <div className="flex items-center gap-2 min-w-0 flex-wrap">
                 <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground select-none">
                   {badgeText}
@@ -531,7 +551,7 @@ export function EntityHeader({
                 )}
               </div>
 
-              {/* Linha 3: Descrição (com lápis discreto apenas no hover) */}
+              {/* Linha 2: Descrição (com lápis discreto apenas no hover) */}
               <div
                 onClick={handleOpenEdit}
                 className={cn(
@@ -582,38 +602,8 @@ export function EntityHeader({
               {/* Divisor */}
               <div className="h-6 w-px bg-border/60 shrink-0 hidden sm:block" />
 
-              {/* Membros (Avatares Empilhados + Botão com Contagem) */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {resolvedMembers.length > 0 && (
-                  <div
-                    onClick={onOpenMembers}
-                    className="flex -space-x-2 items-center mr-0.5 cursor-pointer hover:opacity-80 transition-opacity"
-                    title="Ver e gerenciar integrantes"
-                  >
-                    {resolvedMembers.slice(0, 3).map((m, idx) => (
-                      <div
-                        key={m.userId || idx}
-                        className="size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground select-none"
-                        title={m.name || "Membro"}
-                      >
-                        <MemberAvatarContent name={m.name} src={m.avatarUrl} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onOpenMembers}
-                  className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/60"
-                  title="Ver e gerenciar integrantes"
-                >
-                  <Users className="size-3.5 text-muted-foreground/80" />
-                  <span className="font-semibold text-foreground text-xs">{resolvedMemberCount}</span>
-                </Button>
-              </div>
+              {/* Integrantes com Tooltip e Animação no Hover */}
+              {renderMemberAvatarsSection(false)}
 
               {/* Toggle Chevron Up para Recolher */}
               <Button
@@ -621,12 +611,15 @@ export function EntityHeader({
                 variant="ghost"
                 size="icon"
                 onClick={toggleHeaderExpanded}
-                className="size-7 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
+                className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
                 title="Recolher cabeçalho"
                 aria-label="Recolher cabeçalho"
               >
                 <ChevronUp className="size-4" />
               </Button>
+
+              {/* Botão de Mais Opções (...) */}
+              {renderMoreMenu()}
             </div>
 
             {/* Linha Inferior: Metadados (Criado em | Entrega | Status | Visibilidade) */}

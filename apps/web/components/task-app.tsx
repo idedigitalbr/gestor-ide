@@ -102,7 +102,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem("gestor_only_my_tasks") === "true"; } catch { return false; }
   });
   const [onlyMyTaskNotifications, setOnlyMyTaskNotifications] = useState(() => {
-    try { return localStorage.getItem("gestor_only_my_task_notifications") === "true"; } catch { return false; }
+    try { return localStorage.getItem("gestor_only_my_task_notifications") !== "false"; } catch { return true; }
   });
   const [membershipRetry, setMembershipRetry] = useState(0);
   const [projectMembership, setProjectMembership] = useState<{
@@ -297,6 +297,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>("PENDENTE");
   const [hasModalRemoteConflict, setHasModalRemoteConflict] = useState(false);
   const [isProjectMembersOpen, setIsProjectMembersOpen] = useState(false);
+  const [managementForMembersDialog, setManagementForMembersDialog] = useState<CrmProjectManagement | null>(null);
   const isModalDirtyRef = useRef(false);
   const isModalOpenRef = useRef(isModalOpen);
   useEffect(() => {
@@ -1585,20 +1586,28 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function handleAddProjectMember(data: { emailOrId: string; role: CanonicalMemberRole }) {
+  async function handleAddProjectMember(data: {
+    emailOrId: string;
+    role: CanonicalMemberRole;
+    user?: TeamMemberItem;
+  }) {
     const isEmail = data.emailOrId.includes("@");
+    const targetUserId = data.user?.userId || (!isEmail ? data.emailOrId : undefined);
+    const targetEmail = data.user?.email || (isEmail ? data.emailOrId : undefined);
+
     const tempMember: TeamMemberItem = {
-      userId: isEmail ? `temp-${Date.now()}` : data.emailOrId,
-      name: isEmail ? data.emailOrId.split("@")[0] : data.emailOrId,
-      email: isEmail ? data.emailOrId : null,
+      userId: targetUserId || `temp-${Date.now()}`,
+      name: data.user?.name || (targetEmail ? targetEmail.split("@")[0] : data.emailOrId),
+      email: targetEmail || (isEmail ? data.emailOrId : null),
+      avatarUrl: data.user?.avatarUrl || null,
       role: data.role,
     };
     setProjectAddedMembers((prev) => [...prev, tempMember]);
     if (!selectedProjectId || !isConnectedCrm) return;
     try {
       await ideCrmClient.addProjectMember(selectedProjectId, {
-        email: isEmail ? data.emailOrId : undefined,
-        userId: !isEmail ? data.emailOrId : undefined,
+        email: targetEmail,
+        userId: targetUserId,
         role: data.role,
       });
       const res = await ideCrmClient.listProjectMembers(selectedProjectId);
@@ -1607,6 +1616,215 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       const msg = err instanceof Error ? err.message : "Erro ao adicionar integrante ao projeto.";
       setSyncError(msg);
       throw err;
+    }
+  }
+
+  // Consolidação de todos os usuários conhecidos da empresa para sugestões inteligentes
+  const allKnownUsers = useMemo<TeamMemberItem[]>(() => {
+    const byId = new Map<string, TeamMemberItem>();
+
+    if (currentUser?.id) {
+      byId.set(currentUser.id, {
+        userId: currentUser.id,
+        name: currentUser.name,
+        email: currentUser.email,
+        avatarUrl: currentUser.avatarUrl,
+        role: currentUser.role || "manager",
+      });
+    }
+
+    for (const mem of projectMembers?.members ?? []) {
+      const uid = mem.userId || mem.user?.id;
+      if (!uid) continue;
+      if (!byId.has(uid) || (!byId.get(uid)?.name && mem.user?.name)) {
+        byId.set(uid, {
+          userId: uid,
+          name: mem.user?.name,
+          email: mem.user?.email,
+          avatarUrl: mem.user?.avatarUrl,
+          role: mem.role,
+        });
+      }
+    }
+
+    for (const m of managements) {
+      for (const mem of m.members ?? []) {
+        const uid = mem.userId || mem.user?.id;
+        if (!uid) continue;
+        if (!byId.has(uid) || (!byId.get(uid)?.name && mem.user?.name)) {
+          byId.set(uid, {
+            userId: uid,
+            name: mem.user?.name,
+            email: mem.user?.email,
+            avatarUrl: mem.user?.avatarUrl,
+            role: mem.role,
+          });
+        }
+      }
+    }
+
+    for (const p of projects) {
+      for (const mem of p.members ?? []) {
+        const uid = mem.userId || mem.user?.id;
+        if (!uid) continue;
+        if (!byId.has(uid) || (!byId.get(uid)?.name && mem.user?.name)) {
+          byId.set(uid, {
+            userId: uid,
+            name: mem.user?.name,
+            email: mem.user?.email,
+            avatarUrl: mem.user?.avatarUrl,
+            role: mem.role,
+          });
+        }
+      }
+    }
+
+    for (const t of tasks) {
+      if (t.assigneeId && !byId.has(t.assigneeId)) {
+        byId.set(t.assigneeId, {
+          userId: t.assigneeId,
+          name: t.assignee,
+          avatarUrl: t.assigneeAvatar,
+          role: "editor",
+        });
+      }
+    }
+
+    return Array.from(byId.values());
+  }, [currentUser, projectMembers, managements, projects, tasks]);
+
+  const activeDialogManagement = useMemo(() => {
+    if (!managementForMembersDialog) return null;
+    return (
+      managements.find((m) => m.id === managementForMembersDialog.id) ??
+      managementForMembersDialog
+    );
+  }, [managementForMembersDialog, managements]);
+
+  const dialogManagementMembers = useMemo<TeamMemberItem[]>(() => {
+    if (!activeDialogManagement) return [];
+    return (activeDialogManagement.members ?? [])
+      .map((m) => {
+        const uid = m.userId || m.user?.id || "";
+        const fallback = allKnownUsers.find((u) => u.userId === uid);
+        return {
+          userId: uid,
+          name: m.user?.name || fallback?.name,
+          email: m.user?.email || fallback?.email,
+          avatarUrl: m.user?.avatarUrl || fallback?.avatarUrl,
+          role: m.role || "editor",
+        };
+      })
+      .filter((m) => Boolean(m.userId));
+  }, [activeDialogManagement, allKnownUsers]);
+
+  async function handleAddManagementMemberFromDialog(data: {
+    emailOrId: string;
+    role: CanonicalMemberRole;
+    user?: TeamMemberItem;
+  }) {
+    if (!activeDialogManagement) return;
+    const mgmtId = activeDialogManagement.id;
+    const isEmail = data.emailOrId.includes("@");
+    const targetUserId = data.user?.userId || (!isEmail ? data.emailOrId : undefined);
+    const targetEmail = data.user?.email || (isEmail ? data.emailOrId : undefined);
+
+    const tempMember = {
+      userId: targetUserId || `temp-${Date.now()}`,
+      role: data.role,
+      user: {
+        id: targetUserId || `temp-${Date.now()}`,
+        name: data.user?.name || (targetEmail ? targetEmail.split("@")[0] : data.emailOrId),
+        email: targetEmail || data.emailOrId,
+        avatarUrl: data.user?.avatarUrl || null,
+      },
+    };
+
+    setManagements((prev) =>
+      prev.map((m) => {
+        if (m.id !== mgmtId) return m;
+        const currentMembers = m.members ?? [];
+        return {
+          ...m,
+          members: [
+            ...currentMembers.filter((mem) => mem.userId !== tempMember.userId),
+            tempMember,
+          ],
+          _count: {
+            ...m._count,
+            members: (m._count?.members ?? currentMembers.length) + 1,
+          },
+        };
+      })
+    );
+
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.addManagementMember(mgmtId, {
+          email: targetEmail,
+          userId: targetUserId,
+          role: data.role,
+        });
+        void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+      } catch (err) {
+        console.warn("Erro ao adicionar integrante da gestão no CRM:", err);
+        throw err;
+      }
+    }
+  }
+
+  async function handleUpdateManagementMemberRoleFromDialog(
+    member: TeamMemberItem,
+    newRole: CanonicalMemberRole
+  ) {
+    if (!activeDialogManagement) return;
+    const mgmtId = activeDialogManagement.id;
+    setManagements((prev) =>
+      prev.map((m) => {
+        if (m.id !== mgmtId) return m;
+        return {
+          ...m,
+          members: (m.members ?? []).map((mem) =>
+            mem.userId === member.userId ? { ...mem, role: newRole } : mem
+          ),
+        };
+      })
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.updateManagementMemberRole(mgmtId, member.userId, newRole);
+        void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+      } catch (err) {
+        console.warn("Erro ao atualizar papel do integrante no CRM:", err);
+        throw err;
+      }
+    }
+  }
+
+  async function handleRemoveManagementMemberFromDialog(member: TeamMemberItem) {
+    if (!activeDialogManagement) return;
+    const mgmtId = activeDialogManagement.id;
+    setManagements((prev) =>
+      prev.map((m) => {
+        if (m.id !== mgmtId) return m;
+        return {
+          ...m,
+          members: (m.members ?? []).filter((mem) => mem.userId !== member.userId),
+          _count: {
+            ...m._count,
+            members: Math.max(0, (m._count?.members ?? 1) - 1),
+          },
+        };
+      })
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.removeManagementMember(mgmtId, member.userId);
+        void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+      } catch (err) {
+        console.warn("Erro ao remover integrante da gestão no CRM:", err);
+        throw err;
+      }
     }
   }
 
@@ -1918,6 +2136,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onUpdateManagement={handleUpdateManagementById}
               onDeleteManagement={handleDeleteManagementById}
               onLeaveManagement={handleLeaveManagementById}
+              onOpenMembers={(mgmt) => setManagementForMembersDialog(mgmt)}
             />
           ) : selectedManagementId && membershipPending ? (
             <p role="status" className="text-sm text-muted-foreground">Carregando seus projetos...</p>
@@ -1942,6 +2161,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               management={currentManagement}
               projects={visibleProjects}
               tasks={tasks}
+              availableUsers={allKnownUsers}
               currentUserId={currentUser?.id}
               currentUserEmail={currentUser?.email}
               isConnectedCrm={isConnectedCrm}
@@ -2086,6 +2306,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           title={`Membros de ${currentProject.name}`}
           description="Pessoas liberadas no funil operacional deste projeto."
           members={projectDialogMembers}
+          availableUsers={allKnownUsers}
           loading={Boolean(isConnectedCrm && selectedProjectId && projectMembers?.projectId !== selectedProjectId)}
           canManageMembers={effectiveCanManageProjectMembers}
           currentUserId={currentUser?.id}
@@ -2095,6 +2316,30 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onRemoveMember={handleRemoveProjectMember}
           onAddMember={handleAddProjectMember}
           onSelfLeave={() => handleSelectProject(null)}
+        />
+      )}
+
+      {activeDialogManagement && (
+        <MembersDialog
+          open={Boolean(activeDialogManagement)}
+          onOpenChange={(open) => {
+            if (!open) setManagementForMembersDialog(null);
+          }}
+          title={`Membros de ${activeDialogManagement.name}`}
+          description="Pessoas liberadas no funil operacional desta gestão."
+          members={dialogManagementMembers}
+          availableUsers={allKnownUsers}
+          canManageMembers={canManageProjectMembers}
+          currentUserId={currentUser?.id}
+          currentUserEmail={currentUser?.email}
+          entityType="management"
+          onChangeRole={handleUpdateManagementMemberRoleFromDialog}
+          onRemoveMember={handleRemoveManagementMemberFromDialog}
+          onAddMember={handleAddManagementMemberFromDialog}
+          onSelfLeave={() => {
+            setManagementForMembersDialog(null);
+            void handleLeaveManagementById(activeDialogManagement.id);
+          }}
         />
       )}
 

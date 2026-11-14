@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
+  Check,
   CheckCheck,
   CheckCircle2,
   Clock3,
-  ExternalLink,
   Layers,
-  UserCheck,
 } from "lucide-react";
 import {
   normalizeTaskStatus,
@@ -20,7 +19,6 @@ import {
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -112,17 +110,15 @@ export function HeaderNotifications({
   currentUser,
   tasks = [],
   projects = [],
-  onlyMyTaskNotifications = false,
-  onOnlyMyTaskNotificationsChange,
+  onlyMyTaskNotifications = true,
   onSelectTask,
 }: HeaderNotificationsProps) {
   const [items, setItems] = useState<CrmNotification[]>([]);
-  const [count, setCount] = useState(0);
+  const [, setCount] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [userTabOverride, setUserTabOverride] = useState<"all" | "mine" | null>(null);
-  const filterTab = userTabOverride ?? (onlyMyTaskNotifications ? "mine" : "all");
+  const [tab, setTab] = useState<"unread" | "read">("unread");
 
   const pendingIds = useRef(new Set<string>());
   const revision = useRef(0);
@@ -177,21 +173,6 @@ export function HeaderNotifications({
     }
   }
 
-  async function markAllAsRead() {
-    const unread = items.filter((i) => !i.readAt);
-    if (!unread.length) return;
-    setItems((current) =>
-      current.map((notification) => ({
-        ...notification,
-        readAt: notification.readAt || new Date().toISOString(),
-      }))
-    );
-    setCount(0);
-    await Promise.allSettled(
-      unread.map((notification) => ideCrmClient.markNotificationRead(notification.id))
-    );
-  }
-
   // Prepara metadados para cada notificação
   const itemsWithMeta = useMemo(() => {
     return items.map((item) => ({
@@ -200,24 +181,48 @@ export function HeaderNotifications({
     }));
   }, [items, tasks, projects, currentUser]);
 
-  // Contagem de não lidas específicas de tarefas do usuário
-  const unreadMineCount = useMemo(() => {
-    return itemsWithMeta.filter(({ item, meta }) => !item.readAt && meta.isMyTask).length;
-  }, [itemsWithMeta]);
-
-  // Itens filtrados pela aba ativa
-  const displayedItems = useMemo(() => {
-    if (filterTab === "mine") {
+  // Filtra por "Somente minhas tarefas" quando a preferência estiver ativa (padrão true)
+  const filteredItems = useMemo(() => {
+    if (onlyMyTaskNotifications) {
       return itemsWithMeta.filter(({ meta }) => meta.isMyTask);
     }
     return itemsWithMeta;
-  }, [itemsWithMeta, filterTab]);
+  }, [itemsWithMeta, onlyMyTaskNotifications]);
 
-  // Contador de não lidas exibido no sino (respeita preferência do usuário)
-  const bellBadgeCount = onlyMyTaskNotifications ? unreadMineCount : count;
+  const unreadItems = useMemo(
+    () => filteredItems.filter(({ item }) => !item.readAt),
+    [filteredItems]
+  );
 
-  function handleItemClick(item: CrmNotification, meta: NotificationMeta) {
-    void markRead(item);
+  const readItems = useMemo(
+    () => filteredItems.filter(({ item }) => Boolean(item.readAt)),
+    [filteredItems]
+  );
+
+  const displayedItems = tab === "unread" ? unreadItems : readItems;
+  const unreadCount = unreadItems.length;
+  const readCount = readItems.length;
+
+  async function markAllAsRead() {
+    if (!unreadItems.length) return;
+    const idsToMark = unreadItems.map(({ item }) => item.id);
+    setItems((current) =>
+      current.map((notification) =>
+        idsToMark.includes(notification.id)
+          ? { ...notification, readAt: notification.readAt || new Date().toISOString() }
+          : notification
+      )
+    );
+    setCount((prev) => Math.max(0, prev - idsToMark.length));
+    await Promise.allSettled(
+      idsToMark.map((id) => ideCrmClient.markNotificationRead(id))
+    );
+  }
+
+  function handleCardClick(item: CrmNotification, meta: NotificationMeta) {
+    if (!item.readAt) {
+      void markRead(item);
+    }
     if (meta.matchedTask && onSelectTask) {
       onSelectTask(meta.matchedTask);
       setIsOpen(false);
@@ -237,89 +242,59 @@ export function HeaderNotifications({
           variant="ghost"
           size="icon"
           className="relative h-8 w-8 cursor-pointer"
-          aria-label={`Notificações${bellBadgeCount ? `, ${bellBadgeCount} não lidas` : ""}`}
+          aria-label={`Notificações${unreadCount ? `, ${unreadCount} não lidas` : ""}`}
         >
           <Bell className="size-4" />
-          {bellBadgeCount > 0 && (
+          {unreadCount > 0 && (
             <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
-              {bellBadgeCount > 9 ? "9+" : bellBadgeCount}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(26rem,calc(100vw-1rem))] p-0 shadow-lg">
-        {/* Cabeçalho */}
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1rem))] p-0 shadow-lg">
+        {/* Cabeçalho Limpo */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Notificações</h2>
-            <p className="text-xs text-muted-foreground">
-              {bellBadgeCount === 0 ? "Todas em dia" : `${bellBadgeCount} não lida${bellBadgeCount > 1 ? "s" : ""}`}
-            </p>
-          </div>
-          {count > 0 && (
+          <h2 className="text-sm font-semibold text-foreground">Notificações</h2>
+          {unreadCount > 0 && (
             <button
               type="button"
               onClick={() => void markAllAsRead()}
-              className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+              className="text-xs font-medium text-primary hover:underline cursor-pointer"
             >
               Marcar todas como lidas
             </button>
           )}
         </div>
 
-        {/* Abas e Filtro Rápido */}
-        <div className="flex flex-col border-b border-border bg-muted/20 px-3 py-2 gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5">
-              <button
-                type="button"
-                onClick={() => setUserTabOverride("all")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
-                  filterTab === "all"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Todas ({items.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setUserTabOverride("mine")}
-                className={cn(
-                  "flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
-                  filterTab === "mine"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <span>Minhas tarefas</span>
-                {unreadMineCount > 0 && (
-                  <span className="rounded-full bg-primary/20 px-1 text-[10px] font-semibold text-primary">
-                    {unreadMineCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {onOnlyMyTaskNotificationsChange && (
-              <label
-                htmlFor="notif-filter-toggle"
-                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer select-none"
-                title="Ativar filtro padrão para ver apenas notificações de tarefas onde você é responsável"
-              >
-                <span className="hidden sm:inline">Somente minhas</span>
-                <Switch
-                  id="notif-filter-toggle"
-                  checked={onlyMyTaskNotifications}
-                  onCheckedChange={(val) => {
-                    onOnlyMyTaskNotificationsChange(val);
-                    setUserTabOverride(val ? "mine" : "all");
-                  }}
-                />
-              </label>
-            )}
+        {/* Abas Limpas: Não Lidas | Lidas */}
+        <div className="border-b border-border bg-muted/20 px-3 py-2">
+          <div className="flex rounded-md bg-muted/60 p-0.5">
+            <button
+              type="button"
+              onClick={() => setTab("unread")}
+              className={cn(
+                "flex-1 rounded px-3 py-1 text-xs font-medium transition-colors cursor-pointer text-center",
+                tab === "unread"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Não Lidas {unreadCount > 0 ? `(${unreadCount})` : ""}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("read")}
+              className={cn(
+                "flex-1 rounded px-3 py-1 text-xs font-medium transition-colors cursor-pointer text-center",
+                tab === "read"
+                  ? "bg-background text-foreground shadow-xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Lidas {readCount > 0 ? `(${readCount})` : ""}
+            </button>
           </div>
         </div>
 
@@ -335,90 +310,58 @@ export function HeaderNotifications({
             <p className="p-6 text-center text-sm text-muted-foreground">Carregando...</p>
           ) : !displayedItems.length ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              {filterTab === "mine" ? (
-                <>
-                  <UserCheck className="mx-auto mb-2 size-6 text-muted-foreground/60" />
-                  <p className="font-medium text-foreground">Nenhuma notificação das suas tarefas.</p>
-                  <p className="text-xs mt-1">Mude para a aba &quot;Todas&quot; para ver os alertas gerais da equipe.</p>
-                </>
+              {tab === "unread" ? (
+                <p>Nenhuma notificação não lida.</p>
               ) : (
-                <p>Nenhuma notificação no momento.</p>
+                <p>Nenhuma notificação lida.</p>
               )}
             </div>
           ) : (
             displayedItems.map(({ item, meta }) => {
               const isStatus = item.title.toLowerCase().includes("status");
-              const isReminder = item.title.toLowerCase().includes("lembrete");
 
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => handleItemClick(item, meta)}
+                  onClick={() => handleCardClick(item, meta)}
                   className={cn(
-                    "group flex w-full gap-3 p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
+                    "group flex w-full items-start gap-3 p-3 text-left transition-colors cursor-pointer hover:bg-muted/50",
                     item.readAt ? "opacity-75" : "bg-primary/5"
                   )}
-                  title={meta.matchedTask ? "Clique para abrir esta tarefa" : "Clique para marcar como lida"}
+                  title={meta.matchedTask ? "Clique para abrir a tarefa" : undefined}
                 >
-                  {/* Ícone contextual */}
-                  <span
-                    className={cn(
-                      "flex size-8 shrink-0 items-center justify-center rounded-lg mt-0.5",
-                      meta.isMyTask
-                        ? "bg-primary/15 text-primary"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {meta.isMyTask ? (
-                      <UserCheck className="size-4" />
-                    ) : isStatus ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : isReminder ? (
-                      <Clock3 className="size-4" />
+                  {/* Ícone discreto */}
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 text-muted-foreground mt-0.5">
+                    {isStatus ? (
+                      <CheckCircle2 className="size-3.5" />
                     ) : (
-                      <CheckCheck className="size-4" />
+                      <Bell className="size-3.5" />
                     )}
                   </span>
 
-                  {/* Detalhes da notificação */}
+                  {/* Conteúdo textual */}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-semibold text-foreground truncate">
-                        {item.title}
-                      </span>
-                      {!item.readAt && (
-                        <span className="size-2 shrink-0 rounded-full bg-primary" title="Não lida" />
-                      )}
-                    </div>
+                    <p className="text-[11px] font-medium text-muted-foreground truncate">
+                      {item.title}
+                    </p>
 
                     {item.message && (
-                      <p className="mt-0.5 text-xs font-medium text-foreground/90 line-clamp-2">
+                      <p className="mt-0.5 text-xs font-semibold text-foreground line-clamp-2">
                         {item.message}
                       </p>
                     )}
 
-                    {/* Metadados e Tags */}
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {meta.isMyTask ? (
-                        <Badge variant="default" className="text-[10px] px-1.5 py-0">
-                          Sua tarefa
-                        </Badge>
-                      ) : (
-                        <Badge variant="subtle" className="text-[10px] px-1.5 py-0">
-                          Geral do projeto
-                        </Badge>
-                      )}
-
+                    {/* Metadados: Projeto, Status e Hora */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {meta.projectName && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground truncate max-w-[120px]">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground truncate max-w-[130px]">
                           <Layers className="size-3 shrink-0" />
                           <span className="truncate">{meta.projectName}</span>
                         </span>
                       )}
 
                       {meta.status && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                           {meta.status}
                         </Badge>
                       )}
@@ -433,16 +376,33 @@ export function HeaderNotifications({
                         })}
                       </span>
                     </div>
+                  </div>
 
-                    {/* Ação ao passar o mouse */}
-                    {meta.matchedTask && (
-                      <div className="mt-1.5 hidden items-center gap-1 text-[11px] font-medium text-primary group-hover:flex">
-                        <span>Abrir tarefa</span>
-                        <ExternalLink className="size-3" />
-                      </div>
+                  {/* Checkzinho na direita */}
+                  <div className="shrink-0 self-center pl-1">
+                    {!item.readAt ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void markRead(item);
+                        }}
+                        className="flex size-6 items-center justify-center rounded-full border border-border text-muted-foreground hover:border-primary hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                        title="Marcar como lida"
+                        aria-label="Marcar como lida"
+                      >
+                        <Check className="size-3" />
+                      </button>
+                    ) : (
+                      <span
+                        className="flex size-6 items-center justify-center text-muted-foreground/60"
+                        title="Lida"
+                      >
+                        <CheckCheck className="size-3.5" />
+                      </span>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })
           )}

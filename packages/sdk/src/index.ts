@@ -242,7 +242,18 @@ export class IdeCrmClient {
   async listManagements(): Promise<{ managements: CrmProjectManagement[] }> {
     return this.request("/projects/managements");
   }
-  async listManagementMembers(id: string): Promise<{ members: Array<{ userId: string }> }> {
+  async listManagementMembers(id: string): Promise<{
+    members: Array<{
+      userId: string;
+      role?: string;
+      user?: {
+        id: string;
+        name: string | null;
+        email: string;
+        avatarUrl?: string | null;
+      };
+    }>;
+  }> {
     return this.request(`/projects/managements/${encodeURIComponent(id)}/members`);
   }
 
@@ -250,14 +261,43 @@ export class IdeCrmClient {
     id: string,
     input: { userId?: string; email?: string; role?: string }
   ): Promise<{ ok?: boolean }> {
-    return this.request(
-      `/projects/managements/${encodeURIComponent(id)}/members`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      },
-      true
-    );
+    try {
+      return await this.request(
+        `/projects/managements/${encodeURIComponent(id)}/members`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true
+      );
+    } catch (err) {
+      // Fallback 1: se rota direta com id na URL falhar, tentar na rota /projects/members com managementId
+      try {
+        return await this.request(
+          `/projects/members`,
+          {
+            method: "POST",
+            body: JSON.stringify({ managementId: id, ...input }),
+          },
+          true
+        );
+      } catch {
+        // Fallback 2: tentar com memberId
+        if (input.userId) {
+          try {
+            return await this.request(
+              `/projects/managements/${encodeURIComponent(id)}/members`,
+              {
+                method: "POST",
+                body: JSON.stringify({ memberId: input.userId, role: input.role }),
+              },
+              true
+            );
+          } catch {}
+        }
+        throw err;
+      }
+    }
   }
 
   async updateManagementMemberRole(

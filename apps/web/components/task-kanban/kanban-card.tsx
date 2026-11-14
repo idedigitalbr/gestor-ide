@@ -16,6 +16,7 @@ import {
   ALL_CANONICAL_PRIORITIES,
 } from "../task-priority-icon";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { MemberAvatar } from "@/components/member-avatar-group";
 import { formatDateDeterministic } from "@/lib/initial-data";
 import {
   Clock,
@@ -402,16 +403,12 @@ export function KanbanCard({
           )}
 
           {task.assignee ? (
-            <div
-              className="w-5 h-5 rounded-full border border-border bg-secondary text-secondary-foreground overflow-hidden flex items-center justify-center text-[10px] font-semibold ml-0.5 shrink-0"
-              title={`Atribuído a ${task.assignee}`}
-            >
-              <MemberAvatarContent
-                name={task.assignee}
-                src={task.assigneeAvatar}
-                initialsLength={1}
-              />
-            </div>
+            <MemberAvatar
+              name={task.assignee}
+              src={task.assigneeAvatar}
+              sizeClass="size-5 text-[8px]"
+              className="ml-0.5 border-border"
+            />
           ) : isAgentTask ? (
             <div
               className="w-5 h-5 rounded-full border border-teal-500/30 bg-teal-500/15 text-teal-700 dark:text-teal-400 flex items-center justify-center text-[10px] font-semibold ml-0.5 shrink-0"
