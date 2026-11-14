@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskPriority, TaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
 import {
@@ -51,6 +52,8 @@ import { Button } from "@/components/ui/button";
 
 interface KanbanCardProps {
   task: Task;
+  members?: CrmProjectMember[];
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onOpenDetails: (task: Task) => void;
@@ -62,6 +65,8 @@ const PRIORITIES = ALL_CANONICAL_PRIORITIES;
 
 export function KanbanCard({
   task,
+  members = [],
+  onChangeAssignee,
   onUpdateTask,
   onDeleteTask,
   onOpenDetails,
@@ -95,6 +100,20 @@ export function KanbanCard({
     if (newPriority !== task.priority) {
       onUpdateTask({ ...task, priority: newPriority });
     }
+  }
+
+  function handleSetAssignee(member: CrmProjectMember | null) {
+    if (onChangeAssignee && !task.id.startsWith("task-")) {
+      void onChangeAssignee(task.id, member);
+      return;
+    }
+    onUpdateTask({
+      ...task,
+      assigneeId: member?.userId,
+      assigneeIds: member ? [member.userId] : [],
+      assignee: member?.user.name || member?.user.email || undefined,
+      assigneeAvatar: member?.user.avatarUrl || undefined,
+    });
   }
 
   function handleDeleteFromMenu(e: React.MouseEvent | React.KeyboardEvent) {
@@ -219,6 +238,59 @@ export function KanbanCard({
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+
+              {members.length > 0 && (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2 cursor-pointer">
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Atribuir responsável</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-52 max-h-64 overflow-y-auto bg-card border-border shadow-md">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSetAssignee(null);
+                      }}
+                      className="justify-between cursor-pointer text-xs"
+                    >
+                      <span>Sem responsável</span>
+                      {!task.assigneeId && !task.assignee && (
+                        <Check className="w-3.5 h-3.5 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-border" />
+                    {members.map((member) => {
+                      const isSelected = task.assigneeId === member.userId;
+                      return (
+                        <DropdownMenuItem
+                          key={member.userId}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetAssignee(member);
+                          }}
+                          className="justify-between cursor-pointer text-xs gap-2"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="w-4 h-4 rounded-full bg-muted overflow-hidden flex items-center justify-center text-[9px] font-semibold shrink-0">
+                              <MemberAvatarContent
+                                name={member.user.name || member.user.email}
+                                src={member.user.avatarUrl}
+                                initialsLength={1}
+                              />
+                            </span>
+                            <span className="truncate">
+                              {member.user.name || member.user.email}
+                            </span>
+                          </span>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                          )}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              )}
 
               <DropdownMenuSeparator className="bg-border" />
 

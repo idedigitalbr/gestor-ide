@@ -1,6 +1,7 @@
 "use client";
 
 import React, {
+  useEffect,
   useState,
   useMemo,
   forwardRef,
@@ -98,6 +99,9 @@ interface TaskModalProps {
   onClose: () => void;
   task: Task | null;
   syncError?: string | null;
+  remoteConflictWarning?: boolean;
+  onReloadRemote?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   currentUser?: CrmUserProfile | null;
   members?: CrmProjectMember[];
   onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
@@ -119,6 +123,9 @@ interface TaskModalProps {
 interface TaskModalContentProps {
   task: Task | null;
   syncError?: string | null;
+  remoteConflictWarning?: boolean;
+  onReloadRemote?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   currentUser?: CrmUserProfile | null;
   members?: CrmProjectMember[];
   onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
@@ -303,6 +310,9 @@ const TaskModalContent = forwardRef<
   {
     task,
     syncError,
+    remoteConflictWarning = false,
+    onReloadRemote,
+    onDirtyChange,
     currentUser = null,
     members = [],
     onChangeAssignee,
@@ -422,6 +432,23 @@ const TaskModalContent = forwardRef<
   const activeComments = isEditing && onAddComment ? task?.comments ?? [] : localComments;
 
   const [newCommentText, setNewCommentText] = useState("");
+
+  const isDirty = Boolean(
+    isEditingTitle ||
+      isEditingSubtitle ||
+      title !== defaultTitle ||
+      subtitle !== defaultSubtitle ||
+      description !== defaultDescription ||
+      Boolean(newCommentText.trim()) ||
+      Boolean(newChecklistTitle.trim())
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [isDirty, onDirtyChange]);
 
   const actorName = currentUser?.name || currentUser?.email || "Você";
   const mentionTargetName =
@@ -777,6 +804,22 @@ const TaskModalContent = forwardRef<
         {subtitle.trim() || "Detalhes e configurações da tarefa"}
       </DialogDescription>
       {syncError && <div role="alert" className="m-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">{syncError}</div>}
+      {remoteConflictWarning && (
+        <div role="status" className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-secondary/70 px-3 py-2 text-xs text-secondary-foreground">
+          <span>Esta tarefa foi atualizada no IDE CRM enquanto você editava. Suas alterações locais foram preservadas.</span>
+          {onReloadRemote && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReloadRemote}
+              className="h-7 px-2.5 text-xs cursor-pointer"
+            >
+              Recarregar versão do CRM
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* =================================================================== */}
       {/* 1. TOP HEADER BAR                                                   */}
@@ -2599,6 +2642,9 @@ export function TaskModal(props: TaskModalProps) {
             onClose={props.onClose}
             task={props.task}
             syncError={props.syncError}
+            remoteConflictWarning={props.remoteConflictWarning}
+            onReloadRemote={props.onReloadRemote}
+            onDirtyChange={props.onDirtyChange}
             currentUser={props.currentUser}
             members={props.members}
             onChangeAssignee={props.onChangeAssignee}

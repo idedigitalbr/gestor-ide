@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
+import { ideCrmClient } from "@gestor-ide/sdk";
 import {
   Folder,
   CheckCircle2,
@@ -11,10 +12,12 @@ import {
   Shield,
   ArrowLeft,
   ArrowRight,
+  Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { MembersDialog, type TeamMemberItem } from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
   PROJECT_STATUS_LABELS,
@@ -29,6 +32,10 @@ interface ManagementProjectsViewProps {
   management: CrmProjectManagement;
   projects: CrmProject[];
   tasks: Task[];
+  isConnectedCrm?: boolean;
+  canWrite?: boolean;
+  canManageMembers?: boolean;
+  onCreateProject?: () => void;
   onBack?: () => void;
   onSelectProject: (projectId: string) => void;
 }
@@ -47,15 +54,83 @@ export function ManagementProjectsView({
   management,
   projects,
   tasks,
+  isConnectedCrm = false,
+  canWrite = true,
+  canManageMembers = false,
+  onCreateProject,
   onBack,
   onSelectProject,
 }: ManagementProjectsViewProps) {
-
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const [remoteMemberIds, setRemoteMemberIds] = useState<string[] | null>(null);
 
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
     return projects.filter((p) => p.projectManagementId === management.id);
   }, [projects, management.id]);
+
+  const resolvedMembers = useMemo<TeamMemberItem[]>(() => {
+    const byId = new Map<string, TeamMemberItem>();
+    for (const m of management.members ?? []) {
+      const uid = m.userId || m.user?.id;
+      if (!uid) continue;
+      byId.set(uid, {
+        userId: uid,
+        name: m.user?.name,
+        email: m.user?.email,
+        avatarUrl: m.user?.avatarUrl,
+        role: m.role,
+      });
+    }
+    for (const proj of managementProjects) {
+      for (const m of proj.members ?? []) {
+        const uid = m.userId || m.user?.id;
+        if (!uid) continue;
+        const existing = byId.get(uid);
+        if (!existing) {
+          byId.set(uid, {
+            userId: uid,
+            name: m.user?.name,
+            email: m.user?.email,
+            avatarUrl: m.user?.avatarUrl,
+            role: m.role,
+          });
+        } else if (!existing.name && m.user?.name) {
+          byId.set(uid, {
+            ...existing,
+            name: m.user.name,
+            email: existing.email ?? m.user.email,
+            avatarUrl: existing.avatarUrl ?? m.user.avatarUrl,
+          });
+        }
+      }
+    }
+    for (const uid of remoteMemberIds ?? []) {
+      if (!byId.has(uid)) {
+        byId.set(uid, { userId: uid });
+      }
+    }
+    return Array.from(byId.values());
+  }, [management.members, managementProjects, remoteMemberIds]);
+
+  async function handleOpenMembersDialog() {
+    setMembersDialogOpen(true);
+    setMembersError(null);
+    if (!isConnectedCrm) return;
+    setLoadingMembers(true);
+    try {
+      const res = await ideCrmClient.listManagementMembers(management.id);
+      setRemoteMemberIds((res.members ?? []).map((m) => m.userId).filter(Boolean));
+    } catch (err) {
+      setMembersError(
+        err instanceof Error ? err.message : "Não foi possível atualizar a lista de membros."
+      );
+    } finally {
+      setLoadingMembers(false);
+    }
+  }
 
   // Contadores KPI
   const completedProjectsCount = useMemo(() => {
@@ -245,8 +320,18 @@ export function ManagementProjectsView({
               </div>
             </div>
 
-            <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
+            <div className="pt-3 border-t border-border flex items-center justify-between text-xs gap-2">
               <span className="text-muted-foreground text-[11px]">Gestão integrada</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleOpenMembersDialog()}
+                className="h-7 px-2.5 text-[11px] gap-1.5 cursor-pointer"
+              >
+                <Users className="w-3 h-3" />
+                <span>Ver membros</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -329,6 +414,17 @@ export function ManagementProjectsView({
             <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-4">
               Nenhum projeto corresponde aos filtros aplicados ou ainda não há projetos cadastrados.
             </p>
+            {onCreateProject && canWrite && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onCreateProject}
+                className="h-8 gap-1.5 text-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Novo projeto</span>
+              </Button>
+            )}
           </div>
         ) : viewMode === "cards" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -527,6 +623,17 @@ export function ManagementProjectsView({
           </div>
         )}
       </div>
+
+      <MembersDialog
+        open={membersDialogOpen}
+        onOpenChange={setMembersDialogOpen}
+        title={`Membros de ${management.name}`}
+        description="Integrantes vinculados a esta gestão e aos seus projetos no IDE CRM."
+        members={resolvedMembers}
+        loading={loadingMembers}
+        error={membersError}
+        canManageMembers={canManageMembers}
+      />
     </div>
   );
 }

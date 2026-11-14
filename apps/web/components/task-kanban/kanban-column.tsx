@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskStatus } from "@/types/task";
 import { KanbanCard } from "./kanban-card";
 import { StatusIcon, getStatusDefinition } from "../task-status-icon";
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 interface KanbanColumnProps {
   status: TaskStatus;
   tasks: Task[];
+  members?: CrmProjectMember[];
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   isCollapsed?: boolean;
   onToggleCollapse: () => void;
   onHideColumn: () => void;
@@ -24,6 +27,8 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   status,
   tasks,
+  members = [],
+  onChangeAssignee,
   isCollapsed = false,
   onToggleCollapse,
   onHideColumn,
@@ -187,6 +192,8 @@ export function KanbanColumn({
           <KanbanCard
             key={task.id}
             task={task}
+            members={members}
+            onChangeAssignee={onChangeAssignee}
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
             onOpenDetails={onOpenDetails}

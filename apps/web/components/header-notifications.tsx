@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck, Clock3 } from "lucide-react";
 import type { CrmNotification } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
@@ -12,12 +12,16 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
   const [count, setCount] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const pendingIds = useRef(new Set<string>());
+  const revision = useRef(0);
 
   const load = useCallback(async () => {
     if (!connected) return;
     setLoading(true);
+    const startedAt = revision.current;
     try {
       const result = await ideCrmClient.listNotifications();
+      if (startedAt !== revision.current) return;
       setItems(result.notifications);
       setCount(result.unreadCount);
       setError("");
@@ -38,14 +42,22 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
   }, [connected, load]);
 
   async function markRead(item: CrmNotification) {
-    if (item.readAt) return;
+    if (item.readAt || pendingIds.current.has(item.id)) return;
+    pendingIds.current.add(item.id);
     try {
       await ideCrmClient.markNotificationRead(item.id);
-      await load();
+      revision.current += 1;
+      setItems((current) => current.map((notification) =>
+        notification.id === item.id ? { ...notification, readAt: new Date().toISOString() } : notification
+      ));
+      setCount((current) => Math.max(0, current - 1));
+      setError("");
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Não foi possível atualizar a notificação."
       );
+    } finally {
+      pendingIds.current.delete(item.id);
     }
   }
 
@@ -76,14 +88,11 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
           <h2 className="text-sm font-semibold">Notificações</h2>
           <p className="text-xs text-muted-foreground">{count} não lidas</p>
         </div>
+        {error && <p role="alert" className="p-4 text-sm text-destructive">{error}</p>}
         <div className="max-h-96 overflow-y-auto">
           {!connected ? (
             <p className="p-4 text-sm text-muted-foreground">
               Conecte-se ao CRM para ver suas notificações.
-            </p>
-          ) : error ? (
-            <p role="alert" className="p-4 text-sm text-destructive">
-              {error}
             </p>
           ) : loading && !items.length ? (
             <p className="p-4 text-sm text-muted-foreground">Carregando...</p>
@@ -95,7 +104,7 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
                 key={item.id}
                 type="button"
                 onClick={() => void markRead(item)}
-                className="flex w-full gap-3 border-b border-border p-3 text-left last:border-0 hover:bg-muted/50"
+                className={`flex w-full gap-3 border-b border-border p-3 text-left last:border-0 hover:bg-muted/50 ${item.readAt ? "opacity-60" : ""}`}
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <CheckCheck className="size-4" />

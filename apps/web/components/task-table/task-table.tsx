@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import type { CrmProjectMember } from "@gestor-ide/core";
 import type {
   Subtask,
@@ -27,6 +27,8 @@ import {
   isTaskContentFilled,
   getItemTypeDefinition,
   getAllowedGroupTypes,
+  hasTaskDetails,
+  isBelowPageOrModule,
   normalizeItemType,
   type ProjectTaskItemType,
 } from "@/lib/task-item-type";
@@ -51,6 +53,7 @@ import {
 } from "lucide-react";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import {
+  canBatchDropTasks,
   canReparentTask,
   type TaskDropMode,
 } from "@/lib/task-hierarchy";
@@ -125,6 +128,12 @@ interface TaskTableProps {
     targetStatus: TaskStatus,
     options?: { mode?: TaskDropMode; customGroup?: string }
   ) => void;
+  onBatchReorderTasks?: (
+    draggedTaskIds: string[],
+    targetTaskId: string | null,
+    targetStatus: TaskStatus,
+    options?: { mode?: TaskDropMode; customGroup?: string }
+  ) => void;
   groupBy?: TaskGroupBy;
   groupOrder?: GroupOrder;
   isFieldsModalOpen?: boolean;
@@ -135,10 +144,16 @@ interface TaskTableProps {
   projectId?: string | null;
   projectMembers?: CrmProjectMember[];
   membersLoaded?: boolean;
+  canCreate?: boolean;
+  connected?: boolean;
 }
 
 const TABLE_GROUPS: CanonicalTaskStatus[] = ALL_CANONICAL_STATUSES;
 const PRIORITIES: TaskPriority[] = ALL_CANONICAL_PRIORITIES;
+const TREE_INDENT = 36;
+// Task rows reserve space for the drag handle, selection and expand controls.
+// Checklist rows do not have those controls, so they need the same offset explicitly.
+const CHECKLIST_CONTROL_OFFSET = 76;
 
 const PRESET_TAGS = [
   "geral",
@@ -190,6 +205,7 @@ export function TaskTable({
   onAddTask,
   onUpdateSubtasks,
   onReorderTasks,
+  onBatchReorderTasks,
   groupBy = "none",
   groupOrder = "asc",
   isFieldsModalOpen: externalFieldsModalOpen,
@@ -200,7 +216,64 @@ export function TaskTable({
   projectId,
   projectMembers = [],
   membersLoaded = false,
+  canCreate = true,
+  connected = false,
 }: TaskTableProps) {
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const defaultWidth = (id: string) => id === "title" ? 380 : id === "status" ? 208 : id === "dueDate" ? 176 : id === "assignee" ? 144 : 112;
+  const columnWidth = (id: string) => columnWidths[id] ?? defaultWidth(id);
+  const setColumnWidth = (id: string, width: number) => setColumnWidths((previous) => ({ ...previous, [id]: Math.max(id === "title" ? 180 : 72, Math.min(1000, Math.round(width))) }));
+
+  function resizeHandle(id: string, label: string) {
+    return <span
+      role="separator"
+      aria-label={`Redimensionar coluna ${label}`}
+      aria-orientation="vertical"
+      tabIndex={0}
+      className="absolute -right-1 top-0 z-10 h-full w-2 cursor-col-resize touch-none after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:bg-primary after:opacity-0 hover:after:opacity-100 focus-visible:after:opacity-100"
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const target = event.currentTarget;
+        const startX = event.clientX;
+        const startWidth = id === "title" ? target.parentElement!.getBoundingClientRect().width : columnWidth(id);
+        target.setPointerCapture(event.pointerId);
+        target.onpointermove = (move) => setColumnWidth(id, startWidth + move.clientX - startX);
+        const stop = () => { target.onpointermove = null; target.onpointerup = null; target.onpointercancel = null; };
+        target.onpointerup = stop;
+        target.onpointercancel = stop;
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const cells = tableRef.current?.querySelectorAll<HTMLElement>(`[data-resize-column="${CSS.escape(id)}"]`) ?? [];
+        let width = 0;
+        cells.forEach((cell) => {
+          const content = cell.firstElementChild as HTMLElement | null;
+          width = Math.max(width, (content?.scrollWidth ?? 0) + 32);
+          const label = cell.querySelector<HTMLElement>("[data-column-label]");
+          if (label) width = Math.max(width, label.scrollWidth + 52);
+        });
+        if (id === "title") {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          if (context) {
+            context.font = getComputedStyle(tableRef.current!).font;
+            for (const task of tasks) width = Math.max(width, context.measureText(task.title).width + 180);
+          }
+        }
+        setColumnWidth(id, width || defaultWidth(id));
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          setColumnWidth(id, columnWidth(id) + (event.key === "ArrowRight" ? 10 : -10));
+        }
+      }}
+    />;
+  }
+
   // Controle de colunas e ordenação rápida
   const [columns, setColumns] = useState<TableColumnConfig[]>(DEFAULT_COLUMNS);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -325,6 +398,8 @@ export function TaskTable({
   // Grupos e tarefas expandidas
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [addingItemParentId, setAddingItemParentId] = useState<string | null>(null);
+  const [newItemTitle, setNewItemTitle] = useState("");
 
   // Multi-seleção de linhas e confirmação de exclusão
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -354,17 +429,74 @@ export function TaskTable({
   const [quickTag, setQuickTag] = useState<string>("geral");
 
   // Criação e edição inline de subtarefas / checklists
-  const [addingSubtaskForId, setAddingSubtaskForId] = useState<string | null>(null);
-  const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
-  const [editingSubtaskKey, setEditingSubtaskKey] = useState<string | null>(null);
+  const [editingChecklist, setEditingChecklist] = useState<{ taskId: string; subtaskId: string } | null>(null);
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
 
   function toggleGroup(groupId: string) {
     setCollapsedGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
   }
 
-  function toggleExpandTask(taskId: string) {
-    setExpandedTasks((prev) => ({ ...prev, [taskId]: !prev[taskId] }));
+  function toggleExpandTask(taskId: string, currentlyExpanded: boolean) {
+    setExpandedTasks((prev) => ({ ...prev, [taskId]: !currentlyExpanded }));
+  }
+
+  function renderAddItem(parent: Task | null, depth: number) {
+    if (!canCreate) return null;
+    const key = parent?.id ?? "__root__";
+    const isSubitem = Boolean(parent && (normalizeItemType(parent.itemType) === "PAGE" || normalizeItemType(parent.itemType) === "MODULE" || isBelowPageOrModule(parent.parentTaskId, tasks)));
+    const isPendingParent = Boolean(parent && connected && parent.id.startsWith("task-"));
+    if (addingItemParentId === key) {
+      return (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const title = newItemTitle.trim();
+            if (!title || isPendingParent) return;
+            onAddTask({
+              title,
+              status: "PENDENTE",
+              priority: "Normal",
+              description: "",
+              itemType: "TASK",
+              ...(parent ? { parentTaskId: parent.id, customGroup: parent.customGroup } : {}),
+            });
+            setNewItemTitle("");
+          }}
+          className="flex items-center gap-2 border-b border-border/50 py-2 pr-3"
+          style={{ paddingLeft: `${depth * TREE_INDENT + 14 + (parent ? CHECKLIST_CONTROL_OFFSET : 0)}px` }}
+        >
+          <Input
+            autoFocus
+            aria-label={parent ? `Nome do ${isSubitem ? "subitem" : "item"} de ${parent.title}` : "Nome do novo item"}
+            placeholder={isSubitem ? "Nome do novo subitem..." : "Nome do novo item..."}
+            value={newItemTitle}
+            onChange={(event) => setNewItemTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setAddingItemParentId(null);
+                setNewItemTitle("");
+              }
+            }}
+            className="h-8 max-w-md text-xs"
+          />
+          <Button type="submit" size="sm" className="h-8 text-xs">Adicionar</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setAddingItemParentId(null); setNewItemTitle(""); }}>Cancelar</Button>
+        </form>
+      );
+    }
+    return (
+      <button
+        type="button"
+        disabled={isPendingParent}
+        title={isPendingParent ? "Aguarde o item ser salvo no CRM" : undefined}
+        onClick={() => { setNewItemTitle(""); setAddingItemParentId(key); }}
+        className="flex h-11 w-full items-center gap-2 pr-3 text-left text-xs text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ paddingLeft: `${depth * TREE_INDENT + 14 + (parent ? CHECKLIST_CONTROL_OFFSET : 0)}px` }}
+      >
+        <Plus className="size-4 shrink-0" />
+        {isSubitem ? "Novo subitem" : "Novo item"}
+      </button>
+    );
   }
 
   function toggleSelectTask(taskId: string) {
@@ -408,9 +540,36 @@ export function TaskTable({
     setEditingTaskId(null);
   }
 
+  function getActiveDraggedIds(primaryId: string | null): string[] {
+    if (!primaryId) return [];
+    if (selectedIds.has(primaryId) && selectedIds.size > 1) {
+      return Array.from(selectedIds);
+    }
+    return [primaryId];
+  }
+
+  function extractDraggedIdsFromEvent(e: React.DragEvent, fallbackPrimaryId: string | null): string[] {
+    const rawBatch = e.dataTransfer.getData("application/x-gestor-task-ids");
+    if (rawBatch) {
+      try {
+        const parsed = JSON.parse(rawBatch) as unknown;
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
+          if (valid.length > 0) return valid;
+        }
+      } catch {
+        // fallback abaixo
+      }
+    }
+    const sourceId = fallbackPrimaryId || e.dataTransfer.getData("text/plain");
+    return getActiveDraggedIds(sourceId || null);
+  }
+
   function handleDragStart(e: React.DragEvent, taskId: string) {
+    const batchIds = getActiveDraggedIds(taskId);
     setDraggedTaskId(taskId);
     e.dataTransfer.setData("text/plain", taskId);
+    e.dataTransfer.setData("application/x-gestor-task-ids", JSON.stringify(batchIds));
     e.dataTransfer.effectAllowed = "move";
   }
 
@@ -423,14 +582,17 @@ export function TaskTable({
   function handleDragOverRow(e: React.DragEvent, targetTask: Task) {
     e.preventDefault();
     e.stopPropagation();
-    if (!draggedTaskId || draggedTaskId === targetTask.id) return;
+    const activeIds = getActiveDraggedIds(draggedTaskId);
+    if (activeIds.length === 0 || activeIds.includes(targetTask.id)) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const relY = e.clientY - rect.top;
-    const nextMode: "before" | "nest" =
+    const wantsNest =
       relY >= rect.height * 0.42 &&
-      canReparentTask(tasks, draggedTaskId, targetTask.id)
-        ? "nest"
-        : "before";
+      canBatchDropTasks(tasks, activeIds, targetTask.id, "nest");
+    const nextMode: "before" | "nest" = wantsNest ? "nest" : "before";
+    if (nextMode === "before" && !canBatchDropTasks(tasks, activeIds, targetTask.id, "before")) {
+      return;
+    }
     setDragOverGroup(null);
     setDragOverState((prev) =>
       prev?.taskId === targetTask.id && prev.mode === nextMode
@@ -446,19 +608,26 @@ export function TaskTable({
   ) {
     e.preventDefault();
     e.stopPropagation();
-    const sourceId = draggedTaskId || e.dataTransfer.getData("text/plain");
+    const draggedIds = extractDraggedIdsFromEvent(e, draggedTaskId);
     const dropMode =
       dragOverState?.taskId === targetTask.id ? dragOverState.mode : "before";
     setDraggedTaskId(null);
     setDragOverState(null);
     setDragOverGroup(null);
 
-    if (!sourceId || sourceId === targetTask.id) return;
+    if (draggedIds.length === 0 || draggedIds.includes(targetTask.id)) return;
 
     if (dropMode === "nest") {
       setExpandedTasks((prev) => ({ ...prev, [targetTask.id]: true }));
     }
 
+    if (draggedIds.length > 1 && onBatchReorderTasks) {
+      onBatchReorderTasks(draggedIds, targetTask.id, targetStatus, { mode: dropMode });
+      setSelectedIds(new Set());
+      return;
+    }
+
+    const sourceId = draggedIds[0]!;
     if (onReorderTasks) {
       onReorderTasks(sourceId, targetTask.id, targetStatus, { mode: dropMode });
     } else {
@@ -479,13 +648,23 @@ export function TaskTable({
   ) {
     e.preventDefault();
     e.stopPropagation();
-    const sourceId = draggedTaskId || e.dataTransfer.getData("text/plain");
+    const draggedIds = extractDraggedIdsFromEvent(e, draggedTaskId);
     setDraggedTaskId(null);
     setDragOverState(null);
     setDragOverGroup(null);
 
-    if (!sourceId) return;
+    if (draggedIds.length === 0) return;
 
+    if (draggedIds.length > 1 && onBatchReorderTasks) {
+      onBatchReorderTasks(draggedIds, null, targetStatus, {
+        mode: "root",
+        customGroup,
+      });
+      setSelectedIds(new Set());
+      return;
+    }
+
+    const sourceId = draggedIds[0]!;
     if (onReorderTasks) {
       onReorderTasks(sourceId, null, targetStatus, {
         mode: "root",
@@ -665,30 +844,8 @@ export function TaskTable({
   // Subtarefas e Checklists Inline
   function handleOpenAddSubtask(task: Task) {
     setExpandedTasks((prev) => ({ ...prev, [task.id]: true }));
-    setAddingSubtaskForId(task.id);
-    setNewSubtaskTitle("");
-  }
-
-  function handleSaveNewSubtask(e: React.FormEvent, task: Task) {
-    e.preventDefault();
-    const trimmed = newSubtaskTitle.trim();
-    if (!trimmed) return;
-
-    const current = task.subtasks ?? [];
-    const newItem: Subtask = {
-      id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      title: trimmed,
-      completed: false,
-    };
-    const next = [...current, newItem];
-
-    if (onUpdateSubtasks) {
-      onUpdateSubtasks(task.id, next);
-    } else {
-      onUpdateTask({ ...task, subtasks: next });
-    }
-
-    setNewSubtaskTitle("");
+    setNewItemTitle("");
+    setAddingItemParentId(task.id);
   }
 
   function handleToggleSubtask(task: Task, subtaskId: string) {
@@ -705,7 +862,7 @@ export function TaskTable({
 
   function handleSaveSubtaskTitle(task: Task, subtaskId: string) {
     const trimmed = editingSubtaskTitle.trim();
-    setEditingSubtaskKey(null);
+    setEditingChecklist(null);
     if (!trimmed) return;
 
     const current = task.subtasks ?? [];
@@ -729,40 +886,6 @@ export function TaskTable({
     } else {
       onUpdateTask({ ...task, subtasks: next });
     }
-  }
-
-  function handleUpdateSubtaskMeta(
-    task: Task,
-    subtaskId: string,
-    updates: Partial<Subtask>
-  ) {
-    const current = task.subtasks ?? [];
-    const next = current.map((s) =>
-      s.id === subtaskId ? { ...s, ...updates } : s
-    );
-    if (onUpdateSubtasks) {
-      onUpdateSubtasks(task.id, next);
-    } else {
-      onUpdateTask({ ...task, subtasks: next });
-    }
-  }
-
-  function handleAddChildSubtask(task: Task, parentSubtaskId: string) {
-    const current = task.subtasks ?? [];
-    const newChild: Subtask = {
-      id: `st-child-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title: "Novo sub-item",
-      completed: false,
-      parentId: parentSubtaskId,
-    };
-    const next = [...current, newChild];
-    if (onUpdateSubtasks) {
-      onUpdateSubtasks(task.id, next);
-    } else {
-      onUpdateTask({ ...task, subtasks: next });
-    }
-    setEditingSubtaskKey(`${task.id}:${newChild.id}`);
-    setEditingSubtaskTitle(newChild.title);
   }
 
   function handleDeleteWithConfirm(task: Task) {
@@ -995,9 +1118,10 @@ export function TaskTable({
   ): React.ReactNode {
     const isEditing = editingTaskId === task.id;
     const isSelected = selectedIds.has(task.id);
-    const isDragged = draggedTaskId === task.id;
+    const activeDraggedIds = getActiveDraggedIds(draggedTaskId);
+    const isDragged = activeDraggedIds.includes(task.id);
     const isDragTarget =
-      dragOverState?.taskId === task.id && draggedTaskId !== task.id;
+      dragOverState?.taskId === task.id && !activeDraggedIds.includes(task.id);
     const isDragBefore = isDragTarget && dragOverState?.mode === "before";
     const isDragNest = isDragTarget && dragOverState?.mode === "nest";
 
@@ -1010,13 +1134,11 @@ export function TaskTable({
     const allowedItemTypes: ProjectTaskItemType[] = ["TASK", ...getAllowedGroupTypes(parentType)];
     const subtasks = task.subtasks ?? [];
     const hasDescendants = childTasks.length > 0 || subtasks.length > 0;
+    const isWorkItem = isBelowPageOrModule(task.parentTaskId, tasks);
+    const isSubtask = isWorkItem && (hasTaskDetails(task) || childTasks.length > 0);
+    const isCompleted = normalizeTaskStatus(task.status) === "CONCLUÍDO";
 
-    const isTaskExpanded =
-      subtaskMode === "expanded"
-        ? true
-        : subtaskMode === "separate"
-        ? false
-        : Boolean(expandedTasks[task.id]);
+    const isTaskExpanded = expandedTasks[task.id] ?? (subtaskMode === "expanded");
 
     const itemDef = getItemTypeDefinition(task.itemType);
     const isSpecial = normalizeItemType(task.itemType) !== "TASK" || childTasks.length > 0;
@@ -1090,10 +1212,10 @@ export function TaskTable({
             </button>
 
             {/* Seta para expandir / recolher descendentes */}
-            {hasDescendants ? (
+            {(hasDescendants || canCreate) ? (
               <button
                 type="button"
-                onClick={() => toggleExpandTask(task.id)}
+                onClick={() => toggleExpandTask(task.id, isTaskExpanded)}
                 aria-expanded={isTaskExpanded}
                 aria-label={`${isTaskExpanded ? "Recolher" : "Expandir"} ${task.title}`}
                 className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
@@ -1113,7 +1235,16 @@ export function TaskTable({
             )}
 
             {/* Ícone e Seletor do Tipo Especial da Tarefa */}
-            <TaskItemTypeSelector
+            {isWorkItem ? (
+              <button
+                type="button"
+                aria-label={`${isCompleted ? "Reabrir" : "Concluir"} ${isSubtask ? "subtarefa" : "checklist"} ${task.title}`}
+                onClick={() => onUpdateTask({ ...task, status: isCompleted ? "PENDENTE" : "CONCLUÍDO" })}
+                className={cn("flex size-5 shrink-0 items-center justify-center border border-border text-primary-foreground hover:border-primary", isSubtask ? "rounded-full" : "rounded-sm", isCompleted && "border-primary bg-primary")}
+              >
+                {isCompleted && <Check className="size-3" />}
+              </button>
+            ) : <TaskItemTypeSelector
               value={task.itemType ?? "TASK"}
               allowedTypes={allowedItemTypes}
               hasContent={isTaskContentFilled(task.description)}
@@ -1122,7 +1253,7 @@ export function TaskTable({
               onChange={(newType) =>
                 onUpdateTask({ ...task, itemType: newType })
               }
-            />
+            />}
 
             {/* Edição Inline do Título ou Visualização com Progresso */}
             {isEditing ? (
@@ -1175,11 +1306,13 @@ export function TaskTable({
                 </button>
 
                 {/* Progresso Segmentado Imediatamente Após o Título */}
-                <TaskSegmentedProgress task={task} allTasks={tasks} />
+                {!isWorkItem && <TaskSegmentedProgress task={task} allTasks={tasks} />}
 
                 {isDragNest && (
                   <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                    Soltar como subtarefa
+                    {activeDraggedIds.length > 1
+                      ? `Soltar ${activeDraggedIds.length} tarefas como subtarefa`
+                      : "Soltar como subtarefa"}
                   </span>
                 )}
 
@@ -1191,6 +1324,7 @@ export function TaskTable({
                   <button
                     type="button"
                     onClick={() => handleOpenAddSubtask(task)}
+                    disabled={!canCreate || (connected && task.id.startsWith("task-"))}
                     className="w-6 h-6 rounded border border-border bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                     title="Adicionar subtarefa / checklist"
                     aria-label="Adicionar subtarefa"
@@ -1231,7 +1365,7 @@ export function TaskTable({
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  <button
+                  {!isWorkItem && <button
                     type="button"
                     onClick={() => handleStartEditing(task)}
                     className="w-6 h-6 rounded border border-border bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
@@ -1239,7 +1373,7 @@ export function TaskTable({
                     aria-label="Renomear tarefa"
                   >
                     <Pencil className="w-3 h-3" />
-                  </button>
+                  </button>}
                 </div>
               </div>
             )}
@@ -1252,7 +1386,7 @@ export function TaskTable({
               .map((col) => {
                 if (col.id === "status") {
                   return (
-                    <div key={col.id} className="w-52 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
+                    <div key={col.id} data-resize-column={col.id} style={{ width: columnWidth(col.id) }} className="flex shrink-0 items-center overflow-hidden border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskSolidStatusBadge
                         status={task.status}
                         onChangeStatus={(next) =>
@@ -1265,7 +1399,7 @@ export function TaskTable({
 
                 if (col.id === "dueDate") {
                   return (
-                    <div key={col.id} className="w-44 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
+                    <div key={col.id} data-resize-column={col.id} style={{ width: columnWidth(col.id) }} className="flex shrink-0 items-center overflow-hidden border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskTimelineDateCell
                         startDate={task.startDate}
                         dueDate={task.dueDate}
@@ -1284,7 +1418,7 @@ export function TaskTable({
 
                 if (col.id === "assignee") {
                   return (
-                    <div key={col.id} className="w-36 flex items-center border-l border-muted-foreground/40 pl-3 pr-2">
+                    <div key={col.id} data-resize-column={col.id} style={{ width: columnWidth(col.id) }} className="flex shrink-0 items-center overflow-hidden border-l border-muted-foreground/40 pl-3 pr-2">
                       <TaskAssigneeCell
                         assignee={task.assignee}
                         assigneeId={task.assigneeId}
@@ -1303,7 +1437,7 @@ export function TaskTable({
                 return (
                   <div
                     key={col.id}
-                    className="w-28 flex items-center border-l border-muted-foreground/40 pl-3 pr-2 text-xs text-muted-foreground/50"
+                    data-resize-column={col.id} style={{ width: columnWidth(col.id) }} className="flex shrink-0 items-center overflow-hidden border-l border-muted-foreground/40 pl-3 pr-2 text-xs text-muted-foreground/50"
                   >
                     —
                   </div>
@@ -1332,14 +1466,15 @@ export function TaskTable({
                   >
                     Abrir detalhes
                   </DropdownMenuItem>
-                  <DropdownMenuItem
+                  {!isWorkItem && <DropdownMenuItem
                     onClick={() => handleStartEditing(task)}
                     className="text-xs cursor-pointer hover:bg-accent"
                   >
                     Renomear inline
-                  </DropdownMenuItem>
+                  </DropdownMenuItem>}
                   <DropdownMenuItem
                     onClick={() => handleOpenAddSubtask(task)}
+                    disabled={!canCreate || (connected && task.id.startsWith("task-"))}
                     className="text-xs cursor-pointer hover:bg-accent"
                   >
                     Adicionar subtarefa
@@ -1359,7 +1494,7 @@ export function TaskTable({
         </div>
 
         {/* Itens Descendentes (Child Tasks e Subtasks) com transição suave */}
-        {(hasDescendants || addingSubtaskForId === task.id) && (
+        {(hasDescendants || canCreate) && (
           <CollapsibleSection open={isTaskExpanded}>
             <div className="relative">
               {hasDescendants && <div aria-hidden="true" className="absolute top-0 bottom-0 w-px bg-border pointer-events-none" style={{ left: `${depth * 36 + 18}px` }} />}
@@ -1372,46 +1507,8 @@ export function TaskTable({
               {subtasks.length > 0 &&
                 renderSubtasksList(task, depth + 1, stripeColor)}
 
-              {/* 3. Form inline para adicionar subelemento */}
-              {addingSubtaskForId === task.id && (
-                <div
-                  className="py-2 pr-3 bg-muted/40 flex items-center gap-2 border-b border-border/50"
-                  style={{ paddingLeft: `${(depth + 1) * 36 + 14}px` }}
-                >
-                  <form
-                    onSubmit={(e) => handleSaveNewSubtask(e, task)}
-                    className="flex items-center gap-2 w-full max-w-xl"
-                  >
-                    <input
-                      autoFocus
-                      type="text"
-                      placeholder="Título do novo subelemento / checklist..."
-                      value={newSubtaskTitle}
-                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") setAddingSubtaskForId(null);
-                      }}
-                      className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="h-7 px-3 text-xs cursor-pointer"
-                    >
-                      Adicionar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAddingSubtaskForId(null)}
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      Cancelar
-                    </Button>
-                  </form>
-                </div>
-              )}
+              {renderAddItem(task, depth + 1)}
+
             </div>
           </CollapsibleSection>
         )}
@@ -1422,17 +1519,16 @@ export function TaskTable({
   // ---------------------------------------------------------------------------
   // Renderizador de Lista de Subtarefas / Checklists
   // ---------------------------------------------------------------------------
-  function renderSubtaskColumns(task: Task, subtask: Subtask) {
+  function renderSubtaskColumns(subtask: Subtask) {
     const status = subtask.completed ? "CONCLUÍDO" : subtask.inProgress ? "FAZENDO AGORA" : "PENDENTE";
     return (
       <div className="flex items-stretch self-stretch shrink-0">
         {columns.filter((column) => !hiddenColumnIds.has(column.id)).map((column) => {
-          const width = column.id === "status" ? "w-52" : column.id === "dueDate" ? "w-44" : column.id === "assignee" ? "w-36" : "w-28";
           return (
-            <div key={column.id} className={cn(width, "flex items-center border-l border-muted-foreground/40 pl-3 pr-2")}>
+            <div key={column.id} data-resize-column={column.id} style={{ width: columnWidth(column.id) }} className="flex shrink-0 items-center overflow-hidden border-l border-muted-foreground/40 pl-3 pr-2">
               {column.id === "status" && <TaskSolidStatusBadge status={status} size="sm" />}
-              {column.id === "dueDate" && <TaskTimelineDateCell dueDate={subtask.dueDate} status={status} onUpdateDates={({ dueDate }) => handleUpdateSubtaskMeta(task, subtask.id, { dueDate: dueDate || undefined })} />}
-              {column.id === "assignee" && <TaskAssigneeCell assignee={subtask.assignee} assigneeAvatar={subtask.assigneeAvatar} members={projectMembers} membersLoaded={membersLoaded} onUpdateAssignee={(assignee, assigneeAvatar) => handleUpdateSubtaskMeta(task, subtask.id, { assignee, assigneeAvatar })} />}
+              {column.id === "dueDate" && <span className="text-muted-foreground">{subtask.dueDate || "—"}</span>}
+              {column.id === "assignee" && <span className="truncate text-muted-foreground">{subtask.assignee || "—"}</span>}
               {column.id !== "status" && column.id !== "dueDate" && column.id !== "assignee" && <span className="text-muted-foreground">—</span>}
             </div>
           );
@@ -1471,23 +1567,21 @@ export function TaskTable({
           isParentOfChildren
       );
 
-      const editKey = `${task.id}:${st.id}`;
-      const isEditingSub = editingSubtaskKey === editKey;
 
       return (
         <React.Fragment key={st.id}>
           <div
             className="flex items-center justify-between h-[46px] pr-3 hover:bg-accent/40 bg-background transition-colors group/subrow relative border-b border-border/40"
-            style={{ paddingLeft: `${depth * 36 + 14}px` }}
+            style={{ paddingLeft: `${depth * TREE_INDENT + 14 + CHECKLIST_CONTROL_OFFSET}px` }}
           >
             {/* Conectores em formato de árvore */}
             <div
               className="absolute top-0 bottom-0 w-px bg-border pointer-events-none"
-              style={{ left: `${(depth - 1) * 36 + 18}px` }}
+              style={{ left: `${(depth - 1) * TREE_INDENT + 18 + CHECKLIST_CONTROL_OFFSET}px` }}
             />
             <div
               className="absolute top-0 w-7 h-1/2 border-b border-l border-border rounded-bl-md pointer-events-none"
-              style={{ left: `${(depth - 1) * 36 + 18}px` }}
+              style={{ left: `${(depth - 1) * TREE_INDENT + 18 + CHECKLIST_CONTROL_OFFSET}px` }}
             />
 
             {/* Lado Esquerdo: Checkbox inteligente + Título */}
@@ -1513,91 +1607,29 @@ export function TaskTable({
                 )}
               </button>
 
-              {/* Título inline */}
-              {isEditingSub ? (
-                <div className="flex items-center gap-1.5 flex-1 max-w-md">
-                  <Input
-                    autoFocus
-                    value={editingSubtaskTitle}
-                    onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter")
-                        handleSaveSubtaskTitle(task, st.id);
-                      else if (e.key === "Escape") setEditingSubtaskKey(null);
-                    }}
-                    className="h-6 text-xs bg-background border-primary text-foreground"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditingSubtaskKey(null)}
-                    className="h-6 px-2 text-[10px] cursor-pointer"
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => handleSaveSubtaskTitle(task, st.id)}
-                    className="h-6 px-2 text-[10px] cursor-pointer"
-                  >
-                    Salvar ↵
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span
-                    onClick={() => {
-                      setEditingSubtaskKey(editKey);
-                      setEditingSubtaskTitle(st.title);
-                    }}
-                    className={cn(
-                      "text-xs truncate cursor-text select-none",
-                      st.completed
-                        ? "line-through text-muted-foreground/60"
-                        : "text-foreground font-normal"
-                    )}
-                  >
-                    {st.title}
-                  </span>
-
-                  {/* Ações no Hover */}
-                  <div className="opacity-0 group-hover/subrow:opacity-100 group-focus-within/subrow:opacity-100 flex items-center gap-1 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => handleAddChildSubtask(task, st.id)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary hover:bg-accent text-secondary-foreground hover:text-accent-foreground transition-colors cursor-pointer"
-                      title="Adicionar sub-item a este checklist"
-                    >
-                      + Item
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingSubtaskKey(editKey);
-                        setEditingSubtaskTitle(st.title);
-                      }}
-                      className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
-                      title="Renomear"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSubtask(task, st.id)}
-                      className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive cursor-pointer"
-                      title="Excluir"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              )}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setEditingChecklist({ taskId: task.id, subtaskId: st.id }); setEditingSubtaskTitle(st.title); }}
+                  className={cn("truncate text-left text-xs hover:text-primary", st.completed ? "line-through text-muted-foreground/60" : "text-foreground")}
+                  title="Abrir detalhes"
+                >
+                  {st.title}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label={`Opções de ${st.title}`} className="rounded p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus:opacity-100 group-hover/subrow:opacity-100"><MoreHorizontal className="size-4" /></button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onSelect={() => { setEditingChecklist({ taskId: task.id, subtaskId: st.id }); setEditingSubtaskTitle(st.title); }}>Abrir detalhes</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => handleDeleteSubtask(task, st.id)} className="text-destructive">Excluir</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
 
             {/* Lado Direito: Metadados alinhados às colunas */}
-            {renderSubtaskColumns(task, st)}
+            {renderSubtaskColumns(st)}
           </div>
 
           {isParentOfChildren && renderSubtasksList(task, depth + 1, stripeColor, st.id)}
@@ -1621,7 +1653,7 @@ export function TaskTable({
 
     return (
       <div className="flex items-center justify-between px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        <div className="flex items-center gap-2 flex-1 min-w-0 pl-7">
+        <div className="relative flex items-center gap-2 flex-1 min-w-0 pl-7">
           <ColumnHeaderCell
             id="title"
             label="Tarefa"
@@ -1633,6 +1665,7 @@ export function TaskTable({
             className="p-0 hover:bg-transparent text-foreground"
           />
           {summaryRoot && <TaskSegmentedProgress task={summaryRoot} allTasks={summaryTasks} />}
+          {resizeHandle("title", "Tarefa")}
         </div>
 
         <div className="flex items-stretch self-stretch shrink-0">
@@ -1641,20 +1674,14 @@ export function TaskTable({
             .map((col, idx, arr) => (
               <div
                 key={col.id}
-                className={cn(
-                  "flex items-center border-l border-muted-foreground/40 pl-3",
-                  col.id === "status"
-                    ? "w-52 pr-2"
-                    : col.id === "dueDate"
-                    ? "w-44 pr-2"
-                    : col.id === "assignee"
-                    ? "w-36 pr-2"
-                    : "w-28 pr-2"
-                )}
+                data-resize-column={col.id}
+                style={{ width: columnWidth(col.id) }}
+                className="relative flex shrink-0 items-center border-l border-muted-foreground/40 pl-3 pr-2"
               >
                 <ColumnHeaderCell
                   id={col.id}
                   label={col.label}
+                  className="min-w-0 flex-1"
                   isSorted={sortColumn === col.id}
                   sortDirection={sortColumn === col.id ? sortDirection : null}
                   isDraggable={true}
@@ -1688,6 +1715,7 @@ export function TaskTable({
                   }}
                   isDragTarget={dragOverColumnId === col.id}
                 />
+                {resizeHandle(col.id, col.label)}
               </div>
             ))}
 
@@ -1733,13 +1761,13 @@ export function TaskTable({
       maxDepth = Math.max(maxDepth, itemDepth);
     }
   }
-  const metadataWidth = columns.filter((column) => !hiddenColumnIds.has(column.id)).reduce((width, column) => width + (column.id === "status" ? 208 : column.id === "dueDate" ? 176 : column.id === "assignee" ? 144 : 112), 32);
+  const metadataWidth = columns.filter((column) => !hiddenColumnIds.has(column.id)).reduce((width, column) => width + columnWidth(column.id), 32);
 
   // ---------------------------------------------------------------------------
   // JSX Principal
   // ---------------------------------------------------------------------------
   return (
-    <div className="w-full bg-background select-none text-xs relative pb-24 p-4 sm:p-6 space-y-4" style={{ minWidth: Math.max(760, metadataWidth + maxDepth * 36 + 280) }}>
+    <div ref={tableRef} className="bg-background select-none text-xs relative pb-24 p-4 sm:p-6 space-y-4" style={{ width: `max(100%, ${metadataWidth + Math.max(columnWidth("title"), maxDepth * TREE_INDENT + 180 + CHECKLIST_CONTROL_OFFSET) + 72}px)` }}>
 
 
       {/* --------------------------------------------------------------------- */}
@@ -1747,7 +1775,10 @@ export function TaskTable({
       {/* --------------------------------------------------------------------- */}
       {groupBy === "none" && naturalGroups && (
         <div className="space-y-6">
-          {draggedTaskId && tasks.find((t) => t.id === draggedTaskId)?.parentTaskId && (
+          {draggedTaskId &&
+            getActiveDraggedIds(draggedTaskId).some((id) =>
+              Boolean(tasks.find((t) => t.id === id)?.parentTaskId)
+            ) && (
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -1769,13 +1800,17 @@ export function TaskTable({
               )}
             >
               <ArrowUpFromLine className="w-3.5 h-3.5" />
-              <span>Soltar aqui para mover para o nível raiz</span>
+              <span>
+                {getActiveDraggedIds(draggedTaskId).length > 1
+                  ? `Soltar aqui para mover ${getActiveDraggedIds(draggedTaskId).length} tarefas para o nível raiz`
+                  : "Soltar aqui para mover para o nível raiz"}
+              </span>
             </div>
           )}
 
           {naturalGroups.specialRootTasks.length > 0 && (
             <section aria-label="Projeto" className="rounded-2xl border border-border bg-card/30 p-3 space-y-3">
-              {renderColumnHeader(naturalGroups.specialRootTasks)}
+              {renderColumnHeader([...naturalGroups.specialRootTasks, ...naturalGroups.regularRootTasks])}
               <div className="space-y-3">
           {/* A. Grupos Especiais (Tarefas Raiz com Tipo Especial / Descendentes) */}
           {naturalGroups.specialRootTasks.map((rootTask) => {
@@ -1799,13 +1834,21 @@ export function TaskTable({
             );
           })}
 
+          {sortTasksList(naturalGroups.regularRootTasks).map((task) => (
+            <div key={task.id} className="bg-card border border-border rounded-2xl overflow-hidden relative">
+              <div className="absolute left-0 top-0 bottom-0 w-[3.5px] bg-muted-foreground rounded-l-2xl z-20 pointer-events-none" />
+              {renderTaskRow(task, 0)}
+            </div>
+          ))}
+
               </div>
+              {renderAddItem(null, 0)}
             </section>
           )}
 
-          {(naturalGroups.freeGroups.length > 0 || naturalGroups.regularRootTasks.length > 0 || naturalGroups.specialRootTasks.length === 0) && (
+          {(naturalGroups.freeGroups.length > 0 || naturalGroups.specialRootTasks.length === 0) && (
             <section aria-label="Outras tarefas" className="rounded-2xl border border-border bg-card/30 p-3 space-y-3">
-              {renderColumnHeader([...naturalGroups.freeGroups.flatMap((group) => group.tasks), ...naturalGroups.regularRootTasks])}
+              {renderColumnHeader([...naturalGroups.freeGroups.flatMap((group) => group.tasks), ...(naturalGroups.specialRootTasks.length === 0 ? naturalGroups.regularRootTasks : [])])}
               <div className="space-y-3">
           {/* B. Grupos Livres (Containers Visuais sem status/data próprios) */}
           {naturalGroups.freeGroups.map((group) => {
@@ -1951,7 +1994,7 @@ export function TaskTable({
           })}
 
           {/* C. Tarefas Regulares Raízes Sem Grupo Especial nem Livre */}
-          {sortTasksList(naturalGroups.regularRootTasks).map((task) => (
+          {naturalGroups.specialRootTasks.length === 0 && sortTasksList(naturalGroups.regularRootTasks).map((task) => (
             <div
               key={task.id}
               className="bg-card border border-border rounded-2xl overflow-hidden relative"
@@ -1961,6 +2004,7 @@ export function TaskTable({
             </div>
           ))}
               </div>
+              {naturalGroups.specialRootTasks.length === 0 && renderAddItem(null, 0)}
             </section>
           )}
         </div>
@@ -2117,6 +2161,7 @@ export function TaskTable({
               </div>
             );
           })}
+          {computedGroups.length === 0 && renderAddItem(null, 0)}
         </div>
       )}
 
@@ -2308,6 +2353,23 @@ export function TaskTable({
       )}
 
       {/* Modal de Gerenciamento e Criação de Campos */}
+      <Dialog open={Boolean(editingChecklist)} onOpenChange={(open) => { if (!open) setEditingChecklist(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detalhes do checklist</DialogTitle>
+            <DialogDescription>Edite o nome deste item.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            const owner = tasks.find((task) => task.id === editingChecklist?.taskId);
+            if (owner && editingChecklist) handleSaveSubtaskTitle(owner, editingChecklist.subtaskId);
+          }} className="space-y-4">
+            <Input aria-label="Nome do checklist" value={editingSubtaskTitle} onChange={(event) => setEditingSubtaskTitle(event.target.value)} />
+            <DialogFooter><Button type="button" variant="outline" onClick={() => setEditingChecklist(null)}>Cancelar</Button><Button type="submit" disabled={!editingSubtaskTitle.trim()}>Salvar</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <FieldsModal
         isOpen={isFieldsModalOpen}
         onClose={handleCloseFieldsModal}

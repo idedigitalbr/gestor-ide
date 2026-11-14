@@ -78,28 +78,28 @@ export function ColumnHeaderCell({
       onDragLeave={(e) => onDragLeave?.(id, e)}
       onDrop={(e) => onDrop?.(id, e)}
       className={cn(
-        "group relative select-none px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-secondary/40 rounded-sm",
+        "group relative min-w-0 select-none px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground transition-colors hover:bg-secondary/40 rounded-sm",
         isDraggable && "cursor-grab active:cursor-grabbing",
         isDragTarget && "ring-2 ring-primary bg-primary/10",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-1">
+      <div className="flex min-w-0 items-center">
         {/* Left: Drag Handle (faint on hover) + Column Label */}
-        <div className="flex min-w-0 items-center gap-1.5 flex-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
           {isDraggable ? (
             <GripVertical
               className="h-3 w-3 shrink-0 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"
               aria-hidden="true"
             />
           ) : null}
-          <span className="truncate text-muted-foreground group-hover:text-foreground font-medium transition-colors">
+          <span data-column-label title={label} className="min-w-0 truncate text-muted-foreground group-hover:text-foreground font-medium transition-colors">
             {label}
           </span>
         </div>
 
         {/* Right: Quick Sort Indicator on Hover + Column Options Menu */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className={cn("absolute right-0 flex items-center gap-0.5 rounded-sm bg-popover opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100", isMenuOpen && "opacity-100")}>
           {/* Quick sort button on hover (Anexo 2) */}
           <button
             type="button"
@@ -117,7 +117,7 @@ export function ColumnHeaderCell({
             aria-label={`Ordenar coluna ${label}`}
             className={cn(
               "inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-all hover:bg-primary/20 hover:text-primary cursor-pointer",
-              isSorted ? "opacity-100 text-primary font-bold" : "opacity-0 group-hover:opacity-80"
+              isSorted ? "opacity-100 text-primary font-bold" : "opacity-0 group-hover:opacity-80 focus:opacity-100"
             )}
           >
             {isSorted ? (
@@ -140,7 +140,7 @@ export function ColumnHeaderCell({
                 title="Opções da coluna"
                 className={cn(
                   "inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-all hover:bg-secondary hover:text-foreground cursor-pointer",
-                  isMenuOpen ? "opacity-100 bg-secondary" : "opacity-0 group-hover:opacity-80"
+                  isMenuOpen ? "opacity-100 bg-secondary" : "opacity-0 group-hover:opacity-80 focus:opacity-100"
                 )}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />

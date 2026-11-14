@@ -49,9 +49,13 @@ import { NewProjectDialog } from "@/components/new-project-dialog";
 import { NewManagementDialog } from "@/components/new-management-dialog";
 import type { ListDisplayMode } from "@/lib/list-view-options";
 import {
+  applyBatchTaskDragAndDrop,
   applyTaskDragAndDrop,
   type TaskDropMode,
 } from "@/lib/task-hierarchy";
+import { canPerformProjectAction } from "@/lib/crm-permissions";
+import { reconcileRemoteTasks } from "@/lib/task-sync";
+import { MembersDialog, type TeamMemberItem } from "@/components/members-dialog";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
 import { TaskAdditionalView } from "@/components/task-additional-view";
@@ -86,6 +90,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewManagementOpen, setIsNewManagementOpen] = useState(false);
   const [listSearch, setListSearch] = useState("");
+  const [onlyMyManagements, setOnlyMyManagements] = useState(() => {
+    try { return localStorage.getItem("gestor_only_my_managements") === "true"; } catch { return false; }
+  });
+  const [managementMembership, setManagementMembership] = useState<{ userId: string; ids: Set<string> | null; error: boolean } | null>(null);
   const [onlyMyProjects, setOnlyMyProjects] = useState(() => {
     try { return localStorage.getItem("gestor_only_my_projects") !== "false"; } catch { return true; }
   });
@@ -198,6 +206,27 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   // Contador de requisições ativas para cancelar/ignorar respostas obsoletas (race condition)
   const activeRequestIdRef = useRef(0);
   const taskUpdateVersionsRef = useRef(new Map<string, number>());
+  const pendingTaskCountsRef = useRef(new Map<string, number>());
+  const pendingTaskIdsRef = useRef(new Set<string>());
+  const lastBackgroundSyncRef = useRef(0);
+
+  const trackPendingTask = useCallback((taskId: string) => {
+    const next = (pendingTaskCountsRef.current.get(taskId) ?? 0) + 1;
+    pendingTaskCountsRef.current.set(taskId, next);
+    pendingTaskIdsRef.current.add(taskId);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const current = (pendingTaskCountsRef.current.get(taskId) ?? 1) - 1;
+      if (current <= 0) {
+        pendingTaskCountsRef.current.delete(taskId);
+        pendingTaskIdsRef.current.delete(taskId);
+      } else {
+        pendingTaskCountsRef.current.set(taskId, current);
+      }
+    };
+  }, []);
 
   // Monotonic collision-free code counter initialized above existing tasks
   const nextCodeNumberRef = useRef(getHighestCodeNumber(INITIAL_TASKS) + 1);
@@ -230,6 +259,26 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return null;
   });
   const [modalInitialStatus, setModalInitialStatus] = useState<TaskStatus>("PENDENTE");
+  const [hasModalRemoteConflict, setHasModalRemoteConflict] = useState(false);
+  const [isProjectMembersOpen, setIsProjectMembersOpen] = useState(false);
+  const isModalDirtyRef = useRef(false);
+  const isModalOpenRef = useRef(isModalOpen);
+  useEffect(() => {
+    isModalOpenRef.current = isModalOpen;
+    if (!isModalOpen) {
+      isModalDirtyRef.current = false;
+    }
+  }, [isModalOpen]);
+
+  const selectedTaskIdRef = useRef(selectedTaskId);
+  useEffect(() => {
+    selectedTaskIdRef.current = selectedTaskId;
+  }, [selectedTaskId]);
+
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
   const handledInitialModalRef = useRef<string | null>(null);
   useEffect(() => {
     if (!initialModal || handledInitialModalRef.current === initialModal) return;
@@ -355,14 +404,28 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           ...mapCrmTaskToGestorTask(t, idx),
           ...getLocalTaskPresentation(t.id),
         }));
-        const finalTasks = mapped;
-        setTasks(finalTasks);
-        if (projectIdFilter || !managementIdFilter) setCachedTasks(projectIdFilter, finalTasks);
-        nextCodeNumberRef.current = getHighestCodeNumber(finalTasks) + 1;
+        const syncOptions = {
+          editingTaskId: isModalOpenRef.current ? selectedTaskIdRef.current : null,
+          isModalDirty: isModalDirtyRef.current,
+          pendingTaskIds: pendingTaskIdsRef.current,
+        };
+        const previewReconcile = reconcileRemoteTasks(tasksRef.current, mapped, syncOptions);
+        setHasModalRemoteConflict(previewReconcile.hasEditingConflict);
+        setTasks((prevLocal) => {
+          const reconciled = reconcileRemoteTasks(prevLocal, mapped, syncOptions);
+          if (projectIdFilter || !managementIdFilter) {
+            setCachedTasks(projectIdFilter, reconciled.tasks);
+          }
+          nextCodeNumberRef.current = getHighestCodeNumber(reconciled.tasks) + 1;
+          return reconciled.tasks;
+        });
+        lastBackgroundSyncRef.current = Date.now();
       } catch {
         if (currentRequestId !== activeRequestIdRef.current) return;
-        setTasks(cached ?? []);
-        setSyncError("Não foi possível atualizar as tarefas do CRM. Tente novamente.");
+        if (!silent) {
+          setTasks(cached ?? []);
+          setSyncError("Não foi possível atualizar as tarefas do CRM. Tente novamente.");
+        }
       } finally {
         if (currentRequestId === activeRequestIdRef.current) {
           setIsSyncingTasks(false);
@@ -518,9 +581,67 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!isConnectedCrm || isSecondaryPage) return;
+
+    const triggerBackgroundSync = (minAgeMs: number) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (pendingTaskIdsRef.current.size > 0) return;
+      if (Date.now() - lastBackgroundSyncRef.current < minAgeMs) return;
+      lastBackgroundSyncRef.current = Date.now();
+      void loadTasks(
+        selectedProjectIdRef.current,
+        selectedManagementIdRef.current,
+        undefined,
+        true
+      );
+    };
+
+    const intervalId = window.setInterval(() => triggerBackgroundSync(25_000), 30_000);
+    const onVisibilityOrFocus = () => triggerBackgroundSync(15_000);
+
+    window.addEventListener("focus", onVisibilityOrFocus);
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+    };
+  }, [isConnectedCrm, isSecondaryPage, loadTasks]);
+
   const effectiveManagements = useMemo(() => {
     return isConnectedCrm ? managements : INITIAL_MANAGEMENTS;
   }, [managements, isConnectedCrm]);
+
+  useEffect(() => {
+    if (!onlyMyManagements || !isConnectedCrm || !currentUser?.id) return;
+    const userId = currentUser.id;
+    let cancelled = false;
+
+    void Promise.all(managements.map(async (management) => {
+      const { members } = await ideCrmClient.listManagementMembers(management.id);
+      return members.some((member) => member.userId === userId) ? management.id : null;
+    })).then((ids) => {
+      if (!cancelled) setManagementMembership({ userId, ids: new Set(ids.filter((id): id is string => id !== null)), error: false });
+    }).catch(() => {
+      if (!cancelled) setManagementMembership({ userId, ids: null, error: true });
+    });
+    return () => { cancelled = true; };
+  }, [onlyMyManagements, isConnectedCrm, currentUser?.id, managements, membershipRetry]);
+
+  const managementMembershipForUser = managementMembership?.userId === currentUser?.id ? managementMembership : null;
+  const managementMembershipPending = onlyMyManagements && isConnectedCrm && Boolean(currentUser?.id) && !managementMembershipForUser;
+  const visibleManagements = useMemo(() => {
+    if (!onlyMyManagements || !isConnectedCrm || !currentUser?.id) return effectiveManagements;
+    const ids = managementMembershipForUser?.ids;
+    return ids ? effectiveManagements.filter((management) => ids.has(management.id)) : [];
+  }, [onlyMyManagements, isConnectedCrm, currentUser?.id, effectiveManagements, managementMembershipForUser]);
+
+  function updateOnlyMyManagements(value: boolean) {
+    if (value) setManagementMembership(null);
+    setOnlyMyManagements(value);
+    try { localStorage.setItem("gestor_only_my_managements", String(value)); } catch {}
+  }
 
   const effectiveProjects = useMemo(() => {
     return isConnectedCrm ? projects : INITIAL_PROJECTS;
@@ -898,6 +1019,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const releasePending = trackPendingTask(updatedTask.id);
       void ideCrmClient
         .updateTask(updatedTask.id, changedPayload)
         .catch(() => {
@@ -908,12 +1030,14 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             updateCachedTask(previousTask);
           }
           setSyncError("A alteração não foi salva no CRM. Atualize os dados antes de tentar novamente.");
-        });
+        })
+        .finally(releasePending);
     }
   }
 
   async function handleChangeAssignee(taskId: string, member: CrmProjectMember | null): Promise<boolean> {
     if (!isConnectedCrm || taskId.startsWith("task-")) return false;
+    const releasePending = trackPendingTask(taskId);
     try {
       await ideCrmClient.setTaskAssignees(taskId, member ? [member.userId] : []);
       const existing = tasks.find((task) => task.id === taskId);
@@ -929,6 +1053,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     } catch {
       setSyncError("Não foi possível salvar o responsável no CRM. Tente novamente.");
       return false;
+    } finally {
+      releasePending();
     }
   }
 
@@ -1011,11 +1137,77 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       if (preview.changedParent) {
         payload.parentTaskId = updatedDragged.parentTaskId ?? null;
       }
+      const releasePending = trackPendingTask(draggedTaskId);
       void ideCrmClient
         .updateTask(draggedTaskId, payload)
         .catch(() =>
           setSyncError("Não foi possível salvar a movimentação no CRM. Atualize os dados para conferir.")
-        );
+        )
+        .finally(releasePending);
+    }
+  }
+
+  function handleBatchReorderTask(
+    draggedTaskIds: string[],
+    targetTaskId: string | null,
+    targetStatus: TaskStatus,
+    options?: { mode?: TaskDropMode; customGroup?: string }
+  ) {
+    const mode = options?.mode ?? "before";
+    const preview = applyBatchTaskDragAndDrop(tasks, {
+      draggedTaskIds,
+      targetTaskId,
+      targetStatus,
+      mode,
+      customGroup: options?.customGroup,
+    });
+    if (preview.updatedTasks.length === 0) return;
+
+    for (const movedTask of preview.updatedTasks) {
+      if (options?.customGroup !== undefined || preview.changedParentIds.has(movedTask.id)) {
+        setLocalTaskPresentation(movedTask.id, {
+          itemType: movedTask.itemType,
+          customGroup: movedTask.customGroup,
+        });
+      }
+    }
+
+    setTasks((prev) => {
+      const applied = applyBatchTaskDragAndDrop(prev, {
+        draggedTaskIds,
+        targetTaskId,
+        targetStatus,
+        mode,
+        customGroup: options?.customGroup,
+      });
+      if (selectedProjectId || !selectedManagementId) {
+        setCachedTasks(selectedProjectId, applied.nextTasks);
+      }
+      return applied.nextTasks;
+    });
+
+    if (isConnectedCrm) {
+      for (const movedTask of preview.updatedTasks) {
+        if (movedTask.id.startsWith("task-")) continue;
+        const statusChanged = preview.changedStatusIds.has(movedTask.id);
+        const parentChanged = preview.changedParentIds.has(movedTask.id);
+        if (!statusChanged && !parentChanged) continue;
+
+        const payload: Record<string, unknown> = {};
+        if (statusChanged) {
+          payload.status = mapGestorTaskToCrmUpdateInput({ status: movedTask.status }).status;
+        }
+        if (parentChanged) {
+          payload.parentTaskId = movedTask.parentTaskId ?? null;
+        }
+        const releasePending = trackPendingTask(movedTask.id);
+        void ideCrmClient
+          .updateTask(movedTask.id, payload)
+          .catch(() =>
+            setSyncError("Não foi possível salvar a movimentação em lote no CRM. Atualize os dados para conferir.")
+          )
+          .finally(releasePending);
+      }
     }
   }
 
@@ -1202,16 +1394,66 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     setIsModalOpen(false);
   }
 
+  const canWriteProjects = canPerformProjectAction(
+    currentUser,
+    isConnectedCrm,
+    "projects.write"
+  );
+
+  const canManageProjectMembers = canPerformProjectAction(
+    currentUser,
+    isConnectedCrm,
+    "projects.members"
+  );
+
   function handleOpenNewTask(initialStatus: TaskStatus = "PENDENTE") {
+    if (!canWriteProjects) return;
+    isModalDirtyRef.current = false;
+    setHasModalRemoteConflict(false);
     setSelectedTaskId(null);
     setModalInitialStatus(initialStatus);
     setIsModalOpen(true);
   }
 
   function handleOpenDetails(task: Task) {
+    isModalDirtyRef.current = false;
+    setHasModalRemoteConflict(false);
     setSelectedTaskId(task.id);
     setIsModalOpen(true);
   }
+
+  const activeProjectMembers = useMemo<CrmProjectMember[]>(() => {
+    if (projectMembers?.projectId && projectMembers.projectId === selectedProjectId) {
+      return projectMembers.members;
+    }
+    return [];
+  }, [projectMembers, selectedProjectId]);
+
+  const projectDialogMembers = useMemo<TeamMemberItem[]>(() => {
+    const byUserId = new Map<string, TeamMemberItem>();
+    for (const m of activeProjectMembers) {
+      byUserId.set(m.userId, {
+        userId: m.userId,
+        name: m.user?.name,
+        email: m.user?.email,
+        avatarUrl: m.user?.avatarUrl,
+        role: m.role,
+      });
+    }
+    for (const m of currentProject?.members ?? []) {
+      const uid = m.userId ?? m.user?.id;
+      if (uid && !byUserId.has(uid)) {
+        byUserId.set(uid, {
+          userId: uid,
+          name: m.user?.name,
+          email: m.user?.email,
+          avatarUrl: m.user?.avatarUrl,
+          role: m.role,
+        });
+      }
+    }
+    return Array.from(byUserId.values());
+  }, [activeProjectMembers, currentProject]);
 
   function handleClearFilters() {
     updateOnlyMyTasks(false);
@@ -1250,9 +1492,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onOpenNewEvent={() => openCreateDialog()}
           canCreateCalendarEvent={canCreateCalendarEvent}
           onHome={() => { if (isSecondaryPage) router.push("/"); }}
-          managements={effectiveManagements}
+          managements={visibleManagements}
           projects={effectiveProjects}
           selectableProjects={visibleProjects}
+          onlyMyManagements={onlyMyManagements}
+          onOnlyMyManagementsChange={updateOnlyMyManagements}
           onlyMyProjects={onlyMyProjects}
           onOnlyMyProjectsChange={updateOnlyMyProjects}
           onlyMyTasks={onlyMyTasks}
@@ -1286,6 +1530,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           showClosedTasks={showClosedTasks}
           onToggleShowClosedTasks={setShowClosedTasks}
           onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
+          canWrite={canWriteProjects}
+          projectMembersCount={projectDialogMembers.length}
+          onOpenProjectMembers={
+            selectedProjectId ? () => setIsProjectMembersOpen(true) : undefined
+          }
+          onRefreshSync={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+          isSyncing={isSyncingTasks}
         />
 
         {/* View Content */}
@@ -1321,6 +1572,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           )}
+          {!isSecondaryPage && onlyMyManagements && managementMembershipForUser?.error && (
+            <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
+              Não foi possível verificar suas gestões. <button type="button" className="underline" onClick={() => setMembershipRetry((value) => value + 1)}>Tentar novamente</button>
+            </div>
+          )}
           {!isSecondaryPage && onlyMyProjects && membershipForCurrentUser?.error && (
             <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
               Não foi possível verificar seus projetos. <button type="button" className="underline" onClick={() => setMembershipRetry((value) => value + 1)}>Tentar novamente</button>
@@ -1330,6 +1586,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             children
           ) : isBootstrapping ? (
             <TaskTableSkeleton />
+          ) : managementMembershipPending ? (
+            <p role="status" className="text-sm text-muted-foreground">Carregando suas gestões...</p>
+          ) : onlyMyManagements && managementMembershipForUser?.error ? null
+          : selectedManagementId && onlyMyManagements && isConnectedCrm && managementMembershipForUser?.ids && !managementMembershipForUser.ids.has(selectedManagementId) ? (
+            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              Esta gestão não está entre as suas gestões. <button type="button" className="text-primary underline" onClick={() => updateOnlyMyManagements(false)}>Ver todas as gestões</button>
+            </div>
           ) : selectedManagementId === null ? (
             /* Nível 1: Cards de Todas as Gestões */
             <ManagementsGridView
@@ -1338,7 +1601,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               visibilityFilter={managementVisibility}
               onVisibilityFilterChange={setManagementVisibility}
               viewMode={managementViewMode}
-              managements={effectiveManagements}
+              managements={visibleManagements}
               onSelectManagement={(id) => handleSelectManagement(id)}
             />
           ) : selectedManagementId && membershipPending ? (
@@ -1357,24 +1620,37 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               management={currentManagement}
               projects={visibleProjects}
               tasks={tasks}
+              isConnectedCrm={isConnectedCrm}
+              canWrite={canWriteProjects}
+              canManageMembers={canManageProjectMembers}
+              onCreateProject={() => setIsNewProjectOpen(true)}
               onBack={() => handleSelectManagement(null)}
               onSelectProject={(id) => handleSelectProject(id)}
             />
           ) : isSyncingTasks ? (
             <TaskTableSkeleton />
-          ) : filteredTasks.length === 0 ? (
+          ) : filteredTasks.length === 0 && (viewMode !== "table" || isFiltered) ? (
             <EmptyState
               onAddTask={() => handleOpenNewTask("PENDENTE")}
               isFiltered={isFiltered}
               onClearFilters={handleClearFilters}
             />
           ) : viewMode === "calendar" || viewMode === "gantt" || viewMode === "workload" ? (
-            <TaskAdditionalView mode={viewMode} tasks={filteredTasks} members={projectMembers?.projectId === selectedProjectId ? projectMembers.members : []} onOpen={handleOpenDetails} />
+            <TaskAdditionalView
+              mode={viewMode}
+              tasks={filteredTasks}
+              members={activeProjectMembers}
+              onOpen={handleOpenDetails}
+              onUpdateTask={canWriteProjects ? handleUpdateTask : undefined}
+              onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
+            />
           ) : viewMode === "kanban" ? (
             <TaskKanban
               tasks={filteredTasks}
+              members={activeProjectMembers}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
+              onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
               onOpenDetails={handleOpenDetails}
               onQuickAdd={handleOpenNewTask}
             />
@@ -1382,9 +1658,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             <div className="w-full overflow-x-auto">
             <TaskTable
               onChangeAssignee={handleChangeAssignee}
+              canCreate={canWriteProjects}
+              connected={isConnectedCrm}
               key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
               projectId={selectedProjectId}
-              projectMembers={projectMembers?.projectId === selectedProjectId ? projectMembers?.members ?? [] : []}
+              projectMembers={activeProjectMembers}
               membersLoaded={Boolean(selectedProjectId && projectMembers?.projectId === selectedProjectId)}
               tasks={filteredTasks}
               groupBy={groupBy}
@@ -1394,6 +1672,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onAddTask={handleAddTask}
               onUpdateSubtasks={handleUpdateTaskSubtasks}
               onReorderTasks={handleReorderTask}
+              onBatchReorderTasks={handleBatchReorderTask}
               isFieldsModalOpen={isFieldsModalOpen}
               onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
               onCloseFieldsModal={() => setIsFieldsModalOpen(false)}
@@ -1408,9 +1687,22 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       {/* Task Creation & Inspection Modal */}
       <TaskModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          isModalDirtyRef.current = false;
+          setHasModalRemoteConflict(false);
+          setIsModalOpen(false);
+        }}
         task={selectedTask}
         syncError={syncError}
+        remoteConflictWarning={hasModalRemoteConflict}
+        onReloadRemote={() => {
+          isModalDirtyRef.current = false;
+          setHasModalRemoteConflict(false);
+          void loadTasks(selectedProjectId, selectedManagementId, undefined, true);
+        }}
+        onDirtyChange={(dirty) => {
+          isModalDirtyRef.current = dirty;
+        }}
         currentUser={currentUser}
         members={
           projectMembers &&
@@ -1433,6 +1725,18 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         onUpdateSubtasks={handleUpdateTaskSubtasks}
         onAddComment={handleAddTaskComment}
       />
+
+      {currentProject && (
+        <MembersDialog
+          open={isProjectMembersOpen}
+          onOpenChange={setIsProjectMembersOpen}
+          title={`Membros de ${currentProject.name}`}
+          description="Participantes vinculados a este projeto no IDE CRM."
+          members={projectDialogMembers}
+          loading={Boolean(isConnectedCrm && selectedProjectId && projectMembers?.projectId !== selectedProjectId)}
+          canManageMembers={canManageProjectMembers}
+        />
+      )}
 
       {/* Modal de Conexão e Sincronização com o IDE CRM */}
       <CrmConnectionDialog

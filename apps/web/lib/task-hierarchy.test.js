@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
+  applyBatchTaskDragAndDrop,
   applyTaskDragAndDrop,
+  canBatchDropTasks,
   canReparentTask,
   isDescendantTask,
 } from "./task-hierarchy";
@@ -81,4 +83,37 @@ test("applyTaskDragAndDrop move tarefa para dentro de outro pai e promove de vol
   expect(promoted.changedParent).toBe(true);
   expect(promoted.updatedDragged?.parentTaskId).toBeUndefined();
   expect(promoted.updatedDragged?.status).toBe("FAZENDO AGORA");
+});
+
+test("applyBatchTaskDragAndDrop move lote preservando subárvore interna e bloqueando ciclos", () => {
+  expect(canBatchDropTasks(baseTasks, ["root-a", "child-a1"], "grandchild-a1", "nest")).toBe(false);
+  expect(canBatchDropTasks(baseTasks, ["root-a", "child-a1"], "root-a", "before")).toBe(false);
+  expect(canBatchDropTasks(baseTasks, ["root-a", "child-a1"], "root-b", "nest")).toBe(true);
+
+  const batchNested = applyBatchTaskDragAndDrop(baseTasks, {
+    draggedTaskIds: ["root-a", "child-a1"],
+    targetTaskId: "root-b",
+    targetStatus: "FAZENDO AGORA",
+    mode: "nest",
+  });
+
+  const movedRootA = batchNested.nextTasks.find((t) => t.id === "root-a");
+  const movedChildA1 = batchNested.nextTasks.find((t) => t.id === "child-a1");
+  expect(movedRootA?.parentTaskId).toBe("root-b");
+  expect(movedChildA1?.parentTaskId).toBe("root-a");
+  expect(movedRootA?.status).toBe("FAZENDO AGORA");
+  expect(movedChildA1?.status).toBe("FAZENDO AGORA");
+  expect(batchNested.changedParentIds.has("root-a")).toBe(true);
+  expect(batchNested.changedParentIds.has("child-a1")).toBe(false);
+
+  const batchRoot = applyBatchTaskDragAndDrop(batchNested.nextTasks, {
+    draggedTaskIds: ["root-a", "child-a1"],
+    targetTaskId: null,
+    targetStatus: "PENDENTE",
+    mode: "root",
+    customGroup: "Sprint 2",
+  });
+  expect(batchRoot.nextTasks.find((t) => t.id === "root-a")?.parentTaskId).toBeUndefined();
+  expect(batchRoot.nextTasks.find((t) => t.id === "root-a")?.customGroup).toBe("Sprint 2");
+  expect(batchRoot.nextTasks.find((t) => t.id === "child-a1")?.parentTaskId).toBe("root-a");
 });

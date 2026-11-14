@@ -28,9 +28,11 @@ import {
   Layers,
   LogOut,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -142,6 +144,8 @@ interface AppHeaderProps {
   managements?: CrmProjectManagement[];
   projects?: CrmProject[];
   selectableProjects?: CrmProject[];
+  onlyMyManagements: boolean;
+  onOnlyMyManagementsChange: (value: boolean) => void;
   onlyMyProjects: boolean;
   onOnlyMyProjectsChange: (value: boolean) => void;
   onlyMyTasks: boolean;
@@ -176,6 +180,11 @@ interface AppHeaderProps {
   onToggleShowClosedTasks?: (show: boolean) => void;
   visibleColumnsCount?: number;
   onLogout?: () => void;
+  canWrite?: boolean;
+  projectMembersCount?: number;
+  onOpenProjectMembers?: () => void;
+  onRefreshSync?: () => void;
+  isSyncing?: boolean;
 }
 
 export function AppHeader({
@@ -187,6 +196,8 @@ export function AppHeader({
   managements = [],
   projects = [],
   selectableProjects,
+  onlyMyManagements,
+  onOnlyMyManagementsChange,
   onlyMyProjects,
   onOnlyMyProjectsChange,
   onlyMyTasks,
@@ -221,6 +232,11 @@ export function AppHeader({
   onToggleShowClosedTasks,
   visibleColumnsCount = 5,
   onLogout,
+  canWrite = true,
+  projectMembersCount = 0,
+  onOpenProjectMembers,
+  onRefreshSync,
+  isSyncing = false,
 }: AppHeaderProps) {
   const isInsideProject = Boolean(selectedProjectId);
 
@@ -314,6 +330,40 @@ export function AppHeader({
 
           {/* Divisor vertical "|" */}
           <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
+
+          {!isProjectPage && isInsideProject && onOpenProjectMembers && (
+            <HeaderTooltip label={`Membros do projeto (${projectMembersCount})`}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onOpenProjectMembers}
+                className="h-8 px-2 gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                aria-label={`Membros do projeto (${projectMembersCount})`}
+              >
+                <Users className="w-4 h-4" />
+                {projectMembersCount > 0 && (
+                  <span className="text-[11px] font-mono">{projectMembersCount}</span>
+                )}
+              </Button>
+            </HeaderTooltip>
+          )}
+
+          {!isProjectPage && onRefreshSync && (
+            <HeaderTooltip label="Sincronizar com IDE CRM">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onRefreshSync}
+                disabled={isSyncing}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
+                aria-label="Sincronizar com IDE CRM"
+              >
+                <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
+              </Button>
+            </HeaderTooltip>
+          )}
 
           {/* Configurações da Visualização (Engrenagem) - Abre o Popover Completo do Anexo 2 */}
           {isProjectPage ? (
@@ -687,12 +737,13 @@ export function AppHeader({
           )}
 
           {/* Botão Roxo ClickUp "+ Tarefa ▾" */}
-          {!isProjectPage ? (isInsideProject ? <div className="inline-flex items-center rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-colors overflow-hidden ml-1">
+          {!isProjectPage ? (isInsideProject ? <div className={cn("inline-flex items-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors overflow-hidden ml-1", canWrite ? "hover:bg-primary/90" : "opacity-50")}>
             <button
               type="button"
+              disabled={!canWrite}
               onClick={onOpenNewTaskModal}
-              className="h-8 px-2.5 sm:px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-primary-foreground"
-              title="Criar nova tarefa"
+              className="h-8 px-2.5 sm:px-3 text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed text-primary-foreground"
+              title={canWrite ? "Criar nova tarefa" : "Sem permissão para criar tarefas"}
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Tarefa</span>
@@ -701,7 +752,8 @@ export function AppHeader({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="h-8 px-1.5 border-l border-primary-foreground/20 hover:bg-primary-foreground/10 flex items-center justify-center cursor-pointer text-primary-foreground"
+                  disabled={!canWrite}
+                  className="h-8 px-1.5 border-l border-primary-foreground/20 hover:bg-primary-foreground/10 flex items-center justify-center cursor-pointer disabled:cursor-not-allowed text-primary-foreground"
                   title="Mais opções de criação"
                   aria-label="Mais opções de criação"
                 >
@@ -711,6 +763,7 @@ export function AppHeader({
               <DropdownMenuContent align="end" className="w-44 bg-popover border-border p-1">
                 <DropdownMenuItem
                   onClick={onOpenNewTaskModal}
+                  disabled={!canWrite}
                   className="text-xs cursor-pointer flex items-center gap-2"
                 >
                   <Plus className="w-3.5 h-3.5 text-primary" />
@@ -727,7 +780,7 @@ export function AppHeader({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div> : <Button size="sm" className="h-8 gap-1.5" onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
+          </div> : <Button size="sm" className="h-8 gap-1.5" disabled={!canWrite} title={canWrite ? undefined : "Sem permissão de escrita no IDE CRM"} onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
             <Button size="sm" className="h-8 gap-1.5" onClick={onOpenNewEvent} disabled={!canCreateCalendarEvent}><Plus className="w-3.5 h-3.5" /> Evento</Button>
           ) : null}
           <HeaderNotifications connected={Boolean(currentUser)} />
@@ -756,6 +809,10 @@ export function AppHeader({
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Preferências</div>
+              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                <label htmlFor="only-my-managements">Ver somente gestões que faço parte</label>
+                <Switch id="only-my-managements" checked={onlyMyManagements} onCheckedChange={onOnlyMyManagementsChange} />
+              </div>
               <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
                 <label htmlFor="only-my-projects">Ver somente projetos que faço parte</label>
                 <Switch id="only-my-projects" checked={onlyMyProjects} onCheckedChange={onOnlyMyProjectsChange} />

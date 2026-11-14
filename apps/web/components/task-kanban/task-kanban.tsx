@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskStatus, CanonicalTaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
 import { ALL_CANONICAL_STATUSES } from "../task-status-icon";
@@ -10,6 +11,8 @@ import { Eye } from "lucide-react";
 
 interface TaskKanbanProps {
   tasks: Task[];
+  members?: CrmProjectMember[];
+  onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onOpenDetails: (task: Task) => void;
@@ -20,6 +23,8 @@ const KANBAN_COLUMNS: CanonicalTaskStatus[] = ALL_CANONICAL_STATUSES;
 
 export function TaskKanban({
   tasks,
+  members = [],
+  onChangeAssignee,
   onUpdateTask,
   onDeleteTask,
   onOpenDetails,
@@ -106,6 +111,8 @@ export function TaskKanban({
                 key={colStatus}
                 status={colStatus}
                 tasks={colTasks}
+                members={members}
+                onChangeAssignee={onChangeAssignee}
                 isCollapsed={isCollapsed}
                 onToggleCollapse={() => toggleCollapse(colStatus)}
                 onHideColumn={() => hideColumn(colStatus)}

@@ -122,6 +122,25 @@ export function getItemTypeDefinition(type?: unknown): TaskItemTypeDefinition {
   return TASK_ITEM_TYPE_DEFINITIONS[normalized];
 }
 
+/** Uma página ou módulo encerra os níveis de organização; seus descendentes são trabalho. */
+export function isBelowPageOrModule(parentId: string | undefined, tasks: Array<{ id: string; parentTaskId?: string; itemType?: string }>): boolean {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const visited = new Set<string>();
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = byId.get(parentId);
+    if (!parent) return false;
+    const type = normalizeItemType(parent.itemType);
+    if (type === "PAGE" || type === "MODULE") return true;
+    parentId = parent.parentTaskId;
+  }
+  return false;
+}
+
+export function hasTaskDetails(task: { description?: string; startDate?: string; dueDate?: string; assigneeId?: string; assignee?: string; priority?: string; status?: string; tag?: string; tags?: string[]; estimate?: string; subtasks?: unknown[]; comments?: unknown[] }): boolean {
+  return Boolean(isTaskContentFilled(task.description) || task.startDate || task.dueDate || task.assigneeId || task.assignee || (task.priority && !["Normal", "Média"].includes(task.priority)) || (task.status && !["PENDENTE", "A Fazer", "CONCLUÍDO", "Concluído"].includes(task.status)) || task.tag || task.tags?.length || task.estimate || task.subtasks?.length || task.comments?.length);
+}
+
 /**
  * Verifica se a tarefa tem conteúdo preenchido (descrição / notas).
  * Ignora tags HTML vazias geradas por editores rich text (ex: <p><br></p> ou <p></p>).
