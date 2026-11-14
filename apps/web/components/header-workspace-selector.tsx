@@ -70,13 +70,11 @@ export function HeaderWorkspaceSelector({
         if (selectedProjectId) {
           // Volta do projeto para a visão da gestão (projetos da gestão)
           onSelectProject?.(null);
-        } else if (selectedManagementId) {
-          // Volta da gestão para Todas as Gestões
-          onSelectManagement?.(null);
         }
+        // Se já está na gestão, não faz nada: o botão Início no topo é quem volta para todas as gestões
       }
     },
-    [isPinned, selectedProjectId, selectedManagementId, onSelectProject, onSelectManagement]
+    [isPinned, selectedProjectId, onSelectProject]
   );
 
   const handleProjectButtonClick = useCallback(
@@ -200,7 +198,9 @@ export function HeaderWorkspaceSelector({
             className={cn(
               "group flex h-7 min-w-0 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               isPinned
-                ? "cursor-pointer hover:bg-muted/60 hover:text-primary"
+                ? selectedProjectId
+                  ? "cursor-pointer hover:bg-muted/60 hover:text-primary"
+                  : "cursor-default text-foreground/90"
                 : "cursor-pointer hover:bg-muted/70 hover:text-foreground",
               !isPinned && managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
@@ -211,8 +211,6 @@ export function HeaderWorkspaceSelector({
               isPinned
                 ? selectedProjectId
                   ? `Voltar para gestão ${managementLabel}`
-                  : selectedManagementId
-                  ? "Voltar para Todas as Gestões"
                   : `Gestão: ${managementLabel}`
                 : `Gestão: ${managementLabel}`
             }
@@ -225,7 +223,7 @@ export function HeaderWorkspaceSelector({
             <span
               className={cn(
                 "truncate",
-                isPinned && (selectedProjectId || selectedManagementId) && "group-hover:underline"
+                isPinned && selectedProjectId && "group-hover:underline"
               )}
             >
               {managementLabel}

@@ -11,7 +11,6 @@ import {
   Calendar,
   Users,
   Shield,
-  ArrowLeft,
   Pencil,
   Check,
   ChevronDown,
@@ -248,8 +247,6 @@ export function ProjectHeader({
     }
   }
 
-  const backLabel = management?.name ? management.name : "Projetos";
-
   return (
     <div className={cn("w-full transition-all", className)}>
       {/* ========================================================================= */}
@@ -258,26 +255,8 @@ export function ProjectHeader({
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
         <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all mb-3.5">
-          {/* Esquerda: Voltar + Iniciais + Nome */}
+          {/* Esquerda: Iniciais + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            {onBack && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title={`Voltar para ${backLabel}`}
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span className="hidden sm:inline truncate max-w-[140px]">{backLabel}</span>
-                  <span className="sm:hidden">Voltar</span>
-                </Button>
-                <div className="h-4 w-px bg-border/60 shrink-0" />
-              </>
-            )}
-
             <div
               className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0"
               style={{ backgroundColor: projectColor }}
@@ -354,26 +333,8 @@ export function ProjectHeader({
       ) : (
         /* Cabeçalho Expandido (Pixel-Perfect Reutilizando o Layout da Gestão) */
         <div className="rounded-2xl border border-border/80 bg-card p-3.5 sm:px-5 sm:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition-all mb-3.5">
-          {/* Lado Esquerdo: Voltar + Avatar + Título, Descrição e Metadados */}
+          {/* Lado Esquerdo: Avatar + Título, Descrição e Metadados */}
           <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-            {onBack && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title={`Voltar para ${backLabel}`}
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span className="hidden sm:inline truncate max-w-[140px]">{backLabel}</span>
-                  <span className="sm:hidden">Voltar</span>
-                </Button>
-                <div className="h-5 w-px bg-border/60 shrink-0" />
-              </div>
-            )}
-
             {/* Badge Quadrado com Iniciais do Projeto */}
             <div
               className="size-10 sm:size-11 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-xs shrink-0"

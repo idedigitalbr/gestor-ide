@@ -421,13 +421,6 @@ export function ManagementProjectsView({
     return managementProjects.reduce((acc, p) => acc + (p._count?.tasks ?? 0), 0);
   }, [managementProjects, tasks]);
 
-  const completedTasksCount = useMemo(() => {
-    const projectIds = new Set(managementProjects.map((p) => p.id));
-    return tasks.filter(
-      (t) => t.projectId && projectIds.has(t.projectId) && normalizeTaskStatus(t.status) === "CONCLUÍDO"
-    ).length;
-  }, [managementProjects, tasks]);
-
   const initials = management.name.trim().slice(0, 2).toUpperCase() || "GE";
   const mgmtColor = management.color || "var(--primary)";
   const memberCount = resolvedMembers.length || management.members?.length || 1;
