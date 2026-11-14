@@ -23,6 +23,7 @@ import {
   CALENDAR_EVENT_TYPE_LABELS,
 } from "@/lib/calendar-labels";
 import { cn } from "@/lib/utils";
+import { stripProjectPrefix } from "@/lib/list-view-options";
 
 export interface CalendarEntry {
   kind: "event" | "task";
@@ -449,7 +450,7 @@ export function CalendarDaySchedule({
                         </span>
                         <span className="truncate font-medium">{ev.title}</span>
                         <Badge variant="outline">{CALENDAR_EVENT_TYPE_LABELS[ev.type]}</Badge>
-                        {ev.project && <Badge variant="subtle">{ev.project.name}</Badge>}
+                        {ev.project && <Badge variant="subtle">{stripProjectPrefix(ev.project.name)}</Badge>}
                         {ev.participants.length > 0 && (
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             <Users className="h-3 w-3" />
@@ -557,7 +558,7 @@ export function CalendarAgendaList({
                   {CALENDAR_EVENT_PRIORITY_LABELS[entry.event.priority]}
                 </Badge>
               )}
-              {project && <Badge variant="subtle">{project.name}</Badge>}
+              {project && <Badge variant="subtle">{stripProjectPrefix(project.name)}</Badge>}
               {entry.event?.recurrenceRule && (
                 <Repeat className="h-3.5 w-3.5 text-muted-foreground" />
               )}

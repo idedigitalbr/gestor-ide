@@ -61,6 +61,21 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
     }
   }
 
+  async function markAllAsRead() {
+    const unread = items.filter((i) => !i.readAt);
+    if (!unread.length) return;
+    setItems((current) =>
+      current.map((notification) => ({
+        ...notification,
+        readAt: notification.readAt || new Date().toISOString(),
+      }))
+    );
+    setCount(0);
+    await Promise.allSettled(
+      unread.map((notification) => ideCrmClient.markNotificationRead(notification.id))
+    );
+  }
+
   return (
     <Popover
       onOpenChange={(open) => {
@@ -84,9 +99,20 @@ export function HeaderNotifications({ connected }: { connected: boolean }) {
       </PopoverTrigger>
 
       <PopoverContent align="end" className="w-[min(22rem,calc(100vw-1rem))] p-0">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Notificações</h2>
-          <p className="text-xs text-muted-foreground">{count} não lidas</p>
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold">Notificações</h2>
+            <p className="text-xs text-muted-foreground">{count} não lidas</p>
+          </div>
+          {count > 0 && (
+            <button
+              type="button"
+              onClick={() => void markAllAsRead()}
+              className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+            >
+              Marcar todas como lidas
+            </button>
+          )}
         </div>
         {error && <p role="alert" className="p-4 text-sm text-destructive">{error}</p>}
         <div className="max-h-96 overflow-y-auto">

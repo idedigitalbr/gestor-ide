@@ -64,6 +64,7 @@ import {
   CALENDAR_REMINDER_OPTIONS,
 } from "@/lib/calendar-labels";
 import { cn } from "@/lib/utils";
+import { stripProjectPrefix } from "@/lib/list-view-options";
 
 const PERSONAL_PROJECT_VALUE = "__personal__";
 const NONE_VALUE = "NONE";
@@ -716,7 +717,9 @@ export function CalendarEventDialog({
                   </SelectItem>
                   {projects.map((proj) => (
                     <SelectItem key={proj.id} value={proj.id}>
-                      {proj.code ? `[${proj.code}] ${proj.name}` : proj.name}
+                      {proj.code
+                        ? `[${proj.code}] ${stripProjectPrefix(proj.name)}`
+                        : stripProjectPrefix(proj.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -33,6 +33,7 @@ import {
   formatCalendarRecurrenceSummary,
   formatCalendarReminderLabel,
 } from "@/lib/calendar-labels";
+import { stripProjectPrefix } from "@/lib/list-view-options";
 
 function formatEventSchedule(event: CrmCalendarEvent): string {
   if (event.isAllDay && event.allDayStartDate) {
@@ -113,7 +114,7 @@ export function CalendarEventDetailDialog({
                     Projeto:{" "}
                     <strong className="font-medium text-foreground">
                       {event.project.code ? `[${event.project.code}] ` : ""}
-                      {event.project.name}
+                      {stripProjectPrefix(event.project.name)}
                     </strong>
                   </span>
                 </div>
@@ -256,7 +257,7 @@ export function CalendarEventDetailDialog({
                     Projeto:{" "}
                     <strong className="font-medium text-foreground">
                       {task.project.code ? `[${task.project.code}] ` : ""}
-                      {task.project.name}
+                      {stripProjectPrefix(task.project.name)}
                     </strong>
                   </span>
                 </div>
