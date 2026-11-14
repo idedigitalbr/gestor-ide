@@ -18,7 +18,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
-import { MembersDialog, type TeamMemberItem } from "@/components/members-dialog";
+import {
+  MembersDialog,
+  type TeamMemberItem,
+  type CanonicalMemberRole,
+} from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
   PROJECT_STATUS_LABELS,
@@ -33,10 +37,12 @@ interface ManagementProjectsViewProps {
   management: CrmProjectManagement;
   projects: CrmProject[];
   tasks: Task[];
+  currentUserId?: string | null;
   isConnectedCrm?: boolean;
   canWrite?: boolean;
   canManageMembers?: boolean;
   onCreateProject?: () => void;
+  onRefresh?: () => void;
   onBack?: () => void;
   onSelectProject: (projectId: string) => void;
 }
@@ -83,10 +89,12 @@ export function ManagementProjectsView({
   management,
   projects,
   tasks,
+  currentUserId = null,
   isConnectedCrm = false,
   canWrite = true,
   canManageMembers = false,
   onCreateProject,
+  onRefresh,
   onBack,
   onSelectProject,
 }: ManagementProjectsViewProps) {
@@ -94,6 +102,8 @@ export function ManagementProjectsView({
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
   const [remoteMemberIds, setRemoteMemberIds] = useState<string[] | null>(null);
+  const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
+  const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
 
   // Estados de recolhimento das seções com persistência
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(() => {
@@ -137,27 +147,28 @@ export function ManagementProjectsView({
     const byId = new Map<string, TeamMemberItem>();
     for (const m of management.members ?? []) {
       const uid = m.userId || m.user?.id;
-      if (!uid) continue;
+      if (!uid || removedUserIds.has(uid)) continue;
       byId.set(uid, {
         userId: uid,
         name: m.user?.name,
         email: m.user?.email,
         avatarUrl: m.user?.avatarUrl,
-        role: m.role,
+        role: localRoleOverrides.get(uid) ?? m.role,
       });
     }
     for (const proj of managementProjects) {
       for (const m of proj.members ?? []) {
         const uid = m.userId || m.user?.id;
-        if (!uid) continue;
+        if (!uid || removedUserIds.has(uid)) continue;
         const existing = byId.get(uid);
+        const assignedRole = localRoleOverrides.get(uid) ?? m.role;
         if (!existing) {
           byId.set(uid, {
             userId: uid,
             name: m.user?.name,
             email: m.user?.email,
             avatarUrl: m.user?.avatarUrl,
-            role: m.role,
+            role: assignedRole,
           });
         } else if (!existing.name && m.user?.name) {
           byId.set(uid, {
@@ -165,17 +176,22 @@ export function ManagementProjectsView({
             name: m.user.name,
             email: existing.email ?? m.user.email,
             avatarUrl: existing.avatarUrl ?? m.user.avatarUrl,
+            role: assignedRole,
           });
         }
       }
     }
     for (const uid of remoteMemberIds ?? []) {
+      if (removedUserIds.has(uid)) continue;
       if (!byId.has(uid)) {
-        byId.set(uid, { userId: uid });
+        byId.set(uid, {
+          userId: uid,
+          role: localRoleOverrides.get(uid) ?? "editor",
+        });
       }
     }
     return Array.from(byId.values());
-  }, [management.members, managementProjects, remoteMemberIds]);
+  }, [management.members, managementProjects, remoteMemberIds, removedUserIds, localRoleOverrides]);
 
   async function handleOpenMembersDialog() {
     setMembersDialogOpen(true);
@@ -191,6 +207,59 @@ export function ManagementProjectsView({
       );
     } finally {
       setLoadingMembers(false);
+    }
+  }
+
+  async function handleChangeMemberRole(member: TeamMemberItem, newRole: CanonicalMemberRole) {
+    if (!isConnectedCrm) {
+      setLocalRoleOverrides((prev) => new Map(prev).set(member.userId, newRole));
+      return;
+    }
+    try {
+      await ideCrmClient.updateManagementMemberRole(management.id, member.userId, newRole);
+      setLocalRoleOverrides((prev) => new Map(prev).set(member.userId, newRole));
+      onRefresh?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao alterar papel do integrante.";
+      setMembersError(msg);
+      throw err;
+    }
+  }
+
+  async function handleRemoveMember(member: TeamMemberItem) {
+    if (!isConnectedCrm) {
+      setRemovedUserIds((prev) => new Set([...prev, member.userId]));
+      return;
+    }
+    try {
+      await ideCrmClient.removeManagementMember(management.id, member.userId);
+      setRemovedUserIds((prev) => new Set([...prev, member.userId]));
+      onRefresh?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao remover integrante.";
+      setMembersError(msg);
+      throw err;
+    }
+  }
+
+  async function handleAddMember(data: { emailOrId: string; role: CanonicalMemberRole }) {
+    if (!isConnectedCrm) {
+      setRemoteMemberIds((prev) => [...(prev ?? []), data.emailOrId]);
+      setLocalRoleOverrides((prev) => new Map(prev).set(data.emailOrId, data.role));
+      return;
+    }
+    try {
+      await ideCrmClient.addManagementMember(management.id, {
+        email: data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        userId: !data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        role: data.role,
+      });
+      await handleOpenMembersDialog();
+      onRefresh?.();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao adicionar integrante.";
+      setMembersError(msg);
+      throw err;
     }
   }
 
@@ -678,11 +747,17 @@ export function ManagementProjectsView({
         open={membersDialogOpen}
         onOpenChange={setMembersDialogOpen}
         title={`Membros de ${management.name}`}
-        description="Integrantes vinculados a esta gestão e aos seus projetos no IDE CRM."
+        description="Pessoas liberadas no funil operacional desta gestão."
         members={resolvedMembers}
         loading={loadingMembers}
         error={membersError}
         canManageMembers={canManageMembers}
+        currentUserId={currentUserId}
+        entityType="management"
+        onChangeRole={handleChangeMemberRole}
+        onRemoveMember={handleRemoveMember}
+        onAddMember={handleAddMember}
+        onSelfLeave={onBack}
       />
     </div>
   );

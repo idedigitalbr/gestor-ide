@@ -51,7 +51,11 @@ import {
 } from "@/lib/task-hierarchy";
 import { canPerformProjectAction } from "@/lib/crm-permissions";
 import { reconcileRemoteTasks } from "@/lib/task-sync";
-import { MembersDialog, type TeamMemberItem } from "@/components/members-dialog";
+import {
+  MembersDialog,
+  type TeamMemberItem,
+  type CanonicalMemberRole,
+} from "@/components/members-dialog";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
 import { TaskAdditionalView } from "@/components/task-additional-view";
@@ -1432,6 +1436,67 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return Array.from(byUserId.values());
   }, [activeProjectMembers, currentProject]);
 
+  async function handleUpdateProjectMemberRole(member: TeamMemberItem, newRole: CanonicalMemberRole) {
+    if (!selectedProjectId || !isConnectedCrm) return;
+    try {
+      await ideCrmClient.updateProjectMemberRole(selectedProjectId, member.userId, newRole);
+      setProjectMembers((prev) => {
+        if (!prev || prev.projectId !== selectedProjectId) return prev;
+        return {
+          ...prev,
+          members: prev.members.map((m) =>
+            m.userId === member.userId ? { ...m, role: newRole } : m
+          ),
+        };
+      });
+      void ideCrmClient.listProjectMembers(selectedProjectId).then((res) => {
+        setProjectMembers({ projectId: selectedProjectId, members: res.members });
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao alterar papel do integrante.";
+      setSyncError(msg);
+      throw err;
+    }
+  }
+
+  async function handleRemoveProjectMember(member: TeamMemberItem) {
+    if (!selectedProjectId || !isConnectedCrm) return;
+    try {
+      await ideCrmClient.removeProjectMember(selectedProjectId, member.userId);
+      setProjectMembers((prev) => {
+        if (!prev || prev.projectId !== selectedProjectId) return prev;
+        return {
+          ...prev,
+          members: prev.members.filter((m) => m.userId !== member.userId),
+        };
+      });
+      void ideCrmClient.listProjectMembers(selectedProjectId).then((res) => {
+        setProjectMembers({ projectId: selectedProjectId, members: res.members });
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao remover integrante do projeto.";
+      setSyncError(msg);
+      throw err;
+    }
+  }
+
+  async function handleAddProjectMember(data: { emailOrId: string; role: CanonicalMemberRole }) {
+    if (!selectedProjectId || !isConnectedCrm) return;
+    try {
+      await ideCrmClient.addProjectMember(selectedProjectId, {
+        email: data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        userId: !data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        role: data.role,
+      });
+      const res = await ideCrmClient.listProjectMembers(selectedProjectId);
+      setProjectMembers({ projectId: selectedProjectId, members: res.members });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao adicionar integrante ao projeto.";
+      setSyncError(msg);
+      throw err;
+    }
+  }
+
   function handleClearFilters() {
     updateOnlyMyTasks(false);
     setFilters({
@@ -1607,10 +1672,12 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               management={currentManagement}
               projects={visibleProjects}
               tasks={tasks}
+              currentUserId={currentUser?.id}
               isConnectedCrm={isConnectedCrm}
               canWrite={canWriteProjects}
               canManageMembers={canManageProjectMembers}
               onCreateProject={() => setIsNewProjectOpen(true)}
+              onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
               onBack={() => handleSelectManagement(null)}
               onSelectProject={(id) => handleSelectProject(id)}
             />
@@ -1718,10 +1785,16 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           open={isProjectMembersOpen}
           onOpenChange={setIsProjectMembersOpen}
           title={`Membros de ${currentProject.name}`}
-          description="Participantes vinculados a este projeto no IDE CRM."
+          description="Pessoas liberadas no funil operacional deste projeto."
           members={projectDialogMembers}
           loading={Boolean(isConnectedCrm && selectedProjectId && projectMembers?.projectId !== selectedProjectId)}
           canManageMembers={canManageProjectMembers}
+          currentUserId={currentUser?.id}
+          entityType="project"
+          onChangeRole={handleUpdateProjectMemberRole}
+          onRemoveMember={handleRemoveProjectMember}
+          onAddMember={handleAddProjectMember}
+          onSelfLeave={() => handleSelectProject(null)}
         />
       )}
 

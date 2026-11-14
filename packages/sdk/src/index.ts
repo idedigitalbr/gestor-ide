@@ -246,6 +246,61 @@ export class IdeCrmClient {
     return this.request(`/projects/managements/${encodeURIComponent(id)}/members`);
   }
 
+  async addManagementMember(
+    id: string,
+    input: { userId?: string; email?: string; role?: string }
+  ): Promise<{ ok?: boolean }> {
+    return this.request(
+      `/projects/managements/${encodeURIComponent(id)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      true
+    );
+  }
+
+  async updateManagementMemberRole(
+    managementId: string,
+    userId: string,
+    role: string
+  ): Promise<{ ok?: boolean }> {
+    return this.request<{ ok?: boolean }>(
+      `/projects/managements/${encodeURIComponent(managementId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      }
+    ).catch(async () => {
+      return this.request<{ ok?: boolean }>(
+        `/projects/managements/${encodeURIComponent(managementId)}/members`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ userId, role }),
+        }
+      );
+    });
+  }
+
+  async removeManagementMember(
+    managementId: string,
+    userId: string
+  ): Promise<{ ok?: boolean }> {
+    return this.request<{ ok?: boolean }>(
+      `/projects/managements/${encodeURIComponent(managementId)}/members/${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+      }
+    ).catch(async () => {
+      return this.request<{ ok?: boolean }>(
+        `/projects/managements/${encodeURIComponent(managementId)}/members?userId=${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+    });
+  }
+
   async createManagement(input: { name: string; description?: string }): Promise<{ management: CrmProjectManagement }> {
     return this.request("/projects/managements", {
       method: "POST",
@@ -376,6 +431,61 @@ export class IdeCrmClient {
   async listProjectMembers(projectId?: string): Promise<{ members: CrmProjectMember[] }> {
     const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
     return this.request(`/projects/members${query}`);
+  }
+
+  async addProjectMember(
+    projectId: string,
+    input: { userId?: string; email?: string; role?: string }
+  ): Promise<{ ok?: boolean }> {
+    return this.request(
+      `/projects/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ projectId, ...input }),
+      },
+      true
+    );
+  }
+
+  async updateProjectMemberRole(
+    projectId: string,
+    userId: string,
+    role: string
+  ): Promise<{ ok?: boolean }> {
+    return this.request<{ ok?: boolean }>(
+      `/projects/members/${encodeURIComponent(userId)}?projectId=${encodeURIComponent(projectId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      }
+    ).catch(async () => {
+      return this.request<{ ok?: boolean }>(
+        `/projects/members`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ projectId, userId, role }),
+        }
+      );
+    });
+  }
+
+  async removeProjectMember(
+    projectId: string,
+    userId: string
+  ): Promise<{ ok?: boolean }> {
+    return this.request<{ ok?: boolean }>(
+      `/projects/members/${encodeURIComponent(userId)}?projectId=${encodeURIComponent(projectId)}`,
+      {
+        method: "DELETE",
+      }
+    ).catch(async () => {
+      return this.request<{ ok?: boolean }>(
+        `/projects/members?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(userId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+    });
   }
 }
 
