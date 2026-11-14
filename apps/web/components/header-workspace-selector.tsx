@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { CrmProject, CrmProjectManagement } from "@gestor-ide/core";
-import { Check, ChevronDown, Folder, Layers3, Search, X } from "lucide-react";
+import { Check, ChevronDown, Folder, Layers3, Pin, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { stripManagementPrefix, stripProjectPrefix } from "@/lib/list-view-options";
@@ -37,6 +37,58 @@ export function HeaderWorkspaceSelector({
   const [projectOpen, setProjectOpen] = useState(false);
   const [managementQuery, setManagementQuery] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
+
+  // Estado de fixação (Pin) para agir como breadcrumb
+  const [isPinned, setIsPinned] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem("gestor_workspace_selector_pinned") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const togglePin = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsPinned((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("gestor_workspace_selector_pinned", String(next));
+      } catch {}
+      return next;
+    });
+    setManagementOpen(false);
+    setProjectOpen(false);
+  }, []);
+
+  const handleManagementButtonClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isPinned) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selectedProjectId) {
+          // Volta do projeto para a visão da gestão (projetos da gestão)
+          onSelectProject?.(null);
+        } else if (selectedManagementId) {
+          // Volta da gestão para Todas as Gestões
+          onSelectManagement?.(null);
+        }
+      }
+    },
+    [isPinned, selectedProjectId, selectedManagementId, onSelectProject, onSelectManagement]
+  );
+
+  const handleProjectButtonClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isPinned) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Em modo breadcrumb, já está no projeto folha
+      }
+    },
+    [isPinned]
+  );
 
   // Gestões filtradas
   const filteredManagements = useMemo(() => {
@@ -126,35 +178,66 @@ export function HeaderWorkspaceSelector({
       <div
         role="navigation"
         aria-label="Seletor de Gestão e Projeto"
-        className="flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-0.5 relative z-50"
+        className="group/selector flex min-w-0 max-w-full items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-0.5 relative z-50 transition-all"
       >
         {/* 1. SELETOR DE GESTÃO (ANEXO 2) */}
-        <Popover open={managementOpen} onOpenChange={(open) => { setManagementOpen(open); if (open) setProjectOpen(false); }}>
+        <Popover
+          open={isPinned ? false : managementOpen}
+          onOpenChange={(open) => {
+            if (isPinned) {
+              setManagementOpen(false);
+              return;
+            }
+            setManagementOpen(open);
+            if (open) setProjectOpen(false);
+          }}
+        >
         <div className={cn("relative min-w-0 shrink", managementOpen && "z-50")}>
           <PopoverTrigger asChild>
           <button
             type="button"
+            onClick={handleManagementButtonClick}
             className={cn(
-              "group flex h-7 w-full min-w-0 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
+              "group flex h-7 min-w-0 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              isPinned
+                ? "cursor-pointer hover:bg-muted/60 hover:text-primary"
+                : "cursor-pointer hover:bg-muted/70 hover:text-foreground",
+              !isPinned && managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
-            aria-expanded={managementOpen}
-            aria-haspopup="dialog"
+            aria-expanded={!isPinned && managementOpen}
+            aria-haspopup={isPinned ? undefined : "dialog"}
             aria-label={`Gestão: ${managementLabel}`}
-            title={`Gestão: ${managementLabel}`}
+            title={
+              isPinned
+                ? selectedProjectId
+                  ? `Voltar para gestão ${managementLabel}`
+                  : selectedManagementId
+                  ? "Voltar para Todas as Gestões"
+                  : `Gestão: ${managementLabel}`
+                : `Gestão: ${managementLabel}`
+            }
           >
             {rawManagementLabel && (
               <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
                 Gestão
               </span>
             )}
-            <span className="truncate">{managementLabel}</span>
-            <ChevronDown
+            <span
               className={cn(
-                "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
-                managementOpen && "rotate-180 text-foreground"
+                "truncate",
+                isPinned && (selectedProjectId || selectedManagementId) && "group-hover:underline"
               )}
-            />
+            >
+              {managementLabel}
+            </span>
+            {!isPinned && (
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
+                  managementOpen && "rotate-180 text-foreground"
+                )}
+              />
+            )}
           </button>
           </PopoverTrigger>
 
@@ -272,19 +355,33 @@ export function HeaderWorkspaceSelector({
       <span className="text-muted-foreground/40 text-xs font-semibold select-none px-0.5">/</span>
 
       {/* 2. SELETOR DE PROJETO (ANEXO 2 - só habilitado após setar a gestão) */}
-      <Popover open={projectOpen} onOpenChange={(open) => { setProjectOpen(open); if (open) setManagementOpen(false); }}>
+      <Popover
+        open={isPinned ? false : projectOpen}
+        onOpenChange={(open) => {
+          if (isPinned) {
+            setProjectOpen(false);
+            return;
+          }
+          setProjectOpen(open);
+          if (open) setManagementOpen(false);
+        }}
+      >
       <div className={cn("relative min-w-0 shrink", projectOpen && "z-50")}>
         {!hasManagementSelected ? (
           <div aria-hidden="true" className="h-7 w-20" />
         ) : (
           <PopoverTrigger asChild><button
             type="button"
+            onClick={handleProjectButtonClick}
             className={cn(
-              "group flex h-7 w-full min-w-0 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors hover:bg-muted/70 hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              projectOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
+              "group flex h-7 min-w-0 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              isPinned
+                ? "cursor-default text-foreground"
+                : "cursor-pointer hover:bg-muted/70 hover:text-foreground",
+              !isPinned && projectOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
-            aria-expanded={projectOpen}
-            aria-haspopup="dialog"
+            aria-expanded={!isPinned && projectOpen}
+            aria-haspopup={isPinned ? undefined : "dialog"}
             aria-label={`Projeto: ${projectLabel}`}
             title={`Projeto: ${projectLabel}`}
           >
@@ -294,12 +391,14 @@ export function HeaderWorkspaceSelector({
               </span>
             )}
             <span className="truncate">{projectLabel}</span>
-            <ChevronDown
-              className={cn(
-                "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
-                projectOpen && "rotate-180 text-foreground"
-              )}
-            />
+            {!isPinned && (
+              <ChevronDown
+                className={cn(
+                  "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
+                  projectOpen && "rotate-180 text-foreground"
+                )}
+              />
+            )}
           </button></PopoverTrigger>
         )}
 
@@ -411,6 +510,32 @@ export function HeaderWorkspaceSelector({
           </PopoverContent>
       </div>
       </Popover>
+
+      {/* Botão de Fixar / Desafixar (Tarracha / Pin para modo Breadcrumb) */}
+      <button
+        type="button"
+        onClick={togglePin}
+        className={cn(
+          "h-6 w-6 rounded-md flex items-center justify-center transition-all cursor-pointer shrink-0 ml-0.5",
+          isPinned
+            ? "text-primary bg-primary/10 hover:bg-primary/20 opacity-100"
+            : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 opacity-0 group-hover/selector:opacity-100 focus-visible:opacity-100"
+        )}
+        title={
+          isPinned
+            ? "Fixado como breadcrumb (clique para alternar para modo seletor)"
+            : "Fixar como breadcrumb"
+        }
+        aria-label={isPinned ? "Desafixar do modo breadcrumb" : "Fixar como breadcrumb"}
+        aria-pressed={isPinned}
+      >
+        <Pin
+          className={cn(
+            "w-3.5 h-3.5 transition-transform",
+            isPinned ? "rotate-45 fill-primary text-primary" : "-rotate-45"
+          )}
+        />
+      </button>
     </div>
     </>
   );

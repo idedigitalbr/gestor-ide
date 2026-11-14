@@ -809,14 +809,14 @@ export function ManagementProjectsView({
           <div className="space-y-2">
             {/* Linha Única de Cabeçalho das Colunas: PROJETOS [progresso] | STATUS | DATA | RESPONSÁVEL | [+] */}
             <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/50 select-none">
-              {/* Coluna 1: PROJETOS + Progresso Real da Gestão */}
+              {/* Coluna 1: PROJETOS + Progresso Real dos Projetos da Gestão */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   PROJETOS
                 </span>
                 <SegmentedProgressBar
-                  completed={completedTasksCount}
-                  total={totalTasksCount}
+                  completed={completedProjectsCount}
+                  total={managementProjects.length}
                 />
               </div>
 
@@ -966,8 +966,8 @@ export function ManagementProjectsView({
                   PROJETOS
                 </span>
                 <SegmentedProgressBar
-                  completed={completedTasksCount}
-                  total={totalTasksCount}
+                  completed={completedProjectsCount}
+                  total={managementProjects.length}
                 />
               </div>
 
