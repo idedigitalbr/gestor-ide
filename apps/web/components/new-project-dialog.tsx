@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { stripManagementPrefix } from "@/lib/list-view-options";
 
 function NewProjectDialogContent({
   onOpenChange,
@@ -89,7 +90,7 @@ function NewProjectDialogContent({
             <SelectContent>
               {managements.map((management) => (
                 <SelectItem key={management.id} value={management.id}>
-                  {management.name}
+                  {stripManagementPrefix(management.name)}
                 </SelectItem>
               ))}
             </SelectContent>

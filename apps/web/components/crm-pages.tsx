@@ -1,7 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Folder,
+  Layers,
+  ListTodo,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react";
 import type {
   CrmAccount,
   CrmCalendarEvent,
@@ -41,6 +53,7 @@ import {
   type CalendarViewMode,
 } from "@/lib/calendar-date";
 import { CALENDAR_EVENT_TYPE_LABELS } from "@/lib/calendar-labels";
+import { stripManagementPrefix, stripProjectPrefix } from "@/lib/list-view-options";
 
 function Shell({
   title,
@@ -52,9 +65,16 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 animate-in fade-in duration-150">
       <div>
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3 transition-colors group cursor-pointer"
+        >
+          <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          <span>Voltar para Início</span>
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
       {children}
@@ -358,99 +378,186 @@ export function AccountPage() {
 export function DashboardPage() {
   const [data, setData] = useState<CrmProjectsDashboard | null>(null);
   const [error, setError] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    void ideCrmClient
-      .getProjectsDashboard()
-      .then((r) => setData(r.dashboard))
-      .catch((e) => setError(e.message));
+  const loadData = useCallback(async () => {
+    setIsRefreshing(true);
+    setError("");
+    try {
+      const r = await ideCrmClient.getProjectsDashboard();
+      setData(r.dashboard);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar indicadores.");
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Dashboard de projetos</h1>
+    <div className="mx-auto max-w-6xl space-y-6 animate-in fade-in duration-150">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3 transition-colors group cursor-pointer"
+          >
+            <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Voltar para Início</span>
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard de projetos</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Visão consolidada de métricas, saúde das operações e distribuição de tarefas no IDE Gestor.
+          </p>
+        </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void loadData()}
+          disabled={isRefreshing}
+          className="gap-2 cursor-pointer text-xs"
+        >
+          <RefreshCw className={isRefreshing ? "size-3.5 animate-spin" : "size-3.5"} />
+          <span>{isRefreshing ? "Atualizando..." : "Atualizar dados"}</span>
+        </Button>
+      </div>
+
       <Feedback message={error} />
+
       {!data && !error && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Carregando indicadores...
-        </p>
+        <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Carregando indicadores do painel...
+        </div>
       )}
+
       {data && (
         <>
+          {/* Grid de 4 KPIs */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              ["Gestões ativas", data.metrics.activeManagements],
-              ["Projetos", data.metrics.totalProjects],
-              ["Tarefas abertas", data.metrics.openTasks],
-              ["Tarefas atrasadas", data.metrics.overdueTasks],
-            ].map(([label, value]) => (
-              <Panel key={label} title={String(label)}>
-                <p className="text-3xl font-semibold">{value}</p>
-              </Panel>
-            ))}
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+              <div className="size-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                <Folder className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Gestões ativas</p>
+                <p className="text-2xl font-bold text-foreground mt-0.5">{data.metrics.activeManagements}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+              <div className="size-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                <Layers className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Projetos cadastrados</p>
+                <p className="text-2xl font-bold text-foreground mt-0.5">{data.metrics.totalProjects}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+              <div className="size-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                <ListTodo className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Tarefas abertas</p>
+                <p className="text-2xl font-bold text-foreground mt-0.5">{data.metrics.openTasks}</p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+              <div className="size-12 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
+                <AlertCircle className="size-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-muted-foreground">Tarefas atrasadas</p>
+                <p className="text-2xl font-bold text-foreground mt-0.5">{data.metrics.overdueTasks}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Panel title="Distribuição por status">
+          {/* Gráficos e Distribuições */}
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Panel title="Distribuição por status" description="Proporção das tarefas em cada estágio operacional.">
               {data.statusDistribution.length > 0 ? (
-                data.statusDistribution.map((item) => (
-                  <div key={item.status} className="mb-3">
-                    <div className="flex justify-between text-sm">
-                      <span>{item.label}</span>
-                      <span>
-                        {item.count} · {item.percentage}%
-                      </span>
+                <div className="space-y-3.5">
+                  {data.statusDistribution.map((item) => (
+                    <div key={item.status} className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-medium">
+                        <span className="text-foreground">{item.label}</span>
+                        <span className="text-muted-foreground">
+                          {item.count} {item.count === 1 ? "tarefa" : "tarefas"} ({item.percentage}%)
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(0, item.percentage))}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-1 h-2 rounded bg-muted">
-                      <div
-                        className="h-2 rounded bg-primary"
-                        style={{ width: `${item.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Nenhuma tarefa contabilizada até o momento.
                 </p>
               )}
             </Panel>
 
-            <Panel title="Carga por gestão">
+            <Panel title="Carga por gestão" description="Progresso médio e tarefas em aberto por núcleo de gestão.">
               {data.managements.length > 0 ? (
-                data.managements.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex justify-between border-b border-border py-2 text-sm last:border-0"
-                  >
-                    <span>{item.name}</span>
-                    <span>
-                      {item.openTasks} {item.openTasks === 1 ? "tarefa" : "tarefas"} ·{" "}
-                      {item.progress}%
-                    </span>
-                  </div>
-                ))
+                <div className="divide-y divide-border/60">
+                  {data.managements.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between py-2.5 text-xs first:pt-0 last:pb-0"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                          Gestão
+                        </span>
+                        <span className="font-semibold text-foreground truncate">
+                          {stripManagementPrefix(item.name)}
+                        </span>
+                      </div>
+                      <span className="text-muted-foreground shrink-0 font-medium ml-2">
+                        {item.openTasks} {item.openTasks === 1 ? "tarefa" : "tarefas"} ·{" "}
+                        <span className="font-bold text-foreground">{item.progress}%</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Nenhuma gestão ativa cadastrada.
                 </p>
               )}
             </Panel>
           </div>
 
-          <Panel title="Insights inteligentes">
+          <Panel title="Insights inteligentes" description="Alertas e oportunidades identificadas automaticamente pelo sistema.">
             {data.insights.length > 0 ? (
-              data.insights.map((item) => (
-                <div key={item.title} className="mb-3 rounded-lg border border-border p-3 last:mb-0">
-                  <h3 className="font-medium">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Regra: {item.rule}</p>
-                </div>
-              ))
+              <div className="grid gap-3 sm:grid-cols-2">
+                {data.insights.map((item) => (
+                  <div key={item.title} className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="size-4 text-primary shrink-0" />
+                      <h3 className="font-semibold text-xs text-foreground">{item.title}</h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{item.description}</p>
+                    <p className="text-[10px] text-muted-foreground/70 pt-1">Critério: {item.rule}</p>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Nenhum alerta ou insight crítico identificado no momento.
-              </p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                <span>Nenhum alerta ou gargalo crítico identificado. Todas as operações estão dentro do fluxo esperado!</span>
+              </div>
             )}
           </Panel>
         </>
@@ -769,7 +876,16 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="mx-auto max-w-6xl space-y-4 animate-in fade-in duration-150">
+      <div>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-1 transition-colors group cursor-pointer"
+        >
+          <ArrowLeft className="size-3.5 group-hover:-translate-x-0.5 transition-transform" />
+          <span>Voltar para Início</span>
+        </Link>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -833,7 +949,9 @@ export function CalendarPage() {
               <SelectItem value={ALL_PROJECTS_VALUE}>Todos os projetos</SelectItem>
               {projects.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
-                  {project.code ? `[${project.code}] ${project.name}` : project.name}
+                  {project.code
+                    ? `[${project.code}] ${stripProjectPrefix(project.name)}`
+                    : stripProjectPrefix(project.name)}
                 </SelectItem>
               ))}
             </SelectContent>

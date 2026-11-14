@@ -294,10 +294,10 @@ function SignalBarsIcon({ className }: { className?: string }) {
 
 function PurpleBoardIcon() {
   return (
-    <div className="w-[34px] h-[34px] rounded-[8px] bg-gradient-to-b from-[#7c5dfa] to-[#5938e8] shadow-[0_2px_12px_rgba(110,81,249,0.5)] flex items-center justify-center shrink-0 border border-white/15">
-      <div className="w-[18px] h-[18px] rounded-[4px] bg-white/20 flex items-start gap-[2.5px] p-[3.5px]">
-        <span className="w-[5px] h-[11px] rounded-[1.5px] bg-white" />
-        <span className="w-[5px] h-[7px] rounded-[1.5px] bg-white" />
+    <div className="w-[34px] h-[34px] rounded-[8px] bg-gradient-to-b from-primary to-primary/85 shadow-sm flex items-center justify-center shrink-0 border border-border/40">
+      <div className="w-[18px] h-[18px] rounded-[4px] bg-primary-foreground/20 flex items-start gap-[2.5px] p-[3.5px]">
+        <span className="w-[5px] h-[11px] rounded-[1.5px] bg-primary-foreground" />
+        <span className="w-[5px] h-[7px] rounded-[1.5px] bg-primary-foreground" />
       </div>
     </div>
   );
