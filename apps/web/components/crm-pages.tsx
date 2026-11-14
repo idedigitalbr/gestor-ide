@@ -451,7 +451,7 @@ export function DashboardPage() {
         <>
           {/* Grid de 4 KPIs */}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm flex items-center gap-4">
               <div className="size-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
                 <Folder className="size-6" />
               </div>
@@ -461,7 +461,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm flex items-center gap-4">
               <div className="size-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
                 <Layers className="size-6" />
               </div>
@@ -471,7 +471,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm flex items-center gap-4">
               <div className="size-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
                 <ListTodo className="size-6" />
               </div>
@@ -481,7 +481,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-xs flex items-center gap-4">
+            <div className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm flex items-center gap-4">
               <div className="size-12 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0">
                 <AlertCircle className="size-6" />
               </div>

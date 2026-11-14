@@ -8,6 +8,8 @@ import { ALL_CANONICAL_STATUSES } from "../task-status-icon";
 import { KanbanColumn } from "./kanban-column";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
 
 interface TaskKanbanProps {
   tasks: Task[];
@@ -32,13 +34,34 @@ export function TaskKanban({
 }: TaskKanbanProps) {
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>({});
   const [hiddenColumns, setHiddenColumns] = useState<TaskStatus[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Hooks de hover para as extremidades laterais do Kanban
+  const {
+    isGhostVisible: isLeftGhost,
+    showGhost: showLeftGhost,
+    hideGhost: hideLeftGhost,
+  } = useKanbanEdgeHover({ leaveDelay: 220 });
+
+  const {
+    isGhostVisible: isRightGhost,
+    showGhost: showRightGhost,
+    hideGhost: hideRightGhost,
+    keepGhost: keepRightGhost,
+  } = useKanbanEdgeHover({ leaveDelay: 220 });
 
   function handleDragStart(e: React.DragEvent, taskId: string) {
+    setIsDragging(true);
     e.dataTransfer.setData("text/plain", taskId);
     e.dataTransfer.effectAllowed = "move";
   }
 
+  function handleDragEnd() {
+    setIsDragging(false);
+  }
+
   function handleDropTask(taskId: string, targetStatus: TaskStatus) {
+    setIsDragging(false);
     const task = tasks.find((t) => t.id === taskId);
     if (task && normalizeTaskStatus(task.status) !== normalizeTaskStatus(targetStatus)) {
       onUpdateTask({ ...task, status: targetStatus });
@@ -97,37 +120,88 @@ export function TaskKanban({
         </div>
       )}
 
-      {/* Main Board Scroll Area */}
-      <ScrollArea className="w-full pb-4">
-        <div className="flex gap-3 items-start min-w-[1200px] xl:min-w-0">
-          {visibleColumns.map((colStatus) => {
-            const colTasks = tasks.filter(
-              (t) => normalizeTaskStatus(t.status) === colStatus
-            );
-            const isCollapsed = Boolean(collapsedColumns[colStatus]);
+      {/* Main Board Scroll Area com detecção de hover nas bordas */}
+      <div className="relative w-full">
+        {/* Trigger de hover na borda lateral esquerda do Kanban */}
+        <div
+          className="absolute left-0 top-0 bottom-4 w-6 z-20 cursor-pointer"
+          onMouseEnter={() => showLeftGhost("left")}
+          onMouseLeave={hideLeftGhost}
+          aria-hidden="true"
+        />
 
-            return (
-              <KanbanColumn
-                key={colStatus}
-                status={colStatus}
-                tasks={colTasks}
-                members={members}
-                onChangeAssignee={onChangeAssignee}
-                isCollapsed={isCollapsed}
-                onToggleCollapse={() => toggleCollapse(colStatus)}
-                onHideColumn={() => hideColumn(colStatus)}
-                onUpdateTask={onUpdateTask}
-                onDeleteTask={onDeleteTask}
-                onOpenDetails={onOpenDetails}
-                onQuickAdd={onQuickAdd}
-                onDropTask={handleDropTask}
-                onDragStart={handleDragStart}
-              />
-            );
-          })}
-        </div>
-        <ScrollBar orientation="horizontal" className="h-1.5" />
-      </ScrollArea>
+        {/* Trigger de hover na borda lateral direita do Kanban */}
+        <div
+          className="absolute right-0 top-0 bottom-4 w-6 z-20 cursor-pointer"
+          onMouseEnter={() => showRightGhost("right")}
+          onMouseLeave={hideRightGhost}
+          aria-hidden="true"
+        />
+
+        <ScrollArea className="w-full pb-4">
+          <div className="flex gap-3 items-start min-w-[1200px] xl:min-w-0 pr-2">
+            {visibleColumns.map((colStatus, index) => {
+              const colTasks = tasks.filter(
+                (t) => normalizeTaskStatus(t.status) === colStatus
+              );
+              const isCollapsed = Boolean(collapsedColumns[colStatus]);
+              const isFirstColumn = index === 0;
+              const isLastColumn = index === visibleColumns.length - 1;
+
+              return (
+                <KanbanColumn
+                  key={colStatus}
+                  status={colStatus}
+                  tasks={colTasks}
+                  members={members}
+                  onChangeAssignee={onChangeAssignee}
+                  isCollapsed={isCollapsed}
+                  onToggleCollapse={() => toggleCollapse(colStatus)}
+                  onHideColumn={() => hideColumn(colStatus)}
+                  onUpdateTask={onUpdateTask}
+                  onDeleteTask={onDeleteTask}
+                  onOpenDetails={onOpenDetails}
+                  onQuickAdd={onQuickAdd}
+                  onDropTask={handleDropTask}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  isFirstColumn={isFirstColumn}
+                  isLastColumn={isLastColumn}
+                  isDragging={isDragging}
+                  forceShowGhost={isFirstColumn ? isLeftGhost : isLastColumn ? isRightGhost : false}
+                  ghostDirection={isFirstColumn ? "left" : "right"}
+                />
+              );
+            })}
+
+            {/* Placeholder lateral expansível no final das colunas */}
+            {visibleColumns.length > 0 && (
+              <div
+                onMouseEnter={keepRightGhost}
+                onMouseLeave={hideRightGhost}
+                className={cn(
+                  "transition-all duration-300 ease-out shrink-0 overflow-hidden",
+                  isRightGhost && !isDragging
+                    ? "w-[240px] opacity-100 translate-x-0"
+                    : "w-0 opacity-0 translate-x-4 pointer-events-none"
+                )}
+              >
+                <KanbanGhostCard
+                  label="Novo"
+                  sublabel="Adicionar card"
+                  variant="column"
+                  slideDirection="right"
+                  isVisible={isRightGhost && !isDragging}
+                  onClick={() =>
+                    onQuickAdd(visibleColumns[visibleColumns.length - 1] || "PENDENTE")
+                  }
+                />
+              </div>
+            )}
+          </div>
+          <ScrollBar orientation="horizontal" className="h-1.5" />
+        </ScrollArea>
+      </div>
     </div>
   );
 }

@@ -181,7 +181,7 @@ export function EntityCard({
             onSelect();
           }
         }}
-        className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all duration-200 hover:border-primary/40 hover:shadow-md cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border/80 bg-card text-card-foreground shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 hover:border-primary/40 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {/* Banner Superior com Cor ou Imagem */}
         <div

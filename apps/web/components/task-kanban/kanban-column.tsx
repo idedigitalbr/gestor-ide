@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskStatus } from "@/types/task";
 import { KanbanCard } from "./kanban-card";
 import { StatusIcon, getStatusDefinition } from "../task-status-icon";
 import { Plus, ChevronsLeftRight, EyeOff, ChevronsRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
 
 interface KanbanColumnProps {
   status: TaskStatus;
@@ -22,6 +23,12 @@ interface KanbanColumnProps {
   onQuickAdd: (status: TaskStatus) => void;
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void;
   onDragStart: (e: React.DragEvent, taskId: string) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  isFirstColumn?: boolean;
+  isLastColumn?: boolean;
+  isDragging?: boolean;
+  forceShowGhost?: boolean;
+  ghostDirection?: "left" | "right";
 }
 
 export function KanbanColumn({
@@ -38,8 +45,46 @@ export function KanbanColumn({
   onQuickAdd,
   onDropTask,
   onDragStart,
+  onDragEnd,
+  isFirstColumn = false,
+  isLastColumn = false,
+  isDragging = false,
+  forceShowGhost = false,
+  ghostDirection,
 }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  const {
+    isGhostVisible,
+    slideDirection,
+    showGhost,
+    hideGhost,
+    keepGhost,
+  } = useKanbanEdgeHover({ leaveDelay: 220 });
+
+  const effectiveSlideDirection =
+    ghostDirection ||
+    slideDirection ||
+    (isFirstColumn ? "left" : "right");
+
+  const isGhostActive = (isGhostVisible || forceShowGhost) && !isDragging;
+
+  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (isDragging || isCollapsed) return;
+    if (!columnRef.current) return;
+
+    const rect = columnRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    // Se estiver na primeira coluna e próximo à borda esquerda (até 36px)
+    if (isFirstColumn && x <= 36) {
+      showGhost("left");
+    } else if (isLastColumn && rect.width - x <= 36) {
+      // Se estiver na última coluna e próximo à borda direita (até 36px)
+      showGhost("right");
+    }
+  }
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -132,15 +177,38 @@ export function KanbanColumn({
   // Expanded Standard Column
   return (
     <div
+      ref={columnRef}
       data-column-status={status}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={hideGhost}
       className={cn(
-        "flex flex-col flex-1 min-w-[240px] max-w-[300px] rounded-xl p-2 transition-all duration-150 select-none bg-muted/30 border border-border/80",
+        "relative flex flex-col flex-1 min-w-[240px] max-w-[300px] rounded-xl p-2 transition-all duration-150 select-none bg-muted/30 border border-border/80",
         isDragOver && "border-ring/50 bg-muted/60"
       )}
     >
+      {/* Trigger invisível de hover na lateral externa da primeira coluna */}
+      {isFirstColumn && (
+        <div
+          className="absolute -left-3 top-0 bottom-0 w-7 z-20 cursor-pointer"
+          onMouseEnter={() => showGhost("left")}
+          onMouseLeave={hideGhost}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Trigger invisível de hover na lateral externa da última coluna */}
+      {isLastColumn && (
+        <div
+          className="absolute -right-3 top-0 bottom-0 w-7 z-20 cursor-pointer"
+          onMouseEnter={() => showGhost("right")}
+          onMouseLeave={hideGhost}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Column Header */}
       <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/60">
         <div className="flex items-center gap-2">
@@ -188,6 +256,30 @@ export function KanbanColumn({
 
       {/* Cards list */}
       <div className="flex flex-col gap-2 overflow-y-auto flex-1 pr-0.5">
+        {/* Card Fantasma (Skeleton / Placeholder) suave com transição e microinteração */}
+        <div
+          onMouseEnter={keepGhost}
+          onMouseLeave={hideGhost}
+          className={cn(
+            "overflow-hidden transition-all duration-300 ease-out",
+            isGhostActive
+              ? "max-h-24 opacity-100 mb-1 translate-x-0"
+              : cn(
+                  "max-h-0 opacity-0 mb-0 pointer-events-none",
+                  effectiveSlideDirection === "left" ? "-translate-x-5" : "translate-x-5"
+                )
+          )}
+        >
+          <KanbanGhostCard
+            label="Novo"
+            sublabel={`em ${getStatusDefinition(status).label}`}
+            onClick={() => onQuickAdd(status)}
+            slideDirection={effectiveSlideDirection}
+            variant="task"
+            isVisible={isGhostActive}
+          />
+        </div>
+
         {tasks.map((task) => (
           <KanbanCard
             key={task.id}
@@ -198,10 +290,11 @@ export function KanbanColumn({
             onDeleteTask={onDeleteTask}
             onOpenDetails={onOpenDetails}
             onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
           />
         ))}
 
-        {tasks.length === 0 && (
+        {tasks.length === 0 && !isGhostActive && (
           <div className="py-8 text-center text-[11px] text-text-icon/80">
             Nenhuma tarefa
           </div>

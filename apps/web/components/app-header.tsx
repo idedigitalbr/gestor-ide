@@ -284,7 +284,7 @@ export function AppHeader({
   const displayName = currentUser?.name || currentUser?.email || "Usuário";
 
   return (
-    <header className="planw-app-header min-h-12 px-3 py-1 border-b border-border/60 bg-background/95 backdrop-blur-xs flex flex-wrap items-center justify-between gap-y-1 select-none text-xs shrink-0 relative z-50 text-foreground">
+    <header className="planw-app-header min-h-12 px-3 py-1 border-b border-border/80 bg-card/95 backdrop-blur-xs shadow-2xs flex flex-wrap items-center justify-between gap-y-1 select-none text-xs shrink-0 relative z-50 text-foreground">
       {/* ========================================================= */}
       {/* LADO ESQUERDO: Home + Seletor de Gestão e Projeto          */}
       {/* (Sem ícones redundantes no header, conforme solicitado)     */}

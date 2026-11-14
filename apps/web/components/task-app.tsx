@@ -2133,6 +2133,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               canWrite={canWriteProjects}
               canManageMembers={canManageProjectMembers}
               currentUserId={currentUser?.id}
+              onCreateManagement={() => setIsNewManagementOpen(true)}
               onUpdateManagement={handleUpdateManagementById}
               onDeleteManagement={handleDeleteManagementById}
               onLeaveManagement={handleLeaveManagementById}

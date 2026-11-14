@@ -56,6 +56,8 @@ export interface HeaderKpiItem {
   key: string;
   label: string;
   value: number | string;
+  subValue?: string;
+  tooltip?: string;
   icon: React.ReactNode;
   iconBgColor?: string;
 }
@@ -453,7 +455,7 @@ export function EntityHeader({
       {/* ========================================================================= */}
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
-        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all mb-3.5">
+        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-sm flex items-center justify-between gap-3 transition-all mb-3.5">
           {/* Esquerda: Iniciais + Badge + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div
@@ -479,10 +481,15 @@ export function EntityHeader({
                 <span
                   key={kpi.key}
                   className="flex items-center gap-1 text-muted-foreground"
-                  title={kpi.label}
+                  title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
                 >
                   <span className="shrink-0">{kpi.icon}</span>
                   <span className="font-semibold text-foreground text-xs">{kpi.value}</span>
+                  {kpi.subValue && (
+                    <span className="text-[10px] text-muted-foreground font-normal">
+                      {kpi.subValue}
+                    </span>
+                  )}
                 </span>
               ))}
             </div>
@@ -509,7 +516,7 @@ export function EntityHeader({
         </div>
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
-        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
+        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
           {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             {/* Badge Quadrado com Iniciais */}
@@ -582,7 +589,11 @@ export function EntityHeader({
               {/* 3 KPIs Compactos em Linha Horizontal */}
               <div className="flex items-center gap-3 sm:gap-4">
                 {kpis.map((kpi) => (
-                  <div key={kpi.key} className="flex items-center gap-2">
+                  <div
+                    key={kpi.key}
+                    className="flex items-center gap-2"
+                    title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
+                  >
                     <div
                       className={cn(
                         "size-8 rounded-lg flex items-center justify-center shrink-0",
@@ -593,7 +604,14 @@ export function EntityHeader({
                     </div>
                     <div>
                       <p className="text-[10px] text-muted-foreground leading-tight">{kpi.label}</p>
-                      <p className="text-sm font-bold text-foreground leading-tight">{kpi.value}</p>
+                      <div className="flex items-baseline gap-1.5">
+                        <p className="text-sm font-bold text-foreground leading-tight">{kpi.value}</p>
+                        {kpi.subValue && (
+                          <span className="text-[10px] text-muted-foreground font-normal leading-tight">
+                            {kpi.subValue}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -10,5 +10,11 @@ export type {
   TaskFilter,
   TaskGroupBy,
   GroupOrder,
+  ProjectTasksSummary,
 } from "@gestor-ide/core";
-export { normalizeTaskStatus, normalizeTaskPriority } from "@gestor-ide/core";
+export {
+  normalizeTaskStatus,
+  normalizeTaskPriority,
+  computeProjectTasksSummary,
+} from "@gestor-ide/core";
+

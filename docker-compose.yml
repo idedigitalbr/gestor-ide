@@ -1,0 +1,29 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gestor-ide-web
+    restart: unless-stopped
+    expose:
+      - "3005"
+    environment:
+      NODE_ENV: production
+      PORT: "3005"
+      HOSTNAME: "0.0.0.0"
+      IDE_CRM_BASE_URL: https://crm.suporteide.digital
+    networks:
+      - default
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.gestor-ide.rule=Host(`gestor.suporteide.digital`)"
+      - "traefik.http.routers.gestor-ide.entrypoints=websecure"
+      - "traefik.http.routers.gestor-ide.tls=true"
+      - "traefik.http.routers.gestor-ide.tls.certresolver=letsencrypt"
+      - "traefik.http.services.gestor-ide.loadbalancer.server.port=3005"
+
+networks:
+  proxy:
+    external: true

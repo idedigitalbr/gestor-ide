@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
-import { normalizeTaskStatus } from "@gestor-ide/core";
+import { computeProjectTasksSummary } from "@gestor-ide/core";
 import { ListTodo, CheckCircle2, Clock, Folder } from "lucide-react";
 import { EntityHeader, type HeaderKpiItem } from "@/components/entity-header";
 import type { TeamMemberItem } from "@/components/members-dialog";
@@ -41,21 +41,15 @@ export function ProjectHeader({
   onRefresh,
   className,
 }: ProjectHeaderProps) {
-  // Contagem de tarefas do projeto
+  // Contagem de tarefas e cálculo do escopo completo do projeto
   const projectTasks = useMemo(() => {
     const list = tasks.filter((t) => t.projectId === project.id);
     return list.length > 0 ? list : tasks;
   }, [tasks, project.id]);
 
-  const totalTasksCount = projectTasks.length || (project._count?.tasks ?? 0);
-
-  const completedTasksCount = useMemo(() => {
-    return projectTasks.filter(
-      (t) => normalizeTaskStatus(t.status) === "CONCLUÍDO"
-    ).length;
-  }, [projectTasks]);
-
-  const pendingTasksCount = Math.max(0, totalTasksCount - completedTasksCount);
+  const summary = useMemo(() => {
+    return computeProjectTasksSummary(projectTasks, project._count?.tasks);
+  }, [projectTasks, project._count?.tasks]);
 
   // Iniciais e cor do projeto
   const projectColor = project.color || management?.color || "var(--primary)";
@@ -85,30 +79,66 @@ export function ProjectHeader({
 
   // 3 KPIs do Projeto
   const kpis = useMemo<HeaderKpiItem[]>(() => {
+    if (summary.hasSubtasks) {
+      return [
+        {
+          key: "tasks",
+          label: "Tarefas & Itens",
+          value: summary.totalItems,
+          subValue: `(${summary.directTasksCount} tarefas)`,
+          tooltip: `${summary.directTasksCount} tarefas principais e ${summary.totalSubtasks} subtarefas/checklists (${summary.totalItems} itens no total)`,
+          icon: <ListTodo className="size-4 text-blue-400" />,
+          iconBgColor: "bg-blue-500/10 text-blue-400",
+        },
+        {
+          key: "completed",
+          label: "Concluídas",
+          value: summary.completedItems,
+          subValue: `(${summary.percent}%)`,
+          tooltip: `${summary.completedItems} de ${summary.totalItems} itens concluídos (${summary.percent}%)`,
+          icon: <CheckCircle2 className="size-4 text-emerald-400" />,
+          iconBgColor: "bg-emerald-500/10 text-emerald-400",
+        },
+        {
+          key: "pending",
+          label: "Pendentes",
+          value: summary.pendingItems,
+          subValue: `(${100 - summary.percent}%)`,
+          tooltip: `${summary.pendingItems} itens pendentes de execução`,
+          icon: <Clock className="size-4 text-purple-400" />,
+          iconBgColor: "bg-purple-500/10 text-purple-400",
+        },
+      ];
+    }
+
     return [
       {
         key: "tasks",
         label: "Tarefas",
-        value: totalTasksCount,
+        value: summary.totalItems,
+        tooltip: `${summary.totalItems} tarefas no projeto`,
         icon: <ListTodo className="size-4 text-blue-400" />,
         iconBgColor: "bg-blue-500/10 text-blue-400",
       },
       {
         key: "completed",
         label: "Concluídas",
-        value: completedTasksCount,
+        value: summary.completedItems,
+        subValue: summary.totalItems > 0 ? `(${summary.percent}%)` : undefined,
+        tooltip: `${summary.completedItems} de ${summary.totalItems} tarefas concluídas (${summary.percent}%)`,
         icon: <CheckCircle2 className="size-4 text-emerald-400" />,
         iconBgColor: "bg-emerald-500/10 text-emerald-400",
       },
       {
         key: "pending",
         label: "Pendentes",
-        value: pendingTasksCount,
+        value: summary.pendingItems,
+        tooltip: `${summary.pendingItems} tarefas pendentes de execução`,
         icon: <Clock className="size-4 text-purple-400" />,
         iconBgColor: "bg-purple-500/10 text-purple-400",
       },
     ];
-  }, [totalTasksCount, completedTasksCount, pendingTasksCount]);
+  }, [summary]);
 
   // Parent badge (Gestão)
   const parentBadge = useMemo(() => {

@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { EntityCard } from "@/components/entity-card";
 import { stripManagementPrefix, type ListDisplayMode } from "@/lib/list-view-options";
+import { cn } from "@/lib/utils";
+import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
 
 interface ManagementsGridViewProps {
   search: string;
@@ -23,6 +25,7 @@ interface ManagementsGridViewProps {
   canWrite?: boolean;
   canManageMembers?: boolean;
   currentUserId?: string | null;
+  onCreateManagement?: () => void;
   onUpdateManagement?: (
     managementId: string,
     updates: {
@@ -50,11 +53,34 @@ export function ManagementsGridView({
   canWrite = true,
   canManageMembers = true,
   currentUserId,
+  onCreateManagement,
   onUpdateManagement,
   onDeleteManagement,
   onLeaveManagement,
   onOpenMembers,
 }: ManagementsGridViewProps) {
+  const gridContainerRef = React.useRef<HTMLDivElement>(null);
+
+  const {
+    isGhostVisible,
+    slideDirection,
+    showGhost,
+    hideGhost,
+    keepGhost,
+  } = useKanbanEdgeHover({ leaveDelay: 220 });
+
+  function handleMouseMoveGrid(e: React.MouseEvent<HTMLDivElement>) {
+    if (!gridContainerRef.current) return;
+    const rect = gridContainerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    // Detecta aproximação nas bordas laterais (primeira coluna <= 48px, última coluna >= rect.width - 48px)
+    if (x <= 48) {
+      showGhost("left");
+    } else if (rect.width - x <= 48) {
+      showGhost("right");
+    }
+  }
   const filteredManagements = useMemo(() => {
     let list = managements;
     if (visibilityFilter !== "all") {
@@ -99,54 +125,103 @@ export function ManagementsGridView({
           )}
         </div>
       ) : viewMode === "cards" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filteredManagements.map((mgmt) => {
-            const projectCount = mgmt._count?.projects ?? 0;
-            const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
+        <div
+          ref={gridContainerRef}
+          onMouseMove={handleMouseMoveGrid}
+          onMouseLeave={hideGhost}
+          className="relative"
+        >
+          {/* Trigger de hover na borda lateral esquerda (primeira coluna) */}
+          <div
+            className="absolute -left-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
+            onMouseEnter={() => showGhost("left")}
+            onMouseLeave={hideGhost}
+            aria-hidden="true"
+          />
 
-            return (
-              <EntityCard
-                key={mgmt.id}
-                type="management"
-                id={mgmt.id}
-                name={mgmt.name}
-                description={mgmt.description}
-                code={mgmt.code}
-                color={mgmt.color}
-                coverPath={mgmt.coverPath}
-                status={mgmt.status}
-                visibility={mgmt.visibility}
-                createdAt={mgmt.createdAt}
-                projectCount={projectCount}
-                memberCount={memberCount}
-                members={mgmt.members}
-                onSelect={() => onSelectManagement(mgmt.id)}
-                canWrite={canWrite}
-                canManageMembers={canManageMembers}
-                currentUserId={currentUserId}
-                onUpdate={
-                  onUpdateManagement
-                    ? (updates) => onUpdateManagement(mgmt.id, updates)
-                    : undefined
-                }
-                onDelete={
-                  onDeleteManagement
-                    ? () => onDeleteManagement(mgmt.id)
-                    : undefined
-                }
-                onLeave={
-                  onLeaveManagement
-                    ? () => onLeaveManagement(mgmt.id)
-                    : undefined
-                }
-                onManageMembers={onOpenMembers ? () => onOpenMembers(mgmt) : undefined}
-              />
-            );
-          })}
+          {/* Trigger de hover na borda lateral direita (última coluna) */}
+          <div
+            className="absolute -right-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
+            onMouseEnter={() => showGhost("right")}
+            onMouseLeave={hideGhost}
+            aria-hidden="true"
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredManagements.map((mgmt) => {
+              const projectCount = mgmt._count?.projects ?? 0;
+              const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
+
+              return (
+                <EntityCard
+                  key={mgmt.id}
+                  type="management"
+                  id={mgmt.id}
+                  name={mgmt.name}
+                  description={mgmt.description}
+                  code={mgmt.code}
+                  color={mgmt.color}
+                  coverPath={mgmt.coverPath}
+                  status={mgmt.status}
+                  visibility={mgmt.visibility}
+                  createdAt={mgmt.createdAt}
+                  projectCount={projectCount}
+                  memberCount={memberCount}
+                  members={mgmt.members}
+                  onSelect={() => onSelectManagement(mgmt.id)}
+                  canWrite={canWrite}
+                  canManageMembers={canManageMembers}
+                  currentUserId={currentUserId}
+                  onUpdate={
+                    onUpdateManagement
+                      ? (updates) => onUpdateManagement(mgmt.id, updates)
+                      : undefined
+                  }
+                  onDelete={
+                    onDeleteManagement
+                      ? () => onDeleteManagement(mgmt.id)
+                      : undefined
+                  }
+                  onLeave={
+                    onLeaveManagement
+                      ? () => onLeaveManagement(mgmt.id)
+                      : undefined
+                  }
+                  onManageMembers={onOpenMembers ? () => onOpenMembers(mgmt) : undefined}
+                />
+              );
+            })}
+
+            {/* Card Fantasma para criação rápida de nova Gestão */}
+            {canWrite && onCreateManagement && (
+              <div
+                onMouseEnter={keepGhost}
+                onMouseLeave={hideGhost}
+                className={cn(
+                  "transition-all duration-300 ease-out",
+                  isGhostVisible
+                    ? "opacity-100 scale-100 translate-x-0"
+                    : cn(
+                        "opacity-0 scale-95 pointer-events-none",
+                        slideDirection === "left" ? "-translate-x-5" : "translate-x-5"
+                      )
+                )}
+              >
+                <KanbanGhostCard
+                  label="Novo"
+                  sublabel="Criar nova gestão"
+                  variant="entity"
+                  slideDirection={slideDirection}
+                  onClick={onCreateManagement}
+                  isVisible={isGhostVisible}
+                />
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         /* Lista Compacta */
-        <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+        <div className="divide-y divide-border rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden">
           {filteredManagements.map((mgmt) => {
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);

@@ -59,6 +59,7 @@ interface KanbanCardProps {
   onDeleteTask: (id: string) => void;
   onOpenDetails: (task: Task) => void;
   onDragStart?: (e: React.DragEvent, taskId: string) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 const STATUS_ORDER = ALL_CANONICAL_STATUSES;
@@ -72,6 +73,7 @@ export function KanbanCard({
   onDeleteTask,
   onOpenDetails,
   onDragStart,
+  onDragEnd,
 }: KanbanCardProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const normStatus = normalizeTaskStatus(task.status);
@@ -154,10 +156,11 @@ export function KanbanCard({
       tabIndex={0}
       draggable
       onDragStart={(e) => onDragStart?.(e, task.id)}
+      onDragEnd={onDragEnd}
       onClick={() => onOpenDetails(task)}
       onKeyDown={handleCardKeyDown}
       aria-label={`Ver detalhes da tarefa ${task.code || ""}: ${task.title}`}
-      className="group relative bg-card text-card-foreground border border-border hover:border-ring/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-xl p-3 transition-all duration-150 cursor-grab active:cursor-grabbing hover:shadow-xs select-none"
+      className="group relative bg-card text-card-foreground border border-border/80 hover:border-ring/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-xl p-3 transition-all duration-150 cursor-grab active:cursor-grabbing shadow-xs hover:shadow-md select-none"
     >
       {/* Top row: Code + Priority indicator + Quick Actions Menu */}
       <div className="flex items-center justify-between gap-1 mb-2">

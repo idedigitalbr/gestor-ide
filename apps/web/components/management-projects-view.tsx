@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
-import { normalizeTaskStatus } from "@gestor-ide/core";
+import { computeProjectTasksSummary } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import {
   Folder,
@@ -32,6 +32,7 @@ import {
   type ListDisplayMode,
 } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
+import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
 
 interface ManagementProjectsViewProps {
   search: string;
@@ -221,6 +222,29 @@ export function ManagementProjectsView({
   // Status atual da gestão
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
 
+  // Hook de detecção de hover nas bordas do Kanban/Cards
+  const gridContainerRef = React.useRef<HTMLDivElement>(null);
+  const {
+    isGhostVisible,
+    slideDirection,
+    showGhost,
+    hideGhost,
+    keepGhost,
+  } = useKanbanEdgeHover({ leaveDelay: 220 });
+
+  function handleMouseMoveGrid(e: React.MouseEvent<HTMLDivElement>) {
+    if (!gridContainerRef.current) return;
+    const rect = gridContainerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    // Detecta aproximação nas bordas laterais (primeira coluna <= 48px, última coluna >= rect.width - 48px)
+    if (x <= 48) {
+      showGhost("left");
+    } else if (rect.width - x <= 48) {
+      showGhost("right");
+    }
+  }
+
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
     return projects.filter((p) => p.projectManagementId === management.id);
@@ -231,15 +255,14 @@ export function ManagementProjectsView({
     const map = new Map<string, { total: number; completed: number }>();
     for (const p of managementProjects) {
       const projTasks = tasks.filter((t) => t.projectId === p.id);
-      let total = projTasks.length;
-      let completed = projTasks.filter((t) => normalizeTaskStatus(t.status) === "CONCLUÍDO").length;
-
-      // Fallback para contagem do CRM se tarefas ainda não foram carregadas individualmente
-      if (total === 0 && (p._count?.tasks ?? 0) > 0) {
-        total = p._count?.tasks ?? 0;
-        completed = p.status === "completed" ? total : 0;
+      if (projTasks.length > 0) {
+        const summary = computeProjectTasksSummary(projTasks);
+        map.set(p.id, { total: summary.totalItems, completed: summary.completedItems });
+      } else {
+        const total = p._count?.tasks ?? 0;
+        const completed = p.status === "completed" ? total : 0;
+        map.set(p.id, { total, completed });
       }
-      map.set(p.id, { total, completed });
     }
     return map;
   }, [managementProjects, tasks]);
@@ -533,7 +556,7 @@ export function ManagementProjectsView({
       {/* ========================================================================= */}
       {/* 2. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-3">
+      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-sm space-y-3">
         {filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
@@ -613,7 +636,7 @@ export function ManagementProjectsView({
                       onSelectProject(project.id);
                     }
                   }}
-                  className="group relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 hover:border-primary/50 transition-all cursor-pointer overflow-hidden shadow-xs"
+                  className="group relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 hover:border-primary/50 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-sm"
                 >
                   {/* Faixa Fina Colorida na Lateral Esquerda do Bloco (3.5px) */}
                   <div
@@ -729,63 +752,112 @@ export function ManagementProjectsView({
               )}
             </div>
 
-            {/* Grade de Cards Compactos */}
+            {/* Grade de Cards Compactos com detecção de hover nas bordas */}
             <div
-              className={cn(
-                "grid gap-3.5",
-                cardColumns === 5
-                  ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
-                  : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-              )}
+              ref={gridContainerRef}
+              onMouseMove={handleMouseMoveGrid}
+              onMouseLeave={hideGhost}
+              className="relative"
             >
-              {filteredProjects.map((project) => {
-                const projectColor = project.color || "var(--primary)";
-                const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
-                const taskCount = stats.total || project._count?.tasks || 0;
-                const projMembers = project.members ?? [];
-                const pMemberCount = project._count?.members ?? (projMembers.length || 0);
+              {/* Trigger de hover na borda lateral esquerda (primeira coluna) */}
+              <div
+                className="absolute -left-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
+                onMouseEnter={() => showGhost("left")}
+                onMouseLeave={hideGhost}
+                aria-hidden="true"
+              />
 
-                return (
-                  <EntityCard
-                    key={project.id}
-                    type="project"
-                    id={project.id}
-                    name={project.name}
-                    description={project.description}
-                    code={project.code}
-                    color={projectColor}
-                    coverPath={project.coverPath}
-                    status={project.status}
-                    visibility={project.visibility}
-                    createdAt={project.createdAt}
-                    dueDate={project.dueDate}
-                    priority={project.priority}
-                    taskCount={taskCount}
-                    memberCount={pMemberCount}
-                    members={projMembers}
-                    onSelect={() => onSelectProject(project.id)}
-                    canWrite={canWrite}
-                    canManageMembers={effectiveCanManageMembers}
-                    currentUserId={currentUserId}
-                    onUpdate={
-                      onUpdateProject
-                        ? (updates) => onUpdateProject(project.id, updates)
-                        : undefined
-                    }
-                    onDelete={
-                      onDeleteProject
-                        ? () => onDeleteProject(project.id)
-                        : undefined
-                    }
-                    onLeave={
-                      onLeaveProject
-                        ? () => onLeaveProject(project.id)
-                        : undefined
-                    }
-                    onManageMembers={() => void handleOpenMembersDialog()}
-                  />
-                );
-              })}
+              {/* Trigger de hover na borda lateral direita (última coluna) */}
+              <div
+                className="absolute -right-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
+                onMouseEnter={() => showGhost("right")}
+                onMouseLeave={hideGhost}
+                aria-hidden="true"
+              />
+
+              <div
+                className={cn(
+                  "grid gap-3.5",
+                  cardColumns === 5
+                    ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
+                    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+                )}
+              >
+                {filteredProjects.map((project) => {
+                  const projectColor = project.color || "var(--primary)";
+                  const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
+                  const taskCount = stats.total || project._count?.tasks || 0;
+                  const projMembers = project.members ?? [];
+                  const pMemberCount = project._count?.members ?? (projMembers.length || 0);
+
+                  return (
+                    <EntityCard
+                      key={project.id}
+                      type="project"
+                      id={project.id}
+                      name={project.name}
+                      description={project.description}
+                      code={project.code}
+                      color={projectColor}
+                      coverPath={project.coverPath}
+                      status={project.status}
+                      visibility={project.visibility}
+                      createdAt={project.createdAt}
+                      dueDate={project.dueDate}
+                      priority={project.priority}
+                      taskCount={taskCount}
+                      memberCount={pMemberCount}
+                      members={projMembers}
+                      onSelect={() => onSelectProject(project.id)}
+                      canWrite={canWrite}
+                      canManageMembers={effectiveCanManageMembers}
+                      currentUserId={currentUserId}
+                      onUpdate={
+                        onUpdateProject
+                          ? (updates) => onUpdateProject(project.id, updates)
+                          : undefined
+                      }
+                      onDelete={
+                        onDeleteProject
+                          ? () => onDeleteProject(project.id)
+                          : undefined
+                      }
+                      onLeave={
+                        onLeaveProject
+                          ? () => onLeaveProject(project.id)
+                          : undefined
+                      }
+                      onManageMembers={() => void handleOpenMembersDialog()}
+                    />
+                  );
+                })}
+
+                {/* Card Fantasma para criação rápida de novo Projeto */}
+                {canWrite && onCreateProject && (
+                  <div
+                    onMouseEnter={keepGhost}
+                    onMouseLeave={hideGhost}
+                    className={cn(
+                      "transition-all duration-300 ease-out",
+                      isGhostVisible
+                        ? "opacity-100 scale-100 translate-x-0"
+                        : cn(
+                            "opacity-0 scale-95 pointer-events-none",
+                            slideDirection === "left" ? "-translate-x-5" : "translate-x-5"
+                          )
+                    )}
+                  >
+                    <KanbanGhostCard
+                      label="Novo"
+                      sublabel="Criar novo projeto"
+                      variant="entity"
+                      slideDirection={slideDirection}
+                      onClick={onCreateProject}
+                      isVisible={isGhostVisible}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

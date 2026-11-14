@@ -578,3 +578,63 @@ export function mapGestorTaskToCrmUpdateInput(task: Partial<Task>) {
   else if (task.tag !== undefined) payload.tags = task.tag.trim() ? [task.tag.trim()] : [];
   return payload;
 }
+
+// ============================================================================
+// Métricas e Sumarização Unificada de Projetos e Tarefas
+// ============================================================================
+
+export interface ProjectTasksSummary {
+  directTasksCount: number;
+  totalSubtasks: number;
+  totalItems: number;
+  completedItems: number;
+  pendingItems: number;
+  percent: number;
+  hasSubtasks: boolean;
+}
+
+export function computeProjectTasksSummary(
+  tasks: readonly Task[],
+  fallbackCount?: number
+): ProjectTasksSummary {
+  const directTasksCount = tasks.length || (fallbackCount ?? 0);
+  let totalSubtasks = 0;
+  let completedSubtasks = 0;
+  let completedDirectTasks = 0;
+
+  for (const t of tasks) {
+    if (normalizeTaskStatus(t.status) === "CONCLUÍDO") {
+      completedDirectTasks++;
+    }
+    if (t.subtasks && t.subtasks.length > 0) {
+      totalSubtasks += t.subtasks.length;
+      for (const st of t.subtasks) {
+        if (st.completed) {
+          completedSubtasks++;
+        }
+      }
+    }
+  }
+
+  const hasSubtasks = totalSubtasks > 0;
+  const totalItems = hasSubtasks
+    ? tasks.length + totalSubtasks
+    : directTasksCount;
+  const completedItems = hasSubtasks
+    ? completedDirectTasks + completedSubtasks
+    : completedDirectTasks;
+  const pendingItems = Math.max(0, totalItems - completedItems);
+  const percent =
+    totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+  return {
+    directTasksCount,
+    totalSubtasks,
+    totalItems,
+    completedItems,
+    pendingItems,
+    percent,
+    hasSubtasks,
+  };
+}
+
