@@ -74,13 +74,6 @@ interface ManagementProjectsViewProps {
   onSelectProject: (projectId: string) => void;
 }
 
-const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }> = {
-  low: { label: "Baixa", bg: "bg-blue-500/10", text: "text-blue-500" },
-  medium: { label: "Média", bg: "bg-amber-500/10", text: "text-amber-500" },
-  high: { label: "Alta", bg: "bg-orange-500/10", text: "text-orange-500" },
-  urgent: { label: "Urgente", bg: "bg-rose-500/10", text: "text-rose-500" },
-};
-
 /**
  * Formata data no formato brasileiro idêntico ao Print 3 (ex: "sex (20/nov)")
  */
@@ -975,13 +968,13 @@ export function ManagementProjectsView({
               )}
             >
               {filteredProjects.map((project) => {
-                const projectColor = project.color || "#3b82f6";
-                const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "GE";
+                const projectColor = project.color || "#2563eb";
+                const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "PR";
                 const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
                 const taskCount = stats.total || project._count?.tasks || 0;
-                const pMemberCount = project._count?.members ?? (project.members?.length || 1);
-                const priorityKey = project.priority || "medium";
-                const priorityTone = PRIORITY_TONES[priorityKey] || PRIORITY_TONES.medium;
+                const projMembers = project.members ?? [];
+                const pMemberCount = project._count?.members ?? (projMembers.length || 0);
+                const bgColor = projectColor;
 
                 return (
                   <div
@@ -995,70 +988,91 @@ export function ManagementProjectsView({
                         onSelectProject(project.id);
                       }
                     }}
-                    className="group relative flex flex-col rounded-2xl border border-border/70 bg-card/90 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer overflow-hidden text-left"
+                    className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all duration-200 hover:border-primary/40 hover:shadow-md cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    {/* Capa com Gradiente Compacto e Badge com Iniciais */}
+                    {/* Banner Superior com Cor ou Imagem */}
                     <div
-                      className="h-16 sm:h-20 w-full relative overflow-hidden flex items-end p-2.5 sm:p-3"
-                      style={{
-                        background: `linear-gradient(135deg, ${projectColor}dd 0%, ${projectColor} 60%, #38bdf8 100%)`,
-                      }}
+                      className="relative h-24 w-full p-3 flex items-start justify-between"
+                      style={
+                        project.coverPath
+                          ? {
+                              backgroundImage: `url("${encodeURI(project.coverPath)}")`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }
+                          : {
+                              background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}99 100%)`,
+                            }
+                      }
                     >
-                      <div className="absolute inset-0 bg-black/15" />
-                      <div
-                        className="relative z-10 size-7 sm:size-8 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-bold text-white shadow-md border border-white/20 backdrop-blur-xs"
-                        style={{ backgroundColor: projectColor }}
-                      >
-                        {pInitials}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
+
+                      {/* Monograma flutuante na base do banner */}
+                      <div className="absolute -bottom-3 left-3 z-10">
+                        <div
+                          className="w-8 h-8 rounded-lg border-2 border-card flex items-center justify-center text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105"
+                          style={{ backgroundColor: bgColor }}
+                        >
+                          {pInitials}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Corpo do Card */}
-                    <div className="p-3 pt-2.5 flex-1 flex flex-col justify-between space-y-2">
-                      <div>
-                        {/* Título e Código do Projeto */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                    {/* Conteúdo do Card */}
+                    <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
                             {project.name}
                           </h3>
                           {project.code && (
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/60 bg-muted/50 text-muted-foreground shrink-0">
+                            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border border-border bg-muted/60 text-muted-foreground">
                               {project.code}
                             </span>
                           )}
                         </div>
-
-                        {/* Tag de Prioridade */}
-                        <div className="mt-1.5">
-                          <span
-                            className={cn(
-                              "inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border border-current/20",
-                              priorityTone.bg,
-                              priorityTone.text
-                            )}
-                          >
-                            {priorityTone.label}
-                          </span>
-                        </div>
+                        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                          {project.description?.trim() || "Sem descrição disponível."}
+                        </p>
                       </div>
 
-                      {/* Rodapé do Card: Tarefas, Integrantes e Seta */}
-                      <div className="border-t border-border/50 pt-2 mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                        <div className="flex items-center gap-3">
+                      {/* Rodapé do Card */}
+                      <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-2.5">
                           <span className="flex items-center gap-1">
-                            <ListTodo className="size-3.5 shrink-0 text-muted-foreground/70" />
-                            <span>{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</span>
+                            <ListTodo className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}
+                            </span>
                           </span>
                           {pMemberCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
+                            <span className="flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5 shrink-0" />
                               <span>{pMemberCount}</span>
+                              {projMembers && projMembers.length > 0 && (
+                                <div className="flex -space-x-1.5 items-center ml-1">
+                                  {projMembers.slice(0, 3).map((m, idx) => (
+                                    <div
+                                      key={m.userId || idx}
+                                      className="w-5 h-5 rounded-full border-1.5 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
+                                      title={m.user?.name || "Membro"}
+                                    >
+                                      <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
+                                    </div>
+                                  ))}
+                                  {pMemberCount > 3 && (
+                                    <div className="w-5 h-5 rounded-full border-1.5 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
+                                      +{pMemberCount - 3}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </span>
                           )}
                         </div>
 
                         <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                          <ArrowRight className="size-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                          <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
                     </div>

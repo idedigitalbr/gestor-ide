@@ -339,6 +339,37 @@ export class IdeCrmClient {
     }, true);
   }
 
+  async updateProject(
+    projectId: string,
+    input: {
+      name?: string;
+      description?: string;
+      color?: string;
+      visibility?: string;
+      status?: string;
+      priority?: string;
+      dueDate?: string | null;
+    }
+  ): Promise<{ project?: CrmProject; ok?: boolean }> {
+    try {
+      return await this.request<{ project?: CrmProject; ok?: boolean }>(
+        `/projects/items/${encodeURIComponent(projectId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        }
+      );
+    } catch {
+      return this.request<{ project?: CrmProject; ok?: boolean }>(
+        `/projects/${encodeURIComponent(projectId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        }
+      );
+    }
+  }
+
   async listTasks(params?: {
     projectId?: string;
     status?: string;

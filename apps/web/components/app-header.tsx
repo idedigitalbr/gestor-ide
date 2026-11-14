@@ -29,9 +29,9 @@ import {
   LogOut,
   Palette,
   Plus,
-  RefreshCw,
   Search,
   Settings,
+  SlidersHorizontal,
   UserRound,
   Users,
   X,
@@ -251,6 +251,7 @@ export function AppHeader({
   // Estados locais para a janela de configurações da visualização (Anexo 2)
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
   const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<
     "main" | "grupo" | "subtarefas" | "filtro"
   >("main");
@@ -301,7 +302,6 @@ export function AppHeader({
           </Button>
         </HeaderTooltip>
 
-        <HeaderTooltip label="Dashboard de projetos"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><Link href="/projects/dashboard" aria-label="Dashboard de projetos"><LayoutDashboard className="size-4" /></Link></Button></HeaderTooltip>
         <HeaderWorkspaceSelector
           key={currentUser?.id ?? "anonymous"}
           managements={managements}
@@ -355,22 +355,6 @@ export function AppHeader({
                 {projectMembersCount > 0 && (
                   <span className="text-[11px] font-mono">{projectMembersCount}</span>
                 )}
-              </Button>
-            </HeaderTooltip>
-          )}
-
-          {!isProjectPage && onRefreshSync && (
-            <HeaderTooltip label="Sincronizar com IDE CRM">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onRefreshSync}
-                disabled={isSyncing}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
-                aria-label="Sincronizar com IDE CRM"
-              >
-                <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
               </Button>
             </HeaderTooltip>
           )}
@@ -825,56 +809,120 @@ export function AppHeader({
               />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" collisionPadding={8} className="w-72 max-w-[calc(100vw-1rem)] p-0">
-              <DropdownMenuLabel className="px-4 py-3">
-                <div className="truncate font-semibold">{displayName}</div>
-                {currentUser?.email && <div className="truncate text-xs font-normal text-muted-foreground">{currentUser.email}</div>}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Preferências</div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
-                <label htmlFor="only-my-managements">Ver somente gestões que faço parte</label>
-                <Switch id="only-my-managements" checked={onlyMyManagements} onCheckedChange={onOnlyMyManagementsChange} />
+            <DropdownMenuContent align="end" collisionPadding={8} className="w-68 max-w-[calc(100vw-1rem)] p-1.5">
+              {/* Usuário + Minha Conta */}
+              <div className="px-3 pt-2.5 pb-1.5">
+                <div className="truncate font-semibold text-xs text-foreground">{displayName}</div>
+                {currentUser?.email && (
+                  <div className="truncate text-[11px] text-muted-foreground mt-0.5">{currentUser.email}</div>
+                )}
               </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
-                <label htmlFor="only-my-projects">Ver somente projetos que faço parte</label>
-                <Switch id="only-my-projects" checked={onlyMyProjects} onCheckedChange={onOnlyMyProjectsChange} />
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
-                <label htmlFor="only-my-tasks">Ver somente tarefas que sou responsável</label>
-                <Switch id="only-my-tasks" checked={onlyMyTasks} onCheckedChange={onOnlyMyTasksChange} />
-              </div>
-              <DropdownMenuSeparator />
-              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Conta</div>
-              <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
+              <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
                 <Link href="/settings/account">
-                  <UserRound className="size-4 shrink-0" />
-                  <span className="min-w-0 whitespace-normal"><span className="block font-medium">Configurações da conta</span><span className="block text-xs text-muted-foreground">Nome, email, foto e senha</span></span>
+                  <UserRound className="size-4 shrink-0 text-muted-foreground" />
+                  <span>Minha Conta</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Sistema</div>
+
+              <DropdownMenuSeparator className="my-1" />
+
+              {/* Dashboard, Aparência e Configurações Admin */}
+              <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
+                <Link href="/projects/dashboard">
+                  <LayoutDashboard className="size-4 shrink-0 text-muted-foreground" />
+                  <span>Dashboard</span>
+                </Link>
+              </DropdownMenuItem>
+
               <DropdownMenuItem
-                className="mx-2 my-1 cursor-pointer gap-3 p-2"
+                className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium"
                 onSelect={() => {
                   setTimeout(() => setIsThemeSelectorOpen(true), 50);
                 }}
               >
                 <Palette className="size-4 shrink-0 text-primary" />
-                <span className="min-w-0 whitespace-normal">
-                  <span className="block font-medium">Aparência</span>
-                  <span className="block text-xs text-muted-foreground">Temas, cores e modo escuro</span>
-                </span>
+                <span>Aparência</span>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
+
+              <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
                 <Link href="/settings">
-                  <Settings className="size-4 shrink-0" />
-                  <span className="min-w-0 whitespace-normal"><span className="block font-medium">Administração</span><span className="block text-xs text-muted-foreground">Configurações, usuários e permissões</span></span>
+                  <Settings className="size-4 shrink-0 text-muted-foreground" />
+                  <span>Configurações Admin</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="m-2 cursor-pointer" onSelect={onLogout} disabled={!currentUser}>
-                <LogOut className="size-4" /> Sair
+
+              <DropdownMenuSeparator className="my-1" />
+
+              {/* Preferências expansível (Sanfona com setinha V) */}
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setIsPreferencesOpen((prev) => !prev);
+                }}
+                className="cursor-pointer justify-between gap-2.5 p-2 rounded-lg text-xs font-medium"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <SlidersHorizontal className="size-4 shrink-0 text-muted-foreground" />
+                  <span>Preferências</span>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+                    isPreferencesOpen && "rotate-180"
+                  )}
+                />
+              </DropdownMenuItem>
+
+              {isPreferencesOpen && (
+                <div
+                  className="mx-1 my-1 p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-2 text-xs animate-in fade-in-50 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-2.5">
+                    <label htmlFor="only-my-managements" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                      Ver somente gestões que faço parte
+                    </label>
+                    <Switch
+                      id="only-my-managements"
+                      checked={onlyMyManagements}
+                      onCheckedChange={onOnlyMyManagementsChange}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2.5">
+                    <label htmlFor="only-my-projects" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                      Ver somente projetos que faço parte
+                    </label>
+                    <Switch
+                      id="only-my-projects"
+                      checked={onlyMyProjects}
+                      onCheckedChange={onOnlyMyProjectsChange}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2.5">
+                    <label htmlFor="only-my-tasks" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                      Ver somente tarefas que sou responsável
+                    </label>
+                    <Switch
+                      id="only-my-tasks"
+                      checked={onlyMyTasks}
+                      onCheckedChange={onOnlyMyTasksChange}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <DropdownMenuSeparator className="my-1" />
+
+              {/* Sair */}
+              <DropdownMenuItem
+                className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium text-destructive focus:text-destructive"
+                onSelect={onLogout}
+                disabled={!currentUser}
+              >
+                <LogOut className="size-4 shrink-0" />
+                <span>Sair</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

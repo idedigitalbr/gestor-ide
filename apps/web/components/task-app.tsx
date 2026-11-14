@@ -41,6 +41,7 @@ import {
 import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
 import { ManagementsGridView } from "@/components/managements-grid-view";
 import { ManagementProjectsView } from "@/components/management-projects-view";
+import { ProjectHeader } from "@/components/project-header";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { NewManagementDialog } from "@/components/new-management-dialog";
 import type { ListDisplayMode } from "@/lib/list-view-options";
@@ -790,15 +791,20 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return tasks.find((t) => t.id === selectedTaskId || t.code === selectedTaskId) ?? null;
   }, [tasks, selectedTaskId]);
 
-  const currentManagement = useMemo(() => {
-    if (!selectedManagementId) return null;
-    return effectiveManagements.find((m) => m.id === selectedManagementId) ?? null;
-  }, [effectiveManagements, selectedManagementId]);
-
   const currentProject = useMemo(() => {
     if (!selectedProjectId) return null;
     return effectiveProjects.find((p) => p.id === selectedProjectId) ?? null;
   }, [effectiveProjects, selectedProjectId]);
+
+  const currentManagement = useMemo(() => {
+    if (selectedManagementId) {
+      return effectiveManagements.find((m) => m.id === selectedManagementId) ?? null;
+    }
+    if (currentProject?.projectManagementId) {
+      return effectiveManagements.find((m) => m.id === currentProject.projectManagementId) ?? null;
+    }
+    return null;
+  }, [effectiveManagements, selectedManagementId, currentProject]);
 
   // Filtered tasks computation respeitando a Hierarquia: Gestão -> Projeto -> Filtros
   const filteredTasks = useMemo(() => {
@@ -1529,6 +1535,25 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const handleUpdateProject = useCallback(async (updates: {
+    description?: string;
+    status?: string;
+    priority?: string;
+    name?: string;
+  }) => {
+    if (!currentProject) return;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === currentProject.id ? { ...p, ...updates } : p))
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.updateProject(currentProject.id, updates);
+      } catch (err) {
+        console.warn("Não foi possível atualizar o projeto no CRM:", err);
+      }
+    }
+  }, [currentProject, isConnectedCrm]);
+
   function handleClearFilters() {
     updateOnlyMyTasks(false);
     setFilters({
@@ -1655,7 +1680,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             "min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden",
-            !isSecondaryPage && selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
+            !isSecondaryPage && selectedProjectId && viewMode === "table" ? "px-3 pt-3 pb-6" : "p-4 md:p-5"
           )}
         >
           {syncError && (
@@ -1718,58 +1743,83 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onBack={() => handleSelectManagement(null)}
               onSelectProject={(id) => handleSelectProject(id)}
             />
-          ) : isSyncingTasks ? (
-            <TaskTableSkeleton />
-          ) : filteredTasks.length === 0 && (viewMode !== "table" || isFiltered) ? (
-            <EmptyState
-              onAddTask={() => handleOpenNewTask("PENDENTE")}
-              isFiltered={isFiltered}
-              onClearFilters={handleClearFilters}
-            />
-          ) : viewMode === "calendar" || viewMode === "gantt" || viewMode === "workload" ? (
-            <TaskAdditionalView
-              mode={viewMode}
-              tasks={filteredTasks}
-              members={activeProjectMembers}
-              onOpen={handleOpenDetails}
-              onUpdateTask={canWriteProjects ? handleUpdateTask : undefined}
-              onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
-            />
-          ) : viewMode === "kanban" ? (
-            <TaskKanban
-              tasks={filteredTasks}
-              members={activeProjectMembers}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-              onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
-              onOpenDetails={handleOpenDetails}
-              onQuickAdd={handleOpenNewTask}
-            />
           ) : (
-            <div className="w-full overflow-x-auto">
-            <TaskTable
-              onChangeAssignee={handleChangeAssignee}
-              canCreate={canWriteProjects}
-              connected={isConnectedCrm}
-              key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
-              projectId={selectedProjectId}
-              projectMembers={activeProjectMembers}
-              membersLoaded={Boolean(selectedProjectId && projectMembers?.projectId === selectedProjectId)}
-              tasks={filteredTasks}
-              groupBy={groupBy}
-              onUpdateTask={handleUpdateTask}
-              onDeleteTask={handleDeleteTask}
-              onOpenDetails={handleOpenDetails}
-              onAddTask={handleAddTask}
-              onUpdateSubtasks={handleUpdateTaskSubtasks}
-              onReorderTasks={handleReorderTask}
-              onBatchReorderTasks={handleBatchReorderTask}
-              isFieldsModalOpen={isFieldsModalOpen}
-              onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
-              onCloseFieldsModal={() => setIsFieldsModalOpen(false)}
-              subtaskMode={subtaskMode}
-              showClosedSubtasks={showClosedSubtasks}
-            />
+            /* Nível 3: Dentro do Projeto (com Cabeçalho do Projeto reaproveitando o design da gestão) */
+            <div className="space-y-3.5">
+              {currentProject && (
+                <ProjectHeader
+                  project={currentProject}
+                  management={currentManagement}
+                  tasks={tasks}
+                  members={projectDialogMembers}
+                  canWrite={canWriteProjects}
+                  isConnectedCrm={isConnectedCrm}
+                  onOpenMembers={() => setIsProjectMembersOpen(true)}
+                  onBack={() => {
+                    if (currentManagement) {
+                      handleSelectManagement(currentManagement.id);
+                    }
+                    handleSelectProject(null);
+                  }}
+                  onUpdateProject={handleUpdateProject}
+                  onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+                />
+              )}
+
+              {isSyncingTasks ? (
+                <TaskTableSkeleton />
+              ) : filteredTasks.length === 0 && (viewMode !== "table" || isFiltered) ? (
+                <EmptyState
+                  onAddTask={() => handleOpenNewTask("PENDENTE")}
+                  isFiltered={isFiltered}
+                  onClearFilters={handleClearFilters}
+                />
+              ) : viewMode === "calendar" || viewMode === "gantt" || viewMode === "workload" ? (
+                <TaskAdditionalView
+                  mode={viewMode}
+                  tasks={filteredTasks}
+                  members={activeProjectMembers}
+                  onOpen={handleOpenDetails}
+                  onUpdateTask={canWriteProjects ? handleUpdateTask : undefined}
+                  onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
+                />
+              ) : viewMode === "kanban" ? (
+                <TaskKanban
+                  tasks={filteredTasks}
+                  members={activeProjectMembers}
+                  onUpdateTask={handleUpdateTask}
+                  onDeleteTask={handleDeleteTask}
+                  onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
+                  onOpenDetails={handleOpenDetails}
+                  onQuickAdd={handleOpenNewTask}
+                />
+              ) : (
+                <div className="w-full overflow-x-auto">
+                  <TaskTable
+                    onChangeAssignee={handleChangeAssignee}
+                    canCreate={canWriteProjects}
+                    connected={isConnectedCrm}
+                    key={`${currentUser?.id ?? "anon"}:${selectedProjectId ?? "all"}`}
+                    projectId={selectedProjectId}
+                    projectMembers={activeProjectMembers}
+                    membersLoaded={Boolean(selectedProjectId && projectMembers?.projectId === selectedProjectId)}
+                    tasks={filteredTasks}
+                    groupBy={groupBy}
+                    onUpdateTask={handleUpdateTask}
+                    onDeleteTask={handleDeleteTask}
+                    onOpenDetails={handleOpenDetails}
+                    onAddTask={handleAddTask}
+                    onUpdateSubtasks={handleUpdateTaskSubtasks}
+                    onReorderTasks={handleReorderTask}
+                    onBatchReorderTasks={handleBatchReorderTask}
+                    isFieldsModalOpen={isFieldsModalOpen}
+                    onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
+                    onCloseFieldsModal={() => setIsFieldsModalOpen(false)}
+                    subtaskMode={subtaskMode}
+                    showClosedSubtasks={showClosedSubtasks}
+                  />
+                </div>
+              )}
             </div>
           )}
         </main>

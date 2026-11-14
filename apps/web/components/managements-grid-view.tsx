@@ -6,13 +6,11 @@ import {
   Folder,
   Users,
   ArrowRight,
-  Shield,
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
-import { MANAGEMENT_VISIBILITY_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
+import { stripManagementPrefix, type ListDisplayMode } from "@/lib/list-view-options";
 
 interface ManagementsGridViewProps {
   search: string;
@@ -83,8 +81,8 @@ export function ManagementsGridView({
           {filteredManagements.map((mgmt) => {
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
+            const displayName = stripManagementPrefix(mgmt.name);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const visibilityText = MANAGEMENT_VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
             const bgColor = mgmt.color || "#2563eb";
 
             return (
@@ -118,38 +116,6 @@ export function ManagementsGridView({
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
 
-                  {/* Avatars de Membros (canto superior esquerdo) */}
-                  <div className="relative z-10 flex items-center">
-                    {mgmt.members && mgmt.members.length > 0 ? (
-                      <div className="flex -space-x-1.5 items-center">
-                        {mgmt.members.slice(0, 3).map((m, idx) => (
-                          <div
-                            key={m.userId || idx}
-                            className="w-6 h-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground"
-                            title={m.user?.name || "Membro"}
-                          >
-                            <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                          </div>
-                        ))}
-                        {memberCount > 3 && (
-                          <div className="w-6 h-6 rounded-full border-2 border-card bg-secondary text-secondary-foreground text-[9px] font-bold flex items-center justify-center shadow-2xs">
-                            +{memberCount - 3}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full border border-white/20 bg-black/30 backdrop-blur-xs flex items-center justify-center text-white/80">
-                        <Users className="w-3 h-3" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Badge de Visibilidade (canto superior direito) */}
-                  <span className="relative z-10 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium backdrop-blur-md bg-black/40 text-white border border-white/20">
-                    <Shield className="w-2.5 h-2.5" />
-                    <span>{visibilityText}</span>
-                  </span>
-
                   {/* Monograma flutuante na base do banner */}
                   <div className="absolute -bottom-3 left-3 z-10">
                     <div
@@ -165,14 +131,12 @@ export function ManagementsGridView({
                 <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5">
+                      <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                        Gestão
+                      </span>
                       <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                        {mgmt.name}
+                        {displayName}
                       </h3>
-                      {mgmt.code && (
-                        <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border border-border bg-muted/60 text-muted-foreground">
-                          {mgmt.code}
-                        </span>
-                      )}
                     </div>
                     <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
                       {mgmt.description?.trim() || "Sem descrição disponível."}
@@ -183,15 +147,33 @@ export function ManagementsGridView({
                   <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
                     <div className="flex items-center gap-2.5">
                       <span className="flex items-center gap-1">
-                        <Folder className="w-3 h-3 shrink-0" />
+                        <Folder className="w-3.5 h-3.5 shrink-0" />
                         <span>
                           {projectCount} {projectCount === 1 ? "projeto" : "projetos"}
                         </span>
                       </span>
                       {memberCount > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Users className="w-3 h-3 shrink-0" />
+                        <span className="flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5 shrink-0" />
                           <span>{memberCount}</span>
+                          {mgmt.members && mgmt.members.length > 0 && (
+                            <div className="flex -space-x-1.5 items-center ml-1">
+                              {mgmt.members.slice(0, 3).map((m, idx) => (
+                                <div
+                                  key={m.userId || idx}
+                                  className="w-5 h-5 rounded-full border-1.5 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
+                                  title={m.user?.name || "Membro"}
+                                >
+                                  <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
+                                </div>
+                              ))}
+                              {memberCount > 3 && (
+                                <div className="w-5 h-5 rounded-full border-1.5 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
+                                  +{memberCount - 3}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </span>
                       )}
                     </div>
@@ -211,8 +193,8 @@ export function ManagementsGridView({
           {filteredManagements.map((mgmt) => {
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
+            const displayName = stripManagementPrefix(mgmt.name);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const visibilityText = MANAGEMENT_VISIBILITY_LABELS[mgmt.visibility || "company"] || "Empresa";
             const bgColor = mgmt.color || "#2563eb";
 
             return (
@@ -238,17 +220,12 @@ export function ManagementsGridView({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-xs sm:text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                        {mgmt.name}
+                      <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                        Gestão
                       </span>
-                      {mgmt.code && (
-                        <span className="text-[9px] font-mono px-1 rounded border border-border bg-muted/60 text-muted-foreground">
-                          {mgmt.code}
-                        </span>
-                      )}
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-border">
-                        {visibilityText}
-                      </Badge>
+                      <span className="font-semibold text-xs sm:text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                        {displayName}
+                      </span>
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate max-w-xl">
                       {mgmt.description || "Sem descrição disponível."}
