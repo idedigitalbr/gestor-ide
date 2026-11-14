@@ -394,8 +394,21 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    let cancelled = false;
+    void ideCrmClient
+      .getProjectsDashboard()
+      .then((r) => {
+        if (!cancelled) setData(r.dashboard);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Erro ao carregar indicadores.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 animate-in fade-in duration-150">

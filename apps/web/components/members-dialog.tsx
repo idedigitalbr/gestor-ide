@@ -9,7 +9,6 @@ import {
   LogOut,
   Plus,
   Search,
-  Shield,
   Trash2,
   Users,
   X,

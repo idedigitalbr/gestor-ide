@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from "react";
 import {
   AlertCircle,
-  CheckCircle2,
   ExternalLink,
   KeyRound,
   Loader2,

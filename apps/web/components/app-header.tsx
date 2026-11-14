@@ -241,8 +241,6 @@ export function AppHeader({
   canWrite = true,
   projectMembersCount = 0,
   onOpenProjectMembers,
-  onRefreshSync,
-  isSyncing = false,
   cardColumns = 4,
   onCardColumnsChange,
 }: AppHeaderProps) {

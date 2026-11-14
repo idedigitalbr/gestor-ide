@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import { normalizeTaskStatus } from "@gestor-ide/core";
 import {
@@ -143,12 +143,6 @@ export function ProjectHeader({
   const [editNameText, setEditNameText] = useState(project.name || "");
   const [editDescriptionText, setEditDescriptionText] = useState(project.description || "");
   const [isSavingProject, setIsSavingProject] = useState(false);
-
-  // Sincroniza estados quando o projeto mudar
-  useEffect(() => {
-    setEditNameText(project.name || "");
-    setEditDescriptionText(project.description || "");
-  }, [project.name, project.description]);
 
   // Contagem de tarefas do projeto
   const projectTasks = useMemo(() => {

@@ -138,7 +138,7 @@ export function ThemeSelector({
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onEscape);
     };
-  }, [open, colorPickerOpen]);
+  }, [open, colorPickerOpen, setOpen]);
 
   const panel = (
     <section

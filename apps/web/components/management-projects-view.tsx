@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import { normalizeTaskStatus } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
@@ -245,11 +245,6 @@ export function ManagementProjectsView({
   const [editNameText, setEditNameText] = useState(management.name || "");
   const [editDescriptionText, setEditDescriptionText] = useState(management.description || "");
   const [isSavingManagement, setIsSavingManagement] = useState(false);
-
-  useEffect(() => {
-    setEditNameText(management.name || "");
-    setEditDescriptionText(management.description || "");
-  }, [management.name, management.description]);
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
 
   // Projetos que pertencem a esta gestão
@@ -605,18 +600,20 @@ export function ManagementProjectsView({
                 <h1 className="text-sm sm:text-base font-bold text-foreground truncate tracking-tight">
                   {stripManagementPrefix(management.name)}
                 </h1>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditNameText(management.name || "");
-                    setEditDescriptionText(management.description || "");
-                    setIsEditingManagement(true);
-                  }}
-                  className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
-                  title="Editar nome e descrição da gestão"
-                >
-                  <Pencil className="size-3" />
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditNameText(management.name || "");
+                      setEditDescriptionText(management.description || "");
+                      setIsEditingManagement(true);
+                    }}
+                    className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                    title="Editar nome e descrição da gestão"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                )}
                 {management.code && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
                     {management.code}
@@ -635,18 +632,20 @@ export function ManagementProjectsView({
                 <span className="truncate">
                   {management.description?.trim() || "Gestão das atividades relacionadas à plataforma StudUPlay."}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditNameText(management.name || "");
-                    setEditDescriptionText(management.description || "");
-                    setIsEditingManagement(true);
-                  }}
-                  className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
-                  title="Editar descrição da gestão"
-                >
-                  <Pencil className="size-3" />
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditNameText(management.name || "");
+                      setEditDescriptionText(management.description || "");
+                      setIsEditingManagement(true);
+                    }}
+                    className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                    title="Editar descrição da gestão"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                )}
               </div>
 
               {/* Linha 3: Metadados (Data de Criação | Visibilidade | Status com Lápis) */}
