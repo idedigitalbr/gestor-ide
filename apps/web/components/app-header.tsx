@@ -57,7 +57,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { MANAGEMENT_VISIBILITY_LABELS, PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
+import { PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
 import { GROUP_OPTIONS, getGroupByLabel } from "./task-table/task-grouping-menu";
 import { TaskFilterMenu } from "./task-table/task-filter-menu";
 import { HeaderWorkspaceSelector } from "./header-workspace-selector";
@@ -153,6 +153,9 @@ interface AppHeaderProps {
   onOnlyMyProjectsChange: (value: boolean) => void;
   onlyMyTasks: boolean;
   onOnlyMyTasksChange: (value: boolean) => void;
+  onlyMyTaskNotifications?: boolean;
+  onOnlyMyTaskNotificationsChange?: (value: boolean) => void;
+  onSelectTaskFromNotification?: (task: Task) => void;
   currentManagementName?: string;
   currentProjectName?: string;
   selectedManagementId?: string | null;
@@ -208,6 +211,9 @@ export function AppHeader({
   onOnlyMyProjectsChange,
   onlyMyTasks,
   onOnlyMyTasksChange,
+  onlyMyTaskNotifications = false,
+  onOnlyMyTaskNotificationsChange,
+  onSelectTaskFromNotification,
   currentManagementName,
   currentProjectName,
   selectedManagementId,
@@ -336,8 +342,10 @@ export function AppHeader({
             />
           </div>
 
-          {/* Divisor vertical "|" */}
-          <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
+          {/* Divisor vertical "|" - exibido apenas quando houver botões de ferramentas intermediários */}
+          {(isInsideProject || Boolean(selectedManagementId)) && (
+            <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
+          )}
 
           {!isProjectPage && isInsideProject && onOpenProjectMembers && (
             <HeaderTooltip label={`Membros do projeto (${projectMembersCount})`}>
@@ -704,7 +712,7 @@ export function AppHeader({
               </PopoverContent>
           </Popover>
 
-          : (
+          : selectedManagementId ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização"><Settings className="w-4 h-4" /></Button>
@@ -729,9 +737,9 @@ export function AppHeader({
                   </>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>{selectedManagementId ? "Status dos projetos" : "Visibilidade"}</DropdownMenuLabel>
+                <DropdownMenuLabel>Status dos projetos</DropdownMenuLabel>
                 <DropdownMenuRadioGroup value={listFilter} onValueChange={onListFilterChange}>
-                  {Object.entries(selectedManagementId ? PROJECT_STATUS_LABELS : MANAGEMENT_VISIBILITY_LABELS).map(([value, label]) => (
+                  {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
                     <DropdownMenuRadioItem key={value} value={value}>{label}</DropdownMenuRadioItem>
                   ))}
                 </DropdownMenuRadioGroup>
@@ -739,7 +747,7 @@ export function AppHeader({
                 <DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}><Copy className="w-3.5 h-3.5" /> Copiar link da visualização</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
+          ) : null}
 
           {/* Botão Roxo ClickUp "+ Tarefa ▾" */}
           {!isProjectPage ? (isInsideProject ? <div className={cn("inline-flex items-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors overflow-hidden ml-1", canWrite ? "hover:bg-primary/90" : "opacity-50")}>
@@ -788,7 +796,15 @@ export function AppHeader({
           </div> : <Button size="sm" className="h-8 gap-1.5" disabled={!canWrite} title={canWrite ? undefined : "Sem permissão de escrita no IDE CRM"} onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
             <Button size="sm" className="h-8 gap-1.5" onClick={onOpenNewEvent} disabled={!canCreateCalendarEvent}><Plus className="w-3.5 h-3.5" /> Evento</Button>
           ) : null}
-          <HeaderNotifications connected={Boolean(currentUser)} />
+          <HeaderNotifications
+            connected={Boolean(currentUser)}
+            currentUser={currentUser}
+            tasks={tasks}
+            projects={projects}
+            onlyMyTaskNotifications={onlyMyTaskNotifications}
+            onOnlyMyTaskNotificationsChange={onOnlyMyTaskNotificationsChange}
+            onSelectTask={onSelectTaskFromNotification}
+          />
           {/* Avatar do Usuário com Indicador Online Verde */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -906,6 +922,16 @@ export function AppHeader({
                       id="only-my-tasks"
                       checked={onlyMyTasks}
                       onCheckedChange={onOnlyMyTasksChange}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2.5">
+                    <label htmlFor="only-my-task-notifications" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                      Notificações somente de tarefas que faço parte
+                    </label>
+                    <Switch
+                      id="only-my-task-notifications"
+                      checked={onlyMyTaskNotifications}
+                      onCheckedChange={onOnlyMyTaskNotificationsChange}
                     />
                   </div>
                 </div>

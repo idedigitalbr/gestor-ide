@@ -118,7 +118,17 @@ export interface CrmUserProfile {
 }
 
 export interface CrmAccount { id: string; name: string | null; email: string; avatarUrl: string | null }
-export interface CrmNotification { id: string; title: string; message: string | null; createdAt: string; readAt: string | null; taskId?: string | null }
+export interface CrmNotification {
+  id: string;
+  title: string;
+  message: string | null;
+  createdAt: string;
+  readAt: string | null;
+  taskId?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+  status?: string | null;
+}
 export type CrmCalendarEventType = "MEETING" | "DELIVERY" | "OTHER";
 export type CrmCalendarEventStatus = "CONFIRMED" | "TENTATIVE" | "CANCELLED";
 export type CrmCalendarEventPriority = "LOW" | "MEDIUM" | "HIGH";

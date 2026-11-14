@@ -9,7 +9,7 @@ import {
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { EntityCard } from "@/components/entity-card";
 import { stripManagementPrefix, type ListDisplayMode } from "@/lib/list-view-options";
 
 interface ManagementsGridViewProps {
@@ -20,6 +20,23 @@ interface ManagementsGridViewProps {
   viewMode: ListDisplayMode;
   managements: CrmProjectManagement[];
   onSelectManagement: (managementId: string) => void;
+  canWrite?: boolean;
+  canManageMembers?: boolean;
+  currentUserId?: string | null;
+  onUpdateManagement?: (
+    managementId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      color?: string;
+      coverPath?: string | null;
+      visibility?: string;
+      status?: string;
+    }
+  ) => Promise<void>;
+  onDeleteManagement?: (managementId: string) => Promise<void>;
+  onLeaveManagement?: (managementId: string) => Promise<void>;
+  onOpenMembers?: (management: CrmProjectManagement) => void;
 }
 
 export function ManagementsGridView({
@@ -30,9 +47,14 @@ export function ManagementsGridView({
   viewMode,
   managements,
   onSelectManagement,
+  canWrite = true,
+  canManageMembers = true,
+  currentUserId,
+  onUpdateManagement,
+  onDeleteManagement,
+  onLeaveManagement,
+  onOpenMembers,
 }: ManagementsGridViewProps) {
-
-
   const filteredManagements = useMemo(() => {
     let list = managements;
     if (visibilityFilter !== "all") {
@@ -81,111 +103,44 @@ export function ManagementsGridView({
           {filteredManagements.map((mgmt) => {
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
-            const displayName = stripManagementPrefix(mgmt.name);
-            const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const bgColor = mgmt.color || "var(--primary)";
 
             return (
-              <div
+              <EntityCard
                 key={mgmt.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectManagement(mgmt.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectManagement(mgmt.id);
-                  }
-                }}
-                className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all duration-200 hover:border-primary/40 hover:shadow-md cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {/* Banner Superior com Cor ou Imagem */}
-                <div
-                  className="relative h-24 w-full p-3 flex items-start justify-between"
-                  style={
-                    mgmt.coverPath
-                      ? {
-                          backgroundImage: `url("${encodeURI(mgmt.coverPath)}")`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }
-                      : {
-                          background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}99 100%)`,
-                        }
-                  }
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
-
-                  {/* Monograma flutuante na base do banner */}
-                  <div className="absolute -bottom-3 left-3 z-10">
-                    <div
-                      className="w-8 h-8 rounded-lg border-2 border-card flex items-center justify-center text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105"
-                      style={{ backgroundColor: bgColor }}
-                    >
-                      {initials}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Conteúdo do Card */}
-                <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
-                        Gestão
-                      </span>
-                      <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                        {displayName}
-                      </h3>
-                    </div>
-                    {mgmt.description?.trim() && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                        {mgmt.description.trim()}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Rodapé do Card */}
-                  <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex items-center gap-1">
-                        <Folder className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          {projectCount} {projectCount === 1 ? "projeto" : "projetos"}
-                        </span>
-                      </span>
-                      {memberCount > 0 && (
-                        <span className="flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 shrink-0" />
-                          <span>{memberCount}</span>
-                          {mgmt.members && mgmt.members.length > 0 && (
-                            <div className="flex -space-x-1.5 items-center ml-1">
-                              {mgmt.members.slice(0, 3).map((m, idx) => (
-                                <div
-                                  key={m.userId || idx}
-                                  className="w-5 h-5 rounded-full border-1.5 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
-                                  title={m.user?.name || "Membro"}
-                                >
-                                  <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                                </div>
-                              ))}
-                              {memberCount > 3 && (
-                                <div className="w-5 h-5 rounded-full border-1.5 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
-                                  +{memberCount - 3}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                      <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+                type="management"
+                id={mgmt.id}
+                name={mgmt.name}
+                description={mgmt.description}
+                code={mgmt.code}
+                color={mgmt.color}
+                coverPath={mgmt.coverPath}
+                status={mgmt.status}
+                visibility={mgmt.visibility}
+                createdAt={mgmt.createdAt}
+                projectCount={projectCount}
+                memberCount={memberCount}
+                members={mgmt.members}
+                onSelect={() => onSelectManagement(mgmt.id)}
+                canWrite={canWrite}
+                canManageMembers={canManageMembers}
+                currentUserId={currentUserId}
+                onUpdate={
+                  onUpdateManagement
+                    ? (updates) => onUpdateManagement(mgmt.id, updates)
+                    : undefined
+                }
+                onDelete={
+                  onDeleteManagement
+                    ? () => onDeleteManagement(mgmt.id)
+                    : undefined
+                }
+                onLeave={
+                  onLeaveManagement
+                    ? () => onLeaveManagement(mgmt.id)
+                    : undefined
+                }
+                onManageMembers={onOpenMembers ? () => onOpenMembers(mgmt) : undefined}
+              />
             );
           })}
         </div>

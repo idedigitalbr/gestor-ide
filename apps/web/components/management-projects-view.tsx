@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ListTodo,
   Calendar,
-  Users,
   ArrowRight,
   Plus,
   ChevronRight,
@@ -21,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import { EntityHeader, type HeaderKpiItem } from "@/components/entity-header";
+import { EntityCard } from "@/components/entity-card";
 import {
   MembersDialog,
   normalizeMemberRole,
@@ -52,6 +52,21 @@ interface ManagementProjectsViewProps {
   onRefresh?: () => void;
   onBack?: () => void;
   onSelectProject: (projectId: string) => void;
+  onUpdateProject?: (
+    projectId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      color?: string;
+      coverPath?: string | null;
+      status?: string;
+      visibility?: string;
+      priority?: string;
+      dueDate?: string | null;
+    }
+  ) => Promise<void>;
+  onDeleteProject?: (projectId: string) => Promise<void>;
+  onLeaveProject?: (projectId: string) => Promise<void>;
 }
 
 /**
@@ -188,6 +203,9 @@ export function ManagementProjectsView({
   onRefresh,
   onBack,
   onSelectProject,
+  onUpdateProject,
+  onDeleteProject,
+  onLeaveProject,
 }: ManagementProjectsViewProps) {
   // Estados de membros
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
@@ -671,115 +689,50 @@ export function ManagementProjectsView({
             >
               {filteredProjects.map((project) => {
                 const projectColor = project.color || "var(--primary)";
-                const displayProjectName = stripProjectPrefix(project.name);
-                const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "PR";
                 const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
                 const taskCount = stats.total || project._count?.tasks || 0;
                 const projMembers = project.members ?? [];
                 const pMemberCount = project._count?.members ?? (projMembers.length || 0);
-                const bgColor = projectColor;
 
                 return (
-                  <div
+                  <EntityCard
                     key={project.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectProject(project.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSelectProject(project.id);
-                      }
-                    }}
-                    className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all duration-200 hover:border-primary/40 hover:shadow-md cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {/* Banner Superior com Cor ou Imagem */}
-                    <div
-                      className="relative h-24 w-full p-3 flex items-start justify-between"
-                      style={
-                        project.coverPath
-                          ? {
-                              backgroundImage: `url("${encodeURI(project.coverPath)}")`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                            }
-                          : {
-                              background: `linear-gradient(135deg, ${bgColor}ee 0%, ${bgColor}99 100%)`,
-                            }
-                      }
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none" />
-
-                      {/* Monograma flutuante na base do banner */}
-                      <div className="absolute -bottom-3 left-3 z-10">
-                        <div
-                          className="w-8 h-8 rounded-lg border-2 border-card flex items-center justify-center text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105"
-                          style={{ backgroundColor: bgColor }}
-                        >
-                          {pInitials}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Conteúdo do Card */}
-                    <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
-                            Projeto
-                          </span>
-                          <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                            {displayProjectName}
-                          </h3>
-                        </div>
-                        {project.description?.trim() && (
-                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                            {project.description.trim()}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Rodapé do Card */}
-                      <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex items-center gap-1">
-                            <ListTodo className="w-3.5 h-3.5 shrink-0" />
-                            <span>
-                              {taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}
-                            </span>
-                          </span>
-                          {pMemberCount > 0 && (
-                            <span className="flex items-center gap-1.5">
-                              <Users className="w-3.5 h-3.5 shrink-0" />
-                              <span>{pMemberCount}</span>
-                              {projMembers && projMembers.length > 0 && (
-                                <div className="flex -space-x-1.5 items-center ml-1">
-                                  {projMembers.slice(0, 3).map((m, idx) => (
-                                    <div
-                                      key={m.userId || idx}
-                                      className="w-5 h-5 rounded-full border-1.5 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
-                                      title={m.user?.name || "Membro"}
-                                    >
-                                      <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                                    </div>
-                                  ))}
-                                  {pMemberCount > 3 && (
-                                    <div className="w-5 h-5 rounded-full border-1.5 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
-                                      +{pMemberCount - 3}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                          <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    type="project"
+                    id={project.id}
+                    name={project.name}
+                    description={project.description}
+                    code={project.code}
+                    color={projectColor}
+                    coverPath={project.coverPath}
+                    status={project.status}
+                    visibility={project.visibility}
+                    createdAt={project.createdAt}
+                    dueDate={project.dueDate}
+                    priority={project.priority}
+                    taskCount={taskCount}
+                    memberCount={pMemberCount}
+                    members={projMembers}
+                    onSelect={() => onSelectProject(project.id)}
+                    canWrite={canWrite}
+                    canManageMembers={effectiveCanManageMembers}
+                    currentUserId={currentUserId}
+                    onUpdate={
+                      onUpdateProject
+                        ? (updates) => onUpdateProject(project.id, updates)
+                        : undefined
+                    }
+                    onDelete={
+                      onDeleteProject
+                        ? () => onDeleteProject(project.id)
+                        : undefined
+                    }
+                    onLeave={
+                      onLeaveProject
+                        ? () => onLeaveProject(project.id)
+                        : undefined
+                    }
+                    onManageMembers={() => void handleOpenMembersDialog()}
+                  />
                 );
               })}
             </div>

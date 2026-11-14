@@ -11,7 +11,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  ArrowLeft,
+  Folder,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -362,6 +362,19 @@ export function EntityHeader({
 
   const showDueDate = type === "project" || dueDate !== undefined;
 
+  // Breadcrumb superior unificado (Gestão pai no projeto, ou Gestões na gestão)
+  const resolvedParentBadge = useMemo(() => {
+    if (parentBadge) return parentBadge;
+    if (onBack) {
+      return {
+        icon: <Folder className="size-3 text-blue-400 shrink-0" />,
+        label: backLabel || "Gestões",
+        onClick: onBack,
+      };
+    }
+    return null;
+  }, [parentBadge, onBack, backLabel]);
+
   return (
     <div className={cn("w-full transition-all", className)}>
       {/* ========================================================================= */}
@@ -370,25 +383,8 @@ export function EntityHeader({
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
         <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all mb-3.5">
-          {/* Esquerda: Voltar / Parent + Iniciais + Badge + Nome */}
+          {/* Esquerda: Iniciais + Folder Pill + Badge + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            {onBack && !parentBadge && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title={`Voltar para ${backLabel || "Gestões"}`}
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span>{backLabel || "Gestões"}</span>
-                </Button>
-                <div className="h-4 w-px bg-border/60 shrink-0" />
-              </>
-            )}
-
             <div
               className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0 select-none"
               style={{ backgroundColor: badgeColor }}
@@ -396,15 +392,15 @@ export function EntityHeader({
               {initials}
             </div>
 
-            {parentBadge && (
+            {resolvedParentBadge && (
               <button
                 type="button"
-                onClick={parentBadge.onClick}
+                onClick={resolvedParentBadge.onClick}
                 className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 hover:bg-muted/80 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
-                title={`Voltar para ${parentBadge.label}`}
+                title={`Voltar para ${resolvedParentBadge.label}`}
               >
-                {parentBadge.icon}
-                <span className="truncate max-w-[120px]">{parentBadge.label}</span>
+                {resolvedParentBadge.icon}
+                <span className="truncate max-w-[120px]">{resolvedParentBadge.label}</span>
               </button>
             )}
 
@@ -479,25 +475,8 @@ export function EntityHeader({
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
         <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
-          {/* Lado Esquerdo: Avatar + [Parent Badge / Voltar] + [Badge] Título + Descrição */}
+          {/* Lado Esquerdo: Avatar + [Parent Badge] + [Badge] Título + Descrição */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
-            {onBack && !parentBadge && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title={`Voltar para ${backLabel || "Gestões"}`}
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span className="hidden sm:inline">{backLabel || "Gestões"}</span>
-                </Button>
-                <div className="h-5 w-px bg-border/60 shrink-0" />
-              </div>
-            )}
-
             {/* Badge Quadrado com Iniciais */}
             <div
               className="size-11 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-xs shrink-0 select-none"
@@ -509,16 +488,16 @@ export function EntityHeader({
             {/* Bloco Central de Textos */}
             <div className="min-w-0 flex-1 space-y-1">
               {/* Linha 1: Parent Breadcrumb (quando aplicável) */}
-              {parentBadge && (
+              {resolvedParentBadge && (
                 <div className="flex items-center">
                   <button
                     type="button"
-                    onClick={parentBadge.onClick}
+                    onClick={resolvedParentBadge.onClick}
                     className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/70 bg-muted/40 hover:bg-muted/80 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    title={`Voltar para ${parentBadge.label}`}
+                    title={`Voltar para ${resolvedParentBadge.label}`}
                   >
-                    {parentBadge.icon}
-                    <span className="truncate max-w-[280px]">{parentBadge.label}</span>
+                    {resolvedParentBadge.icon}
+                    <span className="truncate max-w-[280px]">{resolvedParentBadge.label}</span>
                   </button>
                 </div>
               )}
@@ -559,10 +538,13 @@ export function EntityHeader({
                   "group/desc inline-flex items-center gap-1.5 text-xs text-muted-foreground max-w-full min-w-0",
                   canWrite && "cursor-pointer"
                 )}
-                title={canWrite ? `Clique para editar a descrição do ${badgeText.toLowerCase()}` : undefined}
+                title={canWrite ? `Clique para editar a descrição ${type === "management" ? "da gestão" : "do projeto"}` : undefined}
               >
                 <span className="truncate group-hover/desc:text-foreground/90 transition-colors">
-                  {description?.trim() || `Sem descrição definida para este ${badgeText.toLowerCase()}.`}
+                  {description?.trim() ||
+                    (type === "management"
+                      ? "Sem descrição definida para esta gestão."
+                      : "Sem descrição definida para este projeto.")}
                 </span>
                 {canWrite && (
                   <span className="opacity-0 group-hover/desc:opacity-100 transition-opacity duration-150 text-muted-foreground/70 group-hover/desc:text-foreground shrink-0">

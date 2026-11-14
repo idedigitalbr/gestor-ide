@@ -101,6 +101,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [onlyMyTasks, setOnlyMyTasks] = useState(() => {
     try { return localStorage.getItem("gestor_only_my_tasks") === "true"; } catch { return false; }
   });
+  const [onlyMyTaskNotifications, setOnlyMyTaskNotifications] = useState(() => {
+    try { return localStorage.getItem("gestor_only_my_task_notifications") === "true"; } catch { return false; }
+  });
   const [membershipRetry, setMembershipRetry] = useState(0);
   const [projectMembership, setProjectMembership] = useState<{
     userId: string;
@@ -696,6 +699,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   function updateOnlyMyTasks(value: boolean) {
     setOnlyMyTasks(value);
     try { localStorage.setItem("gestor_only_my_tasks", String(value)); } catch {}
+  }
+
+  function updateOnlyMyTaskNotifications(value: boolean) {
+    setOnlyMyTaskNotifications(value);
+    try { localStorage.setItem("gestor_only_my_task_notifications", String(value)); } catch {}
   }
 
   function handleSelectManagement(managementId: string | null) {
@@ -1441,6 +1449,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     setIsModalOpen(true);
   }
 
+  function handleSelectTaskFromNotification(task: Task) {
+    if (task.projectId && task.projectId !== selectedProjectId) {
+      handleSelectProject(task.projectId);
+    }
+    handleOpenDetails(task);
+  }
+
   const activeProjectMembers = useMemo<CrmProjectMember[]>(() => {
     if (projectMembers?.projectId && projectMembers.projectId === selectedProjectId) {
       return projectMembers.members;
@@ -1616,6 +1631,128 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
   }, [currentProject, isConnectedCrm]);
 
+  async function handleUpdateManagementById(
+    managementId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      color?: string;
+      coverPath?: string | null;
+      visibility?: string;
+      status?: string;
+    }
+  ) {
+    setManagements((prev) =>
+      prev.map((m) => (m.id === managementId ? { ...m, ...updates } : m))
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.updateManagement(managementId, updates);
+      } catch (err) {
+        console.warn("Não foi possível atualizar a gestão no CRM:", err);
+      }
+    }
+  }
+
+  async function handleDeleteManagementById(managementId: string) {
+    setManagements((prev) => prev.filter((m) => m.id !== managementId));
+    setProjects((prev) => prev.filter((p) => p.projectManagementId !== managementId));
+    if (selectedManagementId === managementId) {
+      handleSelectManagement(null);
+    }
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.deleteManagement(managementId);
+      } catch (err) {
+        console.warn("Não foi possível excluir a gestão no CRM:", err);
+      }
+    }
+  }
+
+  async function handleLeaveManagementById(managementId: string) {
+    if (!currentUser?.id) return;
+    const uid = currentUser.id;
+    setManagements((prev) =>
+      prev.map((m) => {
+        if (m.id !== managementId) return m;
+        return {
+          ...m,
+          members: (m.members || []).filter((mem) => mem.userId !== uid),
+        };
+      })
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.removeManagementMember(managementId, uid);
+        void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+      } catch (err) {
+        console.warn("Não foi possível sair da gestão no CRM:", err);
+      }
+    }
+  }
+
+  async function handleUpdateProjectById(
+    projectId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      color?: string;
+      coverPath?: string | null;
+      status?: string;
+      visibility?: string;
+      priority?: string;
+      dueDate?: string | null;
+    }
+  ) {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, ...updates } : p))
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.updateProject(projectId, updates);
+      } catch (err) {
+        console.warn("Não foi possível atualizar o projeto no CRM:", err);
+      }
+    }
+  }
+
+  async function handleDeleteProjectById(projectId: string) {
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    setTasks((prev) => prev.filter((t) => t.projectId !== projectId));
+    if (selectedProjectId === projectId) {
+      handleSelectProject(null);
+    }
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.deleteProject(projectId);
+      } catch (err) {
+        console.warn("Não foi possível excluir o projeto no CRM:", err);
+      }
+    }
+  }
+
+  async function handleLeaveProjectById(projectId: string) {
+    if (!currentUser?.id) return;
+    const uid = currentUser.id;
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          members: (p.members || []).filter((mem) => mem.userId !== uid),
+        };
+      })
+    );
+    if (isConnectedCrm) {
+      try {
+        await ideCrmClient.removeProjectMember(projectId, uid);
+        void syncWithIdeCrm(selectedProjectId, selectedManagementId);
+      } catch (err) {
+        console.warn("Não foi possível sair do projeto no CRM:", err);
+      }
+    }
+  }
+
   function handleClearFilters() {
     updateOnlyMyTasks(false);
     setFilters({
@@ -1685,6 +1822,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onOnlyMyProjectsChange={updateOnlyMyProjects}
           onlyMyTasks={onlyMyTasks}
           onOnlyMyTasksChange={updateOnlyMyTasks}
+          onlyMyTaskNotifications={onlyMyTaskNotifications}
+          onOnlyMyTaskNotificationsChange={updateOnlyMyTaskNotifications}
+          onSelectTaskFromNotification={handleSelectTaskFromNotification}
           currentManagementName={currentManagement?.name}
           currentProjectName={currentProject?.name}
           selectedManagementId={selectedManagementId}
@@ -1772,6 +1912,12 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               viewMode={managementViewMode}
               managements={visibleManagements}
               onSelectManagement={(id) => handleSelectManagement(id)}
+              canWrite={canWriteProjects}
+              canManageMembers={canManageProjectMembers}
+              currentUserId={currentUser?.id}
+              onUpdateManagement={handleUpdateManagementById}
+              onDeleteManagement={handleDeleteManagementById}
+              onLeaveManagement={handleLeaveManagementById}
             />
           ) : selectedManagementId && membershipPending ? (
             <p role="status" className="text-sm text-muted-foreground">Carregando seus projetos...</p>
@@ -1805,6 +1951,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
               onBack={() => handleSelectManagement(null)}
               onSelectProject={(id) => handleSelectProject(id)}
+              onUpdateProject={handleUpdateProjectById}
+              onDeleteProject={handleDeleteProjectById}
+              onLeaveProject={handleLeaveProjectById}
             />
           ) : (
             /* Nível 3: Dentro do Projeto (com Cabeçalho do Projeto reaproveitando o design da gestão) */

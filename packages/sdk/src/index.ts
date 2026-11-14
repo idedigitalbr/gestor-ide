@@ -314,6 +314,7 @@ export class IdeCrmClient {
       name?: string;
       description?: string;
       color?: string;
+      coverPath?: string | null;
       visibility?: string;
       status?: string;
     }
@@ -345,6 +346,7 @@ export class IdeCrmClient {
       name?: string;
       description?: string;
       color?: string;
+      coverPath?: string | null;
       visibility?: string;
       status?: string;
       priority?: string;
