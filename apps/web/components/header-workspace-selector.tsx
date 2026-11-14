@@ -38,6 +38,8 @@ export function HeaderWorkspaceSelector({
   const [managementQuery, setManagementQuery] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
 
+  const hasManagementSelected = Boolean(selectedManagementId);
+
   // Estado de fixação (Pin) para agir como breadcrumb
   const [isPinned, setIsPinned] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -158,7 +160,6 @@ export function HeaderWorkspaceSelector({
   const projectLabel = rawProjectLabel
     ? stripProjectPrefix(rawProjectLabel)
     : "Todos os Projetos";
-  const hasManagementSelected = Boolean(selectedManagementId);
 
   return (
     <>
