@@ -64,17 +64,20 @@ export function HeaderWorkspaceSelector({
 
   const handleManagementButtonClick = useCallback(
     (e: React.MouseEvent) => {
-      if (isPinned) {
-        e.preventDefault();
-        e.stopPropagation();
+      if (isPinned && hasManagementSelected) {
         if (selectedProjectId) {
+          e.preventDefault();
+          e.stopPropagation();
           // Volta do projeto para a visão da gestão (projetos da gestão)
           onSelectProject?.(null);
+        } else {
+          e.preventDefault();
+          e.stopPropagation();
+          // Se já está na gestão, não faz nada: o botão Início no topo é quem volta para todas as gestões
         }
-        // Se já está na gestão, não faz nada: o botão Início no topo é quem volta para todas as gestões
       }
     },
-    [isPinned, selectedProjectId, onSelectProject]
+    [isPinned, hasManagementSelected, selectedProjectId, onSelectProject]
   );
 
   const handleProjectButtonClick = useCallback(
@@ -180,9 +183,9 @@ export function HeaderWorkspaceSelector({
       >
         {/* 1. SELETOR DE GESTÃO (ANEXO 2) */}
         <Popover
-          open={isPinned ? false : managementOpen}
+          open={isPinned && hasManagementSelected ? false : managementOpen}
           onOpenChange={(open) => {
-            if (isPinned) {
+            if (isPinned && hasManagementSelected) {
               setManagementOpen(false);
               return;
             }
@@ -197,18 +200,18 @@ export function HeaderWorkspaceSelector({
             onClick={handleManagementButtonClick}
             className={cn(
               "group flex h-7 min-w-0 max-w-[160px] sm:max-w-[200px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              isPinned
+              isPinned && hasManagementSelected
                 ? selectedProjectId
                   ? "cursor-pointer hover:bg-muted/60 hover:text-primary"
                   : "cursor-default text-foreground/90"
                 : "cursor-pointer hover:bg-muted/70 hover:text-foreground",
-              !isPinned && managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
+              (!isPinned || !hasManagementSelected) && managementOpen && "bg-muted text-foreground ring-1 ring-primary/40 shadow-sm"
             )}
-            aria-expanded={!isPinned && managementOpen}
-            aria-haspopup={isPinned ? undefined : "dialog"}
+            aria-expanded={(!isPinned || !hasManagementSelected) && managementOpen}
+            aria-haspopup={isPinned && hasManagementSelected ? undefined : "dialog"}
             aria-label={`Gestão: ${managementLabel}`}
             title={
-              isPinned
+              isPinned && hasManagementSelected
                 ? selectedProjectId
                   ? `Voltar para gestão ${managementLabel}`
                   : `Gestão: ${managementLabel}`
@@ -223,12 +226,12 @@ export function HeaderWorkspaceSelector({
             <span
               className={cn(
                 "truncate",
-                isPinned && selectedProjectId && "group-hover:underline"
+                isPinned && hasManagementSelected && selectedProjectId && "group-hover:underline"
               )}
             >
               {managementLabel}
             </span>
-            {!isPinned && (
+            {(!isPinned || !hasManagementSelected) && (
               <ChevronDown
                 className={cn(
                   "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform group-hover:text-foreground",
@@ -350,27 +353,26 @@ export function HeaderWorkspaceSelector({
       </div>
       </Popover>
 
-      <span className="text-muted-foreground/40 text-xs font-semibold select-none px-0.5">/</span>
+      {hasManagementSelected && (
+        <>
+          <span className="text-muted-foreground/40 text-xs font-semibold select-none px-0.5">/</span>
 
-      {/* 2. SELETOR DE PROJETO (ANEXO 2 - só habilitado após setar a gestão) */}
-      <Popover
-        open={isPinned ? false : projectOpen}
-        onOpenChange={(open) => {
-          if (isPinned) {
-            setProjectOpen(false);
-            return;
-          }
-          setProjectOpen(open);
-          if (open) setManagementOpen(false);
-        }}
-      >
-      <div className={cn("relative min-w-0 shrink", projectOpen && "z-50")}>
-        {!hasManagementSelected ? (
-          <div aria-hidden="true" className="h-7 w-20" />
-        ) : (
-          <PopoverTrigger asChild><button
-            type="button"
-            onClick={handleProjectButtonClick}
+          {/* 2. SELETOR DE PROJETO (ANEXO 2 - só habilitado após setar a gestão) */}
+          <Popover
+            open={isPinned ? false : projectOpen}
+            onOpenChange={(open) => {
+              if (isPinned) {
+                setProjectOpen(false);
+                return;
+              }
+              setProjectOpen(open);
+              if (open) setManagementOpen(false);
+            }}
+          >
+          <div className={cn("relative min-w-0 shrink", projectOpen && "z-50")}>
+            <PopoverTrigger asChild><button
+              type="button"
+              onClick={handleProjectButtonClick}
             className={cn(
               "group flex h-7 min-w-0 max-w-[140px] sm:max-w-[180px] items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-foreground/90 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               isPinned
