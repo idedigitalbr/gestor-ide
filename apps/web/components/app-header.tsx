@@ -27,12 +27,14 @@ import {
   LayoutDashboard,
   Layers,
   LogOut,
+  Palette,
   Plus,
   Search,
   Settings,
   UserRound,
   X,
 } from "lucide-react";
+import { ThemeSelector } from "@/components/theme/theme-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -140,8 +142,11 @@ interface AppHeaderProps {
   canCreateCalendarEvent?: boolean;
   onHome?: () => void;
   managements?: CrmProjectManagement[];
+  selectableManagements?: CrmProjectManagement[];
   projects?: CrmProject[];
   selectableProjects?: CrmProject[];
+  onlyMyManagements: boolean;
+  onOnlyMyManagementsChange: (value: boolean) => void;
   onlyMyProjects: boolean;
   onOnlyMyProjectsChange: (value: boolean) => void;
   onlyMyTasks: boolean;
@@ -185,8 +190,11 @@ export function AppHeader({
   canCreateCalendarEvent = false,
   onHome,
   managements = [],
+  selectableManagements,
   projects = [],
   selectableProjects,
+  onlyMyManagements,
+  onOnlyMyManagementsChange,
   onlyMyProjects,
   onOnlyMyProjectsChange,
   onlyMyTasks,
@@ -226,6 +234,7 @@ export function AppHeader({
 
   // Estados locais para a janela de configurações da visualização (Anexo 2)
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
+  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<
     "main" | "grupo" | "subtarefas" | "filtro"
   >("main");
@@ -280,6 +289,7 @@ export function AppHeader({
         <HeaderWorkspaceSelector
           key={currentUser?.id ?? "anonymous"}
           managements={managements}
+          selectableManagements={selectableManagements}
           selectedManagementId={selectedManagementId ?? null}
           onSelectManagement={onSelectManagement}
           projects={projects}
@@ -757,6 +767,10 @@ export function AppHeader({
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Preferências</div>
               <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
+                <label htmlFor="only-my-managements">Ver somente gestões que faço parte</label>
+                <Switch id="only-my-managements" checked={onlyMyManagements} onCheckedChange={onOnlyMyManagementsChange} />
+              </div>
+              <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs">
                 <label htmlFor="only-my-projects">Ver somente projetos que faço parte</label>
                 <Switch id="only-my-projects" checked={onlyMyProjects} onCheckedChange={onOnlyMyProjectsChange} />
               </div>
@@ -774,6 +788,18 @@ export function AppHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Sistema</div>
+              <DropdownMenuItem
+                className="mx-2 my-1 cursor-pointer gap-3 p-2"
+                onSelect={() => {
+                  setTimeout(() => setIsThemeSelectorOpen(true), 50);
+                }}
+              >
+                <Palette className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 whitespace-normal">
+                  <span className="block font-medium">Aparência</span>
+                  <span className="block text-xs text-muted-foreground">Temas, cores e modo escuro</span>
+                </span>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
                 <Link href="/settings">
                   <Settings className="size-4 shrink-0" />
@@ -786,6 +812,13 @@ export function AppHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <ThemeSelector
+            open={isThemeSelectorOpen}
+            onOpenChange={setIsThemeSelectorOpen}
+            showTrigger={false}
+            position="top-right"
+          />
 
         </div>
       )}

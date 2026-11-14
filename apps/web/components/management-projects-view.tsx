@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import {
   Folder,
@@ -11,6 +11,7 @@ import {
   Shield,
   ArrowLeft,
   ArrowRight,
+  ChevronRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,34 @@ const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }
   urgent: { label: "Urgente", bg: "bg-rose-500/10", text: "text-rose-500" },
 };
 
+function SectionToggleButton({
+  isExpanded,
+  onToggle,
+  title,
+}: {
+  isExpanded: boolean;
+  onToggle: () => void;
+  title: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="size-7 rounded-md border border-border bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted/70 flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer"
+      title={isExpanded ? `Recolher ${title}` : `Expandir ${title}`}
+      aria-label={isExpanded ? `Recolher ${title}` : `Expandir ${title}`}
+      aria-expanded={isExpanded}
+    >
+      <ChevronRight
+        className={cn(
+          "size-4 transition-transform duration-200",
+          isExpanded && "rotate-90"
+        )}
+      />
+    </button>
+  );
+}
+
 export function ManagementProjectsView({
   search,
   statusFilter,
@@ -50,7 +79,38 @@ export function ManagementProjectsView({
   onBack,
   onSelectProject,
 }: ManagementProjectsViewProps) {
+  // Estados de recolhimento das seções com persistência
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(() => {
+    try {
+      return localStorage.getItem("gestor_mgmt_header_expanded") === "true";
+    } catch {
+      return false; // Minimalista e compacto por padrão para dar destaque aos cards de projetos!
+    }
+  });
 
+  const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
+    try {
+      return localStorage.getItem("gestor_mgmt_projects_expanded") !== "false";
+    } catch {
+      return true;
+    }
+  });
+
+  function toggleHeader() {
+    setIsHeaderExpanded((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("gestor_mgmt_header_expanded", String(next)); } catch {}
+      return next;
+    });
+  }
+
+  function toggleProjects() {
+    setIsProjectsExpanded((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("gestor_mgmt_projects_expanded", String(next)); } catch {}
+      return next;
+    });
+  }
 
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
@@ -60,6 +120,10 @@ export function ManagementProjectsView({
   // Contadores KPI
   const completedProjectsCount = useMemo(() => {
     return managementProjects.filter((p) => p.status === "completed").length;
+  }, [managementProjects]);
+
+  const activeProjectsCount = useMemo(() => {
+    return managementProjects.filter((p) => p.status !== "completed" && p.status !== "archived").length;
   }, [managementProjects]);
 
   const totalTasksCount = useMemo(() => {
@@ -105,222 +169,203 @@ export function ManagementProjectsView({
   }, [management.createdAt]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
-      {onBack && (
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onBack}
-            className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Todas as gestões</span>
-          </Button>
-        </div>
-      )}
-      {/* Cartão de Apresentação da Gestão (Hero Card) */}
-      <div className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm">
-        <div className="grid grid-cols-1 lg:grid-cols-3">
-          {/* Lado Esquerdo / Banner da Gestão */}
-          <div
-            className="relative lg:col-span-2 p-5 sm:p-6 flex flex-col justify-between min-h-[160px]"
-            style={
-              management.coverPath
-                ? {
-                    backgroundImage: `url("${encodeURI(management.coverPath)}")`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                  }
-                : {
-                    background: `linear-gradient(135deg, ${mgmtColor}dd 0%, ${mgmtColor}33 100%)`,
-                  }
-            }
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/30 pointer-events-none" />
-
-            <div className="relative z-10 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-primary/10 text-primary border border-primary/20">
-                  <Shield className="w-2.5 h-2.5" />
-                  GESTÃO DE PROJETOS
-                </span>
-                {management.code && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-background/70 text-muted-foreground">
-                    {management.code}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-md shrink-0"
-                  style={{ backgroundColor: mgmtColor }}
+    <div className="space-y-4 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
+      {/* Seção Unificada: Cabeçalho da Gestão com Toggle Retrátil ("Uma coisa só") */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all">
+        {/* Linha Principal (Sempre Visível - minimalista quando recolhido) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:px-4 sm:py-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {onBack && (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onBack}
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
+                  title="Voltar para todas as gestões"
                 >
-                  {initials}
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
-                    {management.name}
-                  </h1>
-                  <p className="text-xs text-muted-foreground">
-                    {managementProjects.length}{" "}
-                    {managementProjects.length === 1
-                      ? "projeto nesta gestão"
-                      : "projetos nesta gestão"}
-                  </p>
-                </div>
-              </div>
+                  <ArrowLeft className="size-3.5" />
+                  <span className="hidden md:inline">Gestões</span>
+                </Button>
+                <div className="h-4 w-px bg-border shrink-0" />
+              </>
+            )}
 
-              <p className="text-xs text-muted-foreground max-w-xl leading-relaxed pt-1">
-                {management.description?.trim() || "Sem descrição disponível."}
-              </p>
+            <div
+              className="size-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0"
+              style={{ backgroundColor: mgmtColor }}
+            >
+              {initials}
             </div>
 
-            {/* Metadados inferiores */}
-            <div className="relative z-10 flex flex-wrap items-center gap-3 pt-4 text-[11px] text-muted-foreground">
-              {formattedDate && (
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-muted-foreground/70" />
-                  <span>{formattedDate}</span>
+            <div className="min-w-0 flex items-center gap-2 flex-wrap">
+              <h1 className="text-sm sm:text-base font-bold text-foreground truncate">
+                {management.name}
+              </h1>
+              {management.code && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground shrink-0">
+                  {management.code}
                 </span>
               )}
-              <span className="flex items-center gap-1">
-                <Folder className="w-3 h-3 text-muted-foreground/70" />
-                <span>Geral</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3 text-muted-foreground/70" />
-                <span>
-                  {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] ||
-                    management.visibility ||
-                    "Empresa"}
-                </span>
-              </span>
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-border bg-secondary/50 text-muted-foreground font-normal shrink-0">
+                {managementProjects.length} {managementProjects.length === 1 ? "projeto" : "projetos"}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-border bg-secondary/50 text-muted-foreground font-normal shrink-0">
+                {memberCount} {memberCount === 1 ? "membro" : "membros"}
+              </Badge>
             </div>
           </div>
 
-          {/* Lado Direito / Membros da Gestão */}
-          <div className="p-5 sm:p-6 border-t lg:border-t-0 lg:border-l border-border bg-muted/20 flex flex-col justify-between gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Membros da Gestão
-                </span>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-border">
-                  {memberCount}
-                </Badge>
-              </div>
-
-              <div className="text-xs font-semibold text-foreground mb-3">
-                {memberCount} {memberCount === 1 ? "integrante ativo" : "integrantes ativos"}
-              </div>
-
-              {/* Lista/Avatares de Membros */}
-              <div className="flex items-center gap-2">
-                {management.members && management.members.length > 0 ? (
-                  <div className="flex -space-x-2 items-center">
-                    {management.members.slice(0, 5).map((m, idx) => (
-                      <div
-                        key={m.userId || idx}
-                        className="w-8 h-8 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[10px] font-bold text-foreground"
-                        title={m.user?.name || "Membro"}
-                      >
-                        <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                      </div>
-                    ))}
-                    {memberCount > 5 && (
-                      <div className="w-8 h-8 rounded-full border-2 border-card bg-secondary text-secondary-foreground text-[10px] font-bold flex items-center justify-center shadow-2xs">
-                        +{memberCount - 5}
-                      </div>
-                    )}
+          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+            {/* Avatares dos membros em miniatura */}
+            {management.members && management.members.length > 0 && (
+              <div className="flex -space-x-1.5 items-center mr-1">
+                {management.members.slice(0, 4).map((m, idx) => (
+                  <div
+                    key={m.userId || idx}
+                    className="size-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground"
+                    title={m.user?.name || "Membro"}
+                  >
+                    <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Users className="w-4 h-4" />
-                    <span>Nenhum membro vinculado</span>
+                ))}
+                {memberCount > 4 && (
+                  <div className="size-6 rounded-full border-2 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
+                    +{memberCount - 4}
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
-            <div className="pt-3 border-t border-border flex items-center justify-between text-xs">
-              <span className="text-muted-foreground text-[11px]">Gestão integrada</span>
-            </div>
+            <button
+              type="button"
+              onClick={toggleHeader}
+              className="size-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+              title={isHeaderExpanded ? "Recolher detalhes e métricas" : "Expandir detalhes e métricas"}
+              aria-label={isHeaderExpanded ? "Recolher detalhes e métricas" : "Expandir detalhes e métricas"}
+              aria-expanded={isHeaderExpanded}
+            >
+              <ChevronRight
+                className={cn(
+                  "size-4 transition-transform duration-200",
+                  isHeaderExpanded && "rotate-90"
+                )}
+              />
+            </button>
           </div>
         </div>
+
+        {/* Detalhes & Métricas Expandidos ("Uma coisa só") */}
+        {isHeaderExpanded && (
+          <div className="border-t border-border/60 bg-muted/10 p-4 sm:p-5 animate-in fade-in duration-150">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+              {/* Lado Esquerdo: Descrição e Metadados */}
+              <div className="lg:col-span-5 space-y-3">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {management.description?.trim() || "Gestão das atividades e projetos relacionados."}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground pt-1">
+                  {formattedDate && (
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="size-3.5 text-muted-foreground/80 shrink-0" />
+                      <span>Criada em {formattedDate}</span>
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="size-3.5 text-muted-foreground/80 shrink-0" />
+                    <span>
+                      Visibilidade: {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] || management.visibility || "Empresa"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Folder className="size-3.5 text-muted-foreground/80 shrink-0" />
+                    <span>Status: {management.status || "Ativa"}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Lado Direito: Os 3 KPIs Compactos Lado a Lado */}
+              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Card 1: Projetos */}
+                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-medium text-muted-foreground">Projetos</span>
+                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
+                      {managementProjects.length}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {activeProjectsCount} ativos de {managementProjects.length} no total
+                    </p>
+                  </div>
+                  <div className="size-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                    <Folder className="size-4" />
+                  </div>
+                </div>
+
+                {/* Card 2: Concluídos */}
+                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-medium text-muted-foreground">Concluídos</span>
+                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
+                      {completedProjectsCount}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Projetos finalizados
+                    </p>
+                  </div>
+                  <div className="size-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="size-4" />
+                  </div>
+                </div>
+
+                {/* Card 3: Tarefas */}
+                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-medium text-muted-foreground">Tarefas</span>
+                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
+                      {totalTasksCount}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Total de tarefas ativas
+                    </p>
+                  </div>
+                  <div className="size-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                    <ListTodo className="size-4" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Indicadores KPI (3 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Card 1: Projetos */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
+      {/* Seção 3: Projetos da Gestão */}
+      <div className="space-y-4 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-2.5">
           <div>
-            <span className="text-[11px] font-medium text-muted-foreground">Projetos</span>
-            <div className="text-2xl font-bold text-foreground mt-0.5">
-              {managementProjects.length}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Ambientes nesta gestão
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-            <Folder className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 2: Concluídos */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground">Concluídos</span>
-            <div className="text-2xl font-bold text-foreground mt-0.5">
-              {completedProjectsCount}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Projetos finalizados
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 3: Tarefas */}
-        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-medium text-muted-foreground">Tarefas</span>
-            <div className="text-2xl font-bold text-foreground mt-0.5">
-              {totalTasksCount}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Tarefas vinculadas
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-            <ListTodo className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Seção Projetos da Gestão */}
-      <div className="space-y-4 pt-2">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-foreground">
+            <h2 className="text-sm sm:text-base font-bold text-foreground">
               Projetos da gestão
             </h2>
             <p className="text-xs text-muted-foreground">
               Filtre o portfólio e abra cada workspace para acompanhar a execução.
             </p>
           </div>
-          <div className="text-xs text-muted-foreground font-mono self-start sm:self-auto">
-            {filteredProjects.length} de {managementProjects.length}
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            <span className="text-xs text-muted-foreground font-mono">
+              {filteredProjects.length} de {managementProjects.length}
+            </span>
+            <SectionToggleButton
+              isExpanded={isProjectsExpanded}
+              onToggle={toggleProjects}
+              title="projetos"
+            />
           </div>
         </div>
 
-        {/* Project Cards / List */}
-        {filteredProjects.length === 0 ? (
+        {isProjectsExpanded && (
+          filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
             <h3 className="text-sm font-semibold text-foreground mb-1">
@@ -525,7 +570,7 @@ export function ManagementProjectsView({
               );
             })}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

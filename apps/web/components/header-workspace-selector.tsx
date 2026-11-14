@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 interface HeaderWorkspaceSelectorProps {
   managements: CrmProjectManagement[];
+  selectableManagements?: CrmProjectManagement[];
   selectedManagementId: string | null;
   onSelectManagement?: (managementId: string | null) => void;
   projects: CrmProject[];
@@ -21,6 +22,7 @@ interface HeaderWorkspaceSelectorProps {
 
 export function HeaderWorkspaceSelector({
   managements = [],
+  selectableManagements = managements,
   selectedManagementId,
   onSelectManagement,
   projects = [],
@@ -38,7 +40,7 @@ export function HeaderWorkspaceSelector({
   // Gestões filtradas
   const filteredManagements = useMemo(() => {
     const q = managementQuery.trim().toLowerCase();
-    const visible = managements;
+    const visible = selectableManagements;
     if (!q) return visible;
     return visible.filter(
       (m) =>
@@ -46,7 +48,7 @@ export function HeaderWorkspaceSelector({
         (m.code && m.code.toLowerCase().includes(q)) ||
         (m.description && m.description.toLowerCase().includes(q))
     );
-  }, [managements, managementQuery]);
+  }, [selectableManagements, managementQuery]);
 
   // Projetos da gestão atual
   const managementProjects = useMemo(() => {

@@ -20,11 +20,7 @@ import {
   type TaskGroupBy,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
-import {
-  INITIAL_TASKS,
-  INITIAL_MANAGEMENTS,
-  INITIAL_PROJECTS,
-} from "@/lib/initial-data";
+import { CrmLoginView } from "@/components/crm-login-view";
 import {
   getCachedManagements,
   setCachedManagements,
@@ -86,6 +82,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewManagementOpen, setIsNewManagementOpen] = useState(false);
   const [listSearch, setListSearch] = useState("");
+  const [onlyMyManagements, setOnlyMyManagements] = useState(() => {
+    try { return localStorage.getItem("gestor_only_my_managements") !== "false"; } catch { return true; }
+  });
   const [onlyMyProjects, setOnlyMyProjects] = useState(() => {
     try { return localStorage.getItem("gestor_only_my_projects") !== "false"; } catch { return true; }
   });
@@ -200,7 +199,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const taskUpdateVersionsRef = useRef(new Map<string, number>());
 
   // Monotonic collision-free code counter initialized above existing tasks
-  const nextCodeNumberRef = useRef(getHighestCodeNumber(INITIAL_TASKS) + 1);
+  const nextCodeNumberRef = useRef(100);
 
   // Filters state
   const [filters, setFilters] = useState<TaskFilter>({
@@ -389,26 +388,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           setIsConnectedCrm(false);
           setCurrentUser(null);
           setCachedSession(null);
-          setTasks(INITIAL_TASKS);
-          if (
-            selectedManagementIdRef.current &&
-            !INITIAL_MANAGEMENTS.some((m) => m.id === selectedManagementIdRef.current)
-          ) {
-            setSelectedManagementId(null);
-            setSelectedProjectId(null);
-            try {
-              localStorage.removeItem("gestor_selected_management_id");
-              localStorage.removeItem("gestor_selected_project_id");
-            } catch {}
-          } else if (
-            selectedProjectIdRef.current &&
-            !INITIAL_PROJECTS.some((p) => p.id === selectedProjectIdRef.current)
-          ) {
-            setSelectedProjectId(null);
-            try {
-              localStorage.removeItem("gestor_selected_project_id");
-            } catch {}
-          }
+          setTasks([]);
+          setSelectedManagementId(null);
+          setSelectedProjectId(null);
+          try {
+            localStorage.removeItem("gestor_selected_management_id");
+            localStorage.removeItem("gestor_selected_project_id");
+          } catch {}
           setIsSyncingTasks(false);
           setIsBootstrapping(false);
           return;
@@ -518,16 +504,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const effectiveManagements = useMemo(() => {
-    return isConnectedCrm ? managements : INITIAL_MANAGEMENTS;
-  }, [managements, isConnectedCrm]);
-
-  const effectiveProjects = useMemo(() => {
-    return isConnectedCrm ? projects : INITIAL_PROJECTS;
-  }, [projects, isConnectedCrm]);
+  const effectiveManagements = managements;
+  const effectiveProjects = projects;
 
   useEffect(() => {
-    if (!onlyMyProjects || !isConnectedCrm || !currentUser?.id) return;
+    if ((!onlyMyProjects && !onlyMyManagements) || !isConnectedCrm || !currentUser?.id) return;
     const userId = currentUser.id;
     let cancelled = false;
     void ideCrmClient.listProjectMembers().then(({ members: projectMemberList }) => {
@@ -536,15 +517,51 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       if (!cancelled) setProjectMembership({ userId, projectIds: null, error: true });
     });
     return () => { cancelled = true; };
-  }, [onlyMyProjects, isConnectedCrm, currentUser?.id, projects, membershipRetry]);
+  }, [onlyMyProjects, onlyMyManagements, isConnectedCrm, currentUser?.id, projects, membershipRetry]);
 
   const membershipForCurrentUser = projectMembership?.userId === currentUser?.id ? projectMembership : null;
-  const membershipPending = onlyMyProjects && isConnectedCrm && Boolean(currentUser?.id) && !membershipForCurrentUser;
+  const membershipPending = (onlyMyProjects || onlyMyManagements) && isConnectedCrm && Boolean(currentUser?.id) && !membershipForCurrentUser;
+
+  const myManagementIds = useMemo(() => {
+    if (!currentUser?.id) return new Set<string>();
+    const uid = currentUser.id;
+    const ids = new Set<string>();
+    for (const m of effectiveManagements) {
+      const isDirectMember = Boolean(
+        m.members?.some((mem) => mem.userId === uid || mem.user?.id === uid)
+      );
+      if (isDirectMember) {
+        ids.add(m.id);
+        continue;
+      }
+      const hasProject = effectiveProjects.some(
+        (p) =>
+          p.projectManagementId === m.id &&
+          (membershipForCurrentUser?.projectIds?.has(p.id) ||
+            p.members?.some((pm) => pm.userId === uid))
+      );
+      if (hasProject) {
+        ids.add(m.id);
+      }
+    }
+    return ids;
+  }, [currentUser?.id, effectiveManagements, effectiveProjects, membershipForCurrentUser]);
+
+  const visibleManagements = useMemo(() => {
+    if (!onlyMyManagements || !isConnectedCrm || !currentUser?.id) return effectiveManagements;
+    return effectiveManagements.filter((m) => myManagementIds.has(m.id));
+  }, [onlyMyManagements, isConnectedCrm, currentUser?.id, effectiveManagements, myManagementIds]);
+
   const visibleProjects = useMemo(() => {
     if (!onlyMyProjects || !isConnectedCrm || !currentUser?.id) return effectiveProjects;
     const projectIds = membershipForCurrentUser?.projectIds;
     return projectIds ? effectiveProjects.filter((project) => projectIds.has(project.id)) : [];
   }, [onlyMyProjects, isConnectedCrm, currentUser?.id, effectiveProjects, membershipForCurrentUser]);
+
+  function updateOnlyMyManagements(value: boolean) {
+    setOnlyMyManagements(value);
+    try { localStorage.setItem("gestor_only_my_managements", String(value)); } catch {}
+  }
 
   function updateOnlyMyProjects(value: boolean) {
     setOnlyMyProjects(value);
@@ -640,21 +657,15 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     setSelectedManagementId(null);
     setProjects([]);
     setSelectedProjectId(null);
-    setTasks(INITIAL_TASKS);
+    setTasks([]);
     clearGestorCache();
   }
 
   // Active selected task derived reactively from current tasks state
   const selectedTask = useMemo(() => {
     if (!selectedTaskId) return null;
-    return (
-      tasks.find((t) => t.id === selectedTaskId) ??
-      (!isConnectedCrm
-        ? INITIAL_TASKS.find((t) => t.id === selectedTaskId || t.code === selectedTaskId)
-        : null) ??
-      null
-    );
-  }, [tasks, selectedTaskId, isConnectedCrm]);
+    return tasks.find((t) => t.id === selectedTaskId || t.code === selectedTaskId) ?? null;
+  }, [tasks, selectedTaskId]);
 
   const currentManagement = useMemo(() => {
     if (!selectedManagementId) return null;
@@ -1240,6 +1251,28 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       (filters.taskType && filters.taskType !== "all")
   );
 
+  if (isBootstrapping) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Verificando sessão com o IDE CRM...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isConnectedCrm) {
+    return (
+      <CrmLoginView
+        isApiReachable={isApiReachable}
+        onSuccessConnect={async () => {
+          await syncWithIdeCrm(selectedProjectId, selectedManagementId);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
       {/* Main Content Area (Sidebar desativada conforme solicitado) */}
@@ -1251,8 +1284,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           canCreateCalendarEvent={canCreateCalendarEvent}
           onHome={() => { if (isSecondaryPage) router.push("/"); }}
           managements={effectiveManagements}
+          selectableManagements={visibleManagements}
           projects={effectiveProjects}
           selectableProjects={visibleProjects}
+          onlyMyManagements={onlyMyManagements}
+          onOnlyMyManagementsChange={updateOnlyMyManagements}
           onlyMyProjects={onlyMyProjects}
           onOnlyMyProjectsChange={updateOnlyMyProjects}
           onlyMyTasks={onlyMyTasks}
@@ -1308,11 +1344,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             !isSecondaryPage && selectedProjectId && viewMode === "table" ? "px-3 pt-1 pb-6" : "p-4 md:p-5"
           )}
         >
-          {!isBootstrapping && !isConnectedCrm && (
-            <div role="status" className="mb-4 rounded-md border border-border bg-card p-3 text-sm text-muted-foreground">
-              Modo de demonstração: alterações locais não são salvas no CRM.
-            </div>
-          )}
           {syncError && (
             <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
               {syncError}
@@ -1321,9 +1352,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               </button>
             </div>
           )}
-          {!isSecondaryPage && onlyMyProjects && membershipForCurrentUser?.error && (
+          {!isSecondaryPage && (onlyMyProjects || onlyMyManagements) && membershipForCurrentUser?.error && (
             <div role="alert" className="mb-4 rounded-md border border-destructive bg-card p-3 text-sm text-destructive">
-              Não foi possível verificar seus projetos. <button type="button" className="underline" onClick={() => setMembershipRetry((value) => value + 1)}>Tentar novamente</button>
+              Não foi possível verificar suas gestões e projetos. <button type="button" className="underline" onClick={() => setMembershipRetry((value) => value + 1)}>Tentar novamente</button>
             </div>
           )}
           {isSecondaryPage ? (
@@ -1338,11 +1369,15 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               visibilityFilter={managementVisibility}
               onVisibilityFilterChange={setManagementVisibility}
               viewMode={managementViewMode}
-              managements={effectiveManagements}
+              managements={visibleManagements}
               onSelectManagement={(id) => handleSelectManagement(id)}
             />
           ) : selectedManagementId && membershipPending ? (
             <p role="status" className="text-sm text-muted-foreground">Carregando seus projetos...</p>
+          ) : selectedManagementId && onlyMyManagements && isConnectedCrm && !myManagementIds.has(selectedManagementId) ? (
+            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+              Esta gestão não está entre as suas gestões. <button type="button" className="text-primary underline" onClick={() => updateOnlyMyManagements(false)}>Ver todas as gestões</button>
+            </div>
           ) : selectedManagementId && onlyMyProjects && membershipForCurrentUser?.error ? null
           : selectedProjectId && onlyMyProjects && isConnectedCrm && membershipForCurrentUser?.projectIds && !membershipForCurrentUser.projectIds.has(selectedProjectId) ? (
             <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
