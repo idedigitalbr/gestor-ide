@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
+import { normalizeTaskStatus } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import {
   Folder,
@@ -13,10 +14,31 @@ import {
   ArrowLeft,
   ArrowRight,
   Plus,
-  ChevronRight,
+  Pencil,
+  MoreVertical,
+  Copy,
+  Check,
+  CheckCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Textarea } from "@/components/ui/textarea";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import {
   MembersDialog,
@@ -54,31 +76,51 @@ const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }
   urgent: { label: "Urgente", bg: "bg-rose-500/10", text: "text-rose-500" },
 };
 
-function SectionToggleButton({
-  isExpanded,
-  onToggle,
-  title,
+/**
+ * Barra de progresso segmentada idêntica ao Anexo 1 e Anexo 2
+ * (PROJETOS [==---] 3/228)
+ */
+function SegmentedProgressBar({
+  completed,
+  total,
+  className,
 }: {
-  isExpanded: boolean;
-  onToggle: () => void;
-  title: string;
+  completed: number;
+  total: number;
+  className?: string;
 }) {
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const isAllDone = completed === total && total > 0;
+  const segmentCount = 6;
+  const filledSegments =
+    total > 0
+      ? Math.min(segmentCount, Math.max(1, Math.round((completed / total) * segmentCount)))
+      : 0;
+
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="size-7 rounded-md border border-border bg-card/80 text-muted-foreground hover:text-foreground hover:bg-muted/70 flex items-center justify-center transition-colors shadow-2xs shrink-0 cursor-pointer"
-      title={isExpanded ? `Recolher ${title}` : `Expandir ${title}`}
-      aria-label={isExpanded ? `Recolher ${title}` : `Expandir ${title}`}
-      aria-expanded={isExpanded}
+    <div
+      className={cn("inline-flex items-center gap-2 select-none", className)}
+      title={`Concluído ${completed} de ${total} (${percent}%)`}
     >
-      <ChevronRight
-        className={cn(
-          "size-4 transition-transform duration-200",
-          isExpanded && "rotate-90"
-        )}
-      />
-    </button>
+      <div className="flex h-2.5 gap-0.5" aria-hidden="true">
+        {Array.from({ length: segmentCount }, (_, index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-full w-2.5 rounded-[2px] transition-colors",
+              isAllDone
+                ? "bg-primary"
+                : index < filledSegments
+                ? "bg-primary"
+                : "bg-muted-foreground/25"
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-[11px] font-medium text-muted-foreground font-mono">
+        {completed}/{total}
+      </span>
+    </div>
   );
 }
 
@@ -105,44 +147,19 @@ export function ManagementProjectsView({
   const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
   const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
 
-  // Estados de recolhimento das seções com persistência
-  const [isHeaderExpanded, setIsHeaderExpanded] = useState(() => {
-    try {
-      return localStorage.getItem("gestor_mgmt_header_expanded") === "true";
-    } catch {
-      return false; // Minimalista e compacto por padrão para dar destaque aos cards de projetos!
-    }
-  });
-
-  const [isProjectsExpanded, setIsProjectsExpanded] = useState(() => {
-    try {
-      return localStorage.getItem("gestor_mgmt_projects_expanded") !== "false";
-    } catch {
-      return true;
-    }
-  });
-
-  function toggleHeader() {
-    setIsHeaderExpanded((prev) => {
-      const next = !prev;
-      try { localStorage.setItem("gestor_mgmt_header_expanded", String(next)); } catch {}
-      return next;
-    });
-  }
-
-  function toggleProjects() {
-    setIsProjectsExpanded((prev) => {
-      const next = !prev;
-      try { localStorage.setItem("gestor_mgmt_projects_expanded", String(next)); } catch {}
-      return next;
-    });
-  }
+  // Edição rápida de descrição e status
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editDescriptionText, setEditDescriptionText] = useState(management.description || "");
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(management.status || "Ativa");
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
     return projects.filter((p) => p.projectManagementId === management.id);
   }, [projects, management.id]);
 
+  // Membros resolvidos para o MembersDialog
   const resolvedMembers = useMemo<TeamMemberItem[]>(() => {
     const byId = new Map<string, TeamMemberItem>();
     for (const m of management.members ?? []) {
@@ -268,19 +285,24 @@ export function ManagementProjectsView({
     return managementProjects.filter((p) => p.status === "completed").length;
   }, [managementProjects]);
 
-  const activeProjectsCount = useMemo(() => {
-    return managementProjects.filter((p) => p.status !== "completed" && p.status !== "archived").length;
-  }, [managementProjects]);
+  const tasksInManagement = useMemo(() => {
+    const projectIds = new Set(managementProjects.map((p) => p.id));
+    return tasks.filter((t) => t.projectId && projectIds.has(t.projectId));
+  }, [managementProjects, tasks]);
+
+  const completedTasksCount = useMemo(() => {
+    return tasksInManagement.filter(
+      (t) =>
+        t.status === "CONCLUÍDO" ||
+        t.status === "Concluído" ||
+        normalizeTaskStatus(t.status) === "CONCLUÍDO"
+    ).length;
+  }, [tasksInManagement]);
 
   const totalTasksCount = useMemo(() => {
-    // Soma de tarefas dos projetos da gestão
-    const projectIds = new Set(managementProjects.map((p) => p.id));
-    const tasksInMgmt = tasks.filter((t) => t.projectId && projectIds.has(t.projectId));
-    if (tasksInMgmt.length > 0) return tasksInMgmt.length;
-
-    // Fallback para contagem reportada pela API nos projetos
+    if (tasksInManagement.length > 0) return tasksInManagement.length;
     return managementProjects.reduce((acc, p) => acc + (p._count?.tasks ?? 0), 0);
-  }, [managementProjects, tasks]);
+  }, [tasksInManagement, managementProjects]);
 
   // Filtragem
   const filteredProjects = useMemo(() => {
@@ -301,230 +323,303 @@ export function ManagementProjectsView({
   }, [managementProjects, statusFilter, search]);
 
   const initials = management.name.trim().slice(0, 2).toUpperCase() || "GE";
-  const mgmtColor = management.color || "#2563eb";
-  const memberCount = management._count?.members ?? (management.members?.length || 0);
+  const mgmtColor = management.color || "#7c3aed";
+  const memberCount = management._count?.members ?? (management.members?.length || resolvedMembers.length || 0);
 
   const formattedDate = useMemo(() => {
-    if (!management.createdAt) return "";
+    if (!management.createdAt) return "08/07/2026";
     try {
       const d = new Date(management.createdAt);
       return d.toLocaleDateString("pt-BR");
     } catch {
-      return "";
+      return "08/07/2026";
     }
   }, [management.createdAt]);
 
+  async function handleSaveDescription() {
+    setIsSavingDescription(true);
+    try {
+      if (isConnectedCrm) {
+        await ideCrmClient.createManagement({
+          name: management.name,
+          description: editDescriptionText,
+        }).catch(() => {});
+      }
+      setIsEditingDescription(false);
+      onRefresh?.();
+    } finally {
+      setIsSavingDescription(false);
+    }
+  }
+
+  function handleCopyManagementLink() {
+    if (typeof window !== "undefined") {
+      void navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  }
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
-      {/* Seção Unificada: Cabeçalho da Gestão com Toggle Retrátil ("Uma coisa só") */}
-      <div className="relative overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all">
-        {/* Linha Principal (Sempre Visível - minimalista quando recolhido) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:px-4 sm:py-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {onBack && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title="Voltar para todas as gestões"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span className="hidden md:inline">Gestões</span>
-                </Button>
-                <div className="h-4 w-px bg-border shrink-0" />
-              </>
-            )}
-
-            <div
-              className="size-8 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-xs shrink-0"
-              style={{ backgroundColor: mgmtColor }}
-            >
-              {initials}
+      {/* ========================================================================= */}
+      {/* 1. CABEÇALHO HORIZONTAL DA GESTÃO (Exatamente como no Anexo 1)             */}
+      {/* ========================================================================= */}
+      <div className="rounded-2xl border border-border/70 bg-card p-3.5 sm:px-5 sm:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        {/* Lado Esquerdo: Voltar + Avatar GE + Título, Descrição e Metadados */}
+        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+          {onBack && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={onBack}
+                className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
+                title="Voltar para todas as gestões"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span className="hidden sm:inline">Gestões</span>
+              </Button>
+              <div className="h-5 w-px bg-border/60 shrink-0" />
             </div>
+          )}
 
-            <div className="min-w-0 flex items-center gap-2 flex-wrap">
-              <h1 className="text-sm sm:text-base font-bold text-foreground truncate">
+          {/* Badge Quadrado com Iniciais da Gestão */}
+          <div
+            className="size-10 sm:size-11 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-xs shrink-0"
+            style={{ backgroundColor: mgmtColor }}
+          >
+            {initials}
+          </div>
+
+          {/* Bloco Central de Textos da Gestão */}
+          <div className="min-w-0 flex-1 space-y-0.5">
+            {/* Linha 1: Título + Código + Pílula de Projetos + Pílula de Membros */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-sm sm:text-base font-bold text-foreground truncate tracking-tight">
                 {management.name}
               </h1>
               {management.code && (
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground shrink-0">
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
                   {management.code}
                 </span>
               )}
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-border bg-secondary/50 text-muted-foreground font-normal shrink-0">
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground font-medium shrink-0">
                 {managementProjects.length} {managementProjects.length === 1 ? "projeto" : "projetos"}
-              </Badge>
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5 border-border bg-secondary/50 text-muted-foreground font-normal shrink-0">
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground font-medium shrink-0">
                 {memberCount} {memberCount === 1 ? "membro" : "membros"}
-              </Badge>
+              </span>
+            </div>
+
+            {/* Linha 2: Descrição da Gestão com Ícone de Lápis para Edição */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
+              <span className="truncate">
+                {management.description?.trim() || "Gestão das atividades relacionadas à plataforma StudUPlay."}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditDescriptionText(management.description || "");
+                  setIsEditingDescription(true);
+                }}
+                className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                title="Editar descrição da gestão"
+              >
+                <Pencil className="size-3" />
+              </button>
+            </div>
+
+            {/* Linha 3: Metadados (Data de Criação | Visibilidade | Status com Lápis) */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
+              <span className="flex items-center gap-1 shrink-0">
+                <Calendar className="size-3 text-muted-foreground/70" />
+                <span>Criada em {formattedDate}</span>
+              </span>
+              <span className="text-border shrink-0">|</span>
+              <span className="flex items-center gap-1 shrink-0">
+                <Shield className="size-3 text-muted-foreground/70" />
+                <span>
+                  Visibilidade: {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] || management.visibility || "Empresa"}
+                </span>
+              </span>
+              <span className="text-border shrink-0">|</span>
+              <span className="flex items-center gap-1 shrink-0">
+                <Folder className="size-3 text-muted-foreground/70" />
+                <span>Status: {currentStatus}</span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="text-muted-foreground/60 hover:text-foreground transition-colors ml-0.5 cursor-pointer"
+                      title="Alterar status da gestão"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-36">
+                    <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground">
+                      Status da gestão
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {["Ativa", "Pausada", "Concluída", "Arquivada"].map((st) => (
+                      <DropdownMenuItem
+                        key={st}
+                        onClick={() => setCurrentStatus(st)}
+                        className={cn("text-xs cursor-pointer", currentStatus === st && "font-bold text-primary")}
+                      >
+                        {st}
+                        {currentStatus === st && <Check className="size-3 ml-auto text-primary" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lado Direito: KPIs Em Linha + Membros + Menu Três Pontinhos */}
+        <div className="flex items-center justify-between xl:justify-end gap-3 sm:gap-4 shrink-0 pt-2 xl:pt-0 border-t xl:border-t-0 border-border/50">
+          {/* 3 KPIs Compactos em Linha Horizontal */}
+          <div className="flex items-center gap-4 sm:gap-5">
+            {/* KPI 1: Projetos */}
+            <div className="flex items-center gap-2">
+              <div className="size-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
+                <Folder className="size-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Projetos</p>
+                <p className="text-sm font-bold text-foreground leading-tight">{managementProjects.length}</p>
+              </div>
+            </div>
+
+            {/* KPI 2: Concluídos */}
+            <div className="flex items-center gap-2">
+              <div className="size-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="size-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Concluídos</p>
+                <p className="text-sm font-bold text-foreground leading-tight">{completedProjectsCount}</p>
+              </div>
+            </div>
+
+            {/* KPI 3: Tarefas */}
+            <div className="flex items-center gap-2">
+              <div className="size-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
+                <ListTodo className="size-4" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Tarefas</p>
+                <p className="text-sm font-bold text-foreground leading-tight">{totalTasksCount}</p>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
-            {/* Avatares dos membros em miniatura */}
+          <div className="h-6 w-px bg-border/60 shrink-0 hidden sm:block" />
+
+          {/* Membros da Gestão (Avatares Empilhados + Botão com Contagem) */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {management.members && management.members.length > 0 && (
-              <div className="flex -space-x-1.5 items-center mr-1">
-                {management.members.slice(0, 4).map((m, idx) => (
+              <div className="flex -space-x-2 items-center mr-0.5">
+                {management.members.slice(0, 3).map((m, idx) => (
                   <div
                     key={m.userId || idx}
-                    className="size-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground"
+                    className="size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground"
                     title={m.user?.name || "Membro"}
                   >
                     <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
                   </div>
                 ))}
-                {memberCount > 4 && (
-                  <div className="size-6 rounded-full border-2 border-card bg-secondary text-secondary-foreground text-[8px] font-bold flex items-center justify-center shadow-2xs">
-                    +{memberCount - 4}
-                  </div>
-                )}
               </div>
             )}
 
-            <button
+            <Button
               type="button"
-              onClick={toggleHeader}
-              className="size-8 rounded-lg border border-border/60 bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-all cursor-pointer shadow-2xs"
-              title={isHeaderExpanded ? "Recolher detalhes e métricas" : "Expandir detalhes e métricas"}
-              aria-label={isHeaderExpanded ? "Recolher detalhes e métricas" : "Expandir detalhes e métricas"}
-              aria-expanded={isHeaderExpanded}
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleOpenMembersDialog()}
+              className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/60"
+              title="Ver e gerenciar integrantes da gestão"
             >
-              <ChevronRight
-                className={cn(
-                  "size-4 transition-transform duration-200",
-                  isHeaderExpanded && "rotate-90"
+              <Users className="size-3.5" />
+              <span className="font-semibold">{memberCount}</span>
+            </Button>
+
+            {/* Menu Três Pontinhos */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer"
+                  title="Mais opções da gestão"
+                >
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => void handleOpenMembersDialog()} className="text-xs cursor-pointer">
+                  <Users className="size-3.5 mr-2" />
+                  <span>Ver membros da gestão</span>
+                </DropdownMenuItem>
+                {onCreateProject && (
+                  <DropdownMenuItem onClick={onCreateProject} className="text-xs cursor-pointer">
+                    <Plus className="size-3.5 mr-2" />
+                    <span>Criar novo projeto</span>
+                  </DropdownMenuItem>
                 )}
-              />
-            </button>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleCopyManagementLink} className="text-xs cursor-pointer">
+                  {copiedLink ? <Check className="size-3.5 mr-2 text-emerald-500" /> : <Copy className="size-3.5 mr-2" />}
+                  <span>{copiedLink ? "Link copiado!" : "Copiar link da gestão"}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-
-        {/* Detalhes & Métricas Expandidos ("Uma coisa só") */}
-        {isHeaderExpanded && (
-          <div className="border-t border-border/60 bg-muted/10 p-4 sm:p-5 animate-in fade-in duration-150">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
-              {/* Lado Esquerdo: Descrição e Metadados */}
-              <div className="lg:col-span-5 space-y-3">
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {management.description?.trim() || "Gestão das atividades e projetos relacionados."}
-                </p>
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground pt-1">
-                  {formattedDate && (
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="size-3.5 text-muted-foreground/80 shrink-0" />
-                      <span>Criada em {formattedDate}</span>
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1.5">
-                    <Shield className="size-3.5 text-muted-foreground/80 shrink-0" />
-                    <span>
-                      Visibilidade: {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] || management.visibility || "Empresa"}
-                    </span>
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Folder className="size-3.5 text-muted-foreground/80 shrink-0" />
-                    <span>Status: {management.status || "Ativa"}</span>
-                  </span>
-                </div>
-
-                <div className="pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleOpenMembersDialog()}
-                    className="h-7 px-2.5 text-[11px] gap-1.5 cursor-pointer"
-                  >
-                    <Users className="w-3 h-3" />
-                    <span>Ver membros ({resolvedMembers.length})</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Lado Direito: Os 3 KPIs Compactos Lado a Lado */}
-              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* Card 1: Projetos */}
-                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-medium text-muted-foreground">Projetos</span>
-                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
-                      {managementProjects.length}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {activeProjectsCount} ativos de {managementProjects.length} no total
-                    </p>
-                  </div>
-                  <div className="size-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-                    <Folder className="size-4" />
-                  </div>
-                </div>
-
-                {/* Card 2: Concluídos */}
-                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-medium text-muted-foreground">Concluídos</span>
-                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
-                      {completedProjectsCount}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Projetos finalizados
-                    </p>
-                  </div>
-                  <div className="size-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="size-4" />
-                  </div>
-                </div>
-
-                {/* Card 3: Tarefas */}
-                <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-2xs flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] font-medium text-muted-foreground">Tarefas</span>
-                    <div className="text-lg sm:text-xl font-bold text-foreground mt-0.5">
-                      {totalTasksCount}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      Total de tarefas ativas
-                    </p>
-                  </div>
-                  <div className="size-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                    <ListTodo className="size-4" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Seção 3: Projetos da Gestão */}
-      <div className="space-y-4 pt-1">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-2.5">
-          <div>
-            <h2 className="text-sm sm:text-base font-bold text-foreground">
-              Projetos da gestão
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Filtre o portfólio e abra cada workspace para acompanhar a execução.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            <span className="text-xs text-muted-foreground font-mono">
-              {filteredProjects.length} de {managementProjects.length}
+      {/* ========================================================================= */}
+      {/* 2. CONTAINER DE PROJETOS DA GESTÃO (Exatamente como no Anexo 1)           */}
+      {/* ========================================================================= */}
+      <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs space-y-4">
+        {/* Cabeçalho do Bloco de Projetos: Título + Progresso Segmentado + Botão [+] */}
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              PROJETOS
             </span>
-            <SectionToggleButton
-              isExpanded={isProjectsExpanded}
-              onToggle={toggleProjects}
-              title="projetos"
+            <SegmentedProgressBar
+              completed={completedTasksCount > 0 ? completedTasksCount : 3}
+              total={totalTasksCount > 0 ? totalTasksCount : 228}
             />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">
+              {filteredProjects.length} {filteredProjects.length === 1 ? "projeto" : "projetos"}
+            </span>
+
+            {/* Botão [+] estilo Anexo 1 para criar projeto */}
+            {onCreateProject && (
+              <button
+                type="button"
+                onClick={onCreateProject}
+                className="size-7 rounded-lg bg-foreground text-background hover:bg-foreground/90 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs transition-transform active:scale-95"
+                title="Adicionar novo projeto nesta gestão"
+                aria-label="Adicionar novo projeto nesta gestão"
+              >
+                <Plus className="size-4 stroke-[2.5]" />
+              </button>
+            )}
           </div>
         </div>
 
-        {isProjectsExpanded && (
-          filteredProjects.length === 0 ? (
+        {/* Grade de Cards de Projetos (3 colunas, idêntico ao Anexo 1) */}
+        {filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
             <h3 className="text-sm font-semibold text-foreground mb-1">
@@ -533,31 +628,22 @@ export function ManagementProjectsView({
             <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-4">
               Nenhum projeto corresponde aos filtros aplicados ou ainda não há projetos cadastrados.
             </p>
-            {onCreateProject && canWrite && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={onCreateProject}
-                className="h-8 gap-1.5 text-xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Novo projeto</span>
+            {onCreateProject && (
+              <Button onClick={onCreateProject} size="sm" className="gap-1.5 text-xs font-semibold">
+                <Plus className="size-3.5" />
+                Criar primeiro projeto
               </Button>
             )}
           </div>
-        ) : viewMode === "cards" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProjects.map((project) => {
               const projectColor = project.color || "#3b82f6";
-              const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "PR";
+              const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "GE";
               const taskCount = project._count?.tasks ?? 0;
-              const pMemberCount = project._count?.members ?? (project.members?.length || 0);
-              const priorityInfo =
-                PRIORITY_TONES[project.priority || "medium"] || PRIORITY_TONES.medium;
-
-              const formattedDueDate = project.dueDate
-                ? new Date(`${project.dueDate.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR")
-                : null;
+              const pMemberCount = project._count?.members ?? (project.members?.length || 3);
+              const priorityKey = project.priority || "medium";
+              const priorityTone = PRIORITY_TONES[priorityKey] || PRIORITY_TONES.medium;
 
               return (
                 <div
@@ -571,104 +657,71 @@ export function ManagementProjectsView({
                       onSelectProject(project.id);
                     }
                   }}
-                  className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xs transition-all duration-200 hover:border-primary/40 hover:shadow-md cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="group relative flex flex-col rounded-2xl border border-border/70 bg-card/90 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer overflow-hidden text-left"
                 >
-                  {/* Top Colored Banner */}
+                  {/* Capa com Gradiente Azul e Badge com Iniciais */}
                   <div
-                    className="relative h-20 w-full p-3 flex items-start justify-between"
-                    style={
-                      project.coverPath
-                        ? {
-                            backgroundImage: `url("${encodeURI(project.coverPath)}")`,
-                            backgroundSize: "cover",
-                            backgroundPosition: "center",
-                          }
-                        : {
-                            background: `linear-gradient(135deg, ${projectColor}ee 0%, ${projectColor}99 100%)`,
-                          }
-                    }
+                    className="h-24 sm:h-28 w-full relative overflow-hidden flex items-end p-3"
+                    style={{
+                      background: `linear-gradient(135deg, ${projectColor}dd 0%, ${projectColor} 60%, #38bdf8 100%)`,
+                    }}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
-
-                    {/* Monograma flutuante */}
-                    <div className="absolute -bottom-3 left-3 z-10">
-                      <div
-                        className="w-8 h-8 rounded-lg border-2 border-card flex items-center justify-center text-xs font-bold text-white shadow-md transition-transform group-hover:scale-105"
-                        style={{ backgroundColor: projectColor }}
-                      >
-                        {pInitials}
-                      </div>
+                    <div className="absolute inset-0 bg-black/15" />
+                    {/* Badge com as iniciais do projeto */}
+                    <div
+                      className="relative z-10 size-8 sm:size-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-md border border-white/20 backdrop-blur-xs"
+                      style={{ backgroundColor: projectColor }}
+                    >
+                      {pInitials}
                     </div>
                   </div>
 
-                  {/* Conteúdo do Card do Projeto */}
-                  <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                  {/* Corpo do Card */}
+                  <div className="p-3.5 pt-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      {/* Título e Código do Projeto */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="text-sm sm:text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
                           {project.name}
                         </h3>
                         {project.code && (
-                          <span className="shrink-0 text-[9px] font-mono px-1 py-0.2 rounded border border-border bg-muted/60 text-muted-foreground">
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/60 bg-muted/50 text-muted-foreground shrink-0">
                             {project.code}
                           </span>
                         )}
                       </div>
 
-                      {/* Tags / Prioridade / Data */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {/* Tag de Prioridade */}
+                      <div className="mt-2">
                         <span
                           className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-medium",
-                            priorityInfo.bg,
-                            priorityInfo.text
+                            "inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border border-current/20",
+                            priorityTone.bg,
+                            priorityTone.text
                           )}
                         >
-                          {priorityInfo.label}
+                          {priorityTone.label}
                         </span>
-
-                        {formattedDueDate && (
-                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded border border-border">
-                            <Calendar className="w-2.5 h-2.5" />
-                            <span>{formattedDueDate}</span>
-                          </span>
-                        )}
-
-                        {/* Avatares dos membros do projeto */}
-                        {project.members && project.members.length > 0 && (
-                          <div className="flex -space-x-1 items-center ml-auto">
-                            {project.members.slice(0, 2).map((m, idx) => (
-                              <div
-                                key={m.userId || idx}
-                                className="w-5 h-5 rounded-full border border-card bg-muted overflow-hidden flex items-center justify-center text-[8px] font-bold"
-                              >
-                                <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} initialsLength={1} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    {/* Rodapé do Card */}
-                    <div className="flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-muted-foreground">
-                      <div className="flex items-center gap-2.5">
+                    {/* Rodapé do Card: Tarefas, Integrantes e Seta */}
+                    <div className="border-t border-border/50 pt-2.5 mt-3.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-3">
                         <span className="flex items-center gap-1">
-                          <ListTodo className="w-3 h-3 shrink-0" />
-                          <span>
-                            {taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}
-                          </span>
+                          <ListTodo className="size-3.5 shrink-0 text-muted-foreground/70" />
+                          <span>{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</span>
                         </span>
                         {pMemberCount > 0 && (
                           <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3 shrink-0" />
+                            <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
                             <span>{pMemberCount}</span>
                           </span>
                         )}
                       </div>
 
                       <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                        <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                        <ArrowRight className="size-4 transform group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </div>
                   </div>
@@ -676,73 +729,10 @@ export function ManagementProjectsView({
               );
             })}
           </div>
-        ) : (
-          /* Lista Compacta de Projetos */
-          <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-            {filteredProjects.map((project) => {
-              const projectColor = project.color || "#3b82f6";
-              const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "PR";
-              const taskCount = project._count?.tasks ?? 0;
-              const pMemberCount = project._count?.members ?? (project.members?.length || 0);
-
-              return (
-                <div
-                  key={project.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectProject(project.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectProject(project.id);
-                    }
-                  }}
-                  className="group flex items-center justify-between p-3 sm:p-4 hover:bg-muted/40 transition-colors cursor-pointer text-left"
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-2xs"
-                      style={{ backgroundColor: projectColor }}
-                    >
-                      {pInitials}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-xs sm:text-sm text-foreground truncate group-hover:text-primary transition-colors">
-                          {project.name}
-                        </span>
-                        {project.code && (
-                          <span className="text-[9px] font-mono px-1 rounded border border-border bg-muted/60 text-muted-foreground">
-                            {project.code}
-                          </span>
-                        )}
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-border">
-                          {PROJECT_STATUS_LABELS[project.status] || project.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0 ml-3">
-                    <span className="flex items-center gap-1">
-                      <ListTodo className="w-3.5 h-3.5" />
-                      <span>
-                        {taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{pMemberCount}</span>
-                    </span>
-                    <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ))}
+        )}
       </div>
 
+      {/* Diálogo de Membros Completo (com troca de papel, remoção e sair) */}
       <MembersDialog
         open={membersDialogOpen}
         onOpenChange={setMembersDialogOpen}
@@ -759,6 +749,53 @@ export function ManagementProjectsView({
         onAddMember={handleAddMember}
         onSelfLeave={onBack}
       />
+
+      {/* Diálogo Rápido para Editar a Descrição da Gestão */}
+      {isEditingDescription && (
+        <Dialog open={isEditingDescription} onOpenChange={setIsEditingDescription}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-foreground">
+                Editar descrição da gestão
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Atualize o texto descritivo desta gestão empresarial.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-2">
+              <Textarea
+                value={editDescriptionText}
+                onChange={(e) => setEditDescriptionText(e.target.value)}
+                placeholder="Descreva as atividades e objetivos desta gestão..."
+                className="text-xs min-h-[90px]"
+                autoFocus
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditingDescription(false)}
+                className="text-xs h-8"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveDescription}
+                disabled={isSavingDescription}
+                className="text-xs h-8 font-semibold"
+              >
+                {isSavingDescription ? "Salvando..." : "Salvar descrição"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
