@@ -27,6 +27,7 @@ import {
   LayoutDashboard,
   Layers,
   LogOut,
+  Palette,
   Plus,
   RefreshCw,
   Search,
@@ -35,6 +36,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { ThemeSelector } from "@/components/theme/theme-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -142,6 +144,7 @@ interface AppHeaderProps {
   canCreateCalendarEvent?: boolean;
   onHome?: () => void;
   managements?: CrmProjectManagement[];
+  selectableManagements?: CrmProjectManagement[];
   projects?: CrmProject[];
   selectableProjects?: CrmProject[];
   onlyMyManagements: boolean;
@@ -194,6 +197,7 @@ export function AppHeader({
   canCreateCalendarEvent = false,
   onHome,
   managements = [],
+  selectableManagements,
   projects = [],
   selectableProjects,
   onlyMyManagements,
@@ -242,6 +246,7 @@ export function AppHeader({
 
   // Estados locais para a janela de configurações da visualização (Anexo 2)
   const [isSettingsPopoverOpen, setIsSettingsPopoverOpen] = useState(false);
+  const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<
     "main" | "grupo" | "subtarefas" | "filtro"
   >("main");
@@ -296,6 +301,7 @@ export function AppHeader({
         <HeaderWorkspaceSelector
           key={currentUser?.id ?? "anonymous"}
           managements={managements}
+          selectableManagements={selectableManagements}
           selectedManagementId={selectedManagementId ?? null}
           onSelectManagement={onSelectManagement}
           projects={projects}
@@ -831,6 +837,18 @@ export function AppHeader({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <div className="px-4 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">Sistema</div>
+              <DropdownMenuItem
+                className="mx-2 my-1 cursor-pointer gap-3 p-2"
+                onSelect={() => {
+                  setTimeout(() => setIsThemeSelectorOpen(true), 50);
+                }}
+              >
+                <Palette className="size-4 shrink-0 text-primary" />
+                <span className="min-w-0 whitespace-normal">
+                  <span className="block font-medium">Aparência</span>
+                  <span className="block text-xs text-muted-foreground">Temas, cores e modo escuro</span>
+                </span>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild className="mx-2 my-1 cursor-pointer gap-3 p-2">
                 <Link href="/settings">
                   <Settings className="size-4 shrink-0" />
@@ -843,6 +861,13 @@ export function AppHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <ThemeSelector
+            open={isThemeSelectorOpen}
+            onOpenChange={setIsThemeSelectorOpen}
+            showTrigger={false}
+            position="top-right"
+          />
 
         </div>
       )}

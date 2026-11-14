@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Check, ChevronDown, Diamond, Moon, Palette, PanelLeft, Pen, Search, Sun, X,
@@ -18,6 +18,14 @@ import { cn } from "@/lib/utils";
 const RAINBOW_CONIC_GRADIENT =
   "conic-gradient(from 180deg at 50% 50%, #f43f5e, #fb923c, #facc15, #4ade80, #22d3ee, #60a5fa, #a855f7, #ec4899, #f43f5e)";
 
+export interface ThemeSelectorProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
+  showTrigger?: boolean;
+  position?: "bottom-left" | "top-right" | "center";
+}
+
 /**
  * Composição exata do Figma ajustada por Will: 354 × 240.
  * - Sem cor secundária (eliminada para simplicidade máxima).
@@ -27,12 +35,34 @@ const RAINBOW_CONIC_GRADIENT =
  * - Linha Temas + busca inline + toggle Sidebar/Header colorido.
  * - Lista rolante com todos os temas (modo Livre) ou filtrados por cor/busca.
  */
-export function ThemeSelector() {
+export function ThemeSelector({
+  open: controlledOpen,
+  onOpenChange,
+  trigger,
+  showTrigger = true,
+  position = "bottom-left",
+}: ThemeSelectorProps = {}) {
   const {
     activeTheme, resolvedMode, presetThemes, coloredChrome,
     setAppearanceMode, selectTheme, setColoredChrome,
   } = useTheme();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  const setOpen = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const val = typeof next === "function" ? next(open) : next;
+      if (onOpenChange) {
+        onOpenChange(val);
+      }
+      if (!isControlled) {
+        setInternalOpen(val);
+      }
+    },
+    [isControlled, onOpenChange, open]
+  );
+
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedColor, setSelectedColor] = useState<ColorFamily | null>(null);
@@ -115,7 +145,14 @@ export function ThemeSelector() {
       ref={dialogRef}
       role="dialog"
       aria-label="Aparência"
-      className="fixed bottom-[56px] left-[12px] z-[100] flex h-[240px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl"
+      className={cn(
+        "fixed z-[100] flex h-[240px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl",
+        position === "top-right"
+          ? "top-[56px] right-[16px]"
+          : position === "center"
+            ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+            : "bottom-[56px] left-[12px]"
+      )}
     >
       {/* Cabeçalho do Figma: Pílula de cor à esquerda, Aparência no centro, Modo e Fechar à direita */}
       <div className="relative flex h-[45px] shrink-0 items-center justify-between border-b border-border px-[10px]">
@@ -343,21 +380,25 @@ export function ThemeSelector() {
 
   return (
     <>
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => { setOpen((prev) => !prev); setColorPickerOpen(false); }}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label="Abrir aparência"
-        className="h-7 gap-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent"
-      >
-        <Palette className="size-3.5" />
-        <span>Aparência</span>
-        <ChevronDown className={cn("ml-auto size-3 text-muted-foreground", open && "rotate-180")} />
-      </Button>
+      {trigger ? (
+        trigger
+      ) : showTrigger ? (
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => { setOpen((prev) => !prev); setColorPickerOpen(false); }}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label="Abrir aparência"
+          className="h-7 gap-2 px-2 text-sidebar-foreground hover:bg-sidebar-accent"
+        >
+          <Palette className="size-3.5" />
+          <span>Aparência</span>
+          <ChevronDown className={cn("ml-auto size-3 text-muted-foreground", open && "rotate-180")} />
+        </Button>
+      ) : null}
       {open && typeof document !== "undefined" && createPortal(panel, document.body)}
     </>
   );
