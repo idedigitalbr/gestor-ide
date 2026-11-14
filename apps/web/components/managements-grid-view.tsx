@@ -11,8 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { EntityCard } from "@/components/entity-card";
 import { stripManagementPrefix, type ListDisplayMode } from "@/lib/list-view-options";
-import { cn } from "@/lib/utils";
-import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
+import {
+  KanbanGhostCard,
+  useFlipGrid,
+  CardInsertSeparator,
+  useDwellGhost,
+} from "@/components/kanban-ghost-card";
+import { Plus } from "lucide-react";
 
 interface ManagementsGridViewProps {
   search: string;
@@ -61,26 +66,22 @@ export function ManagementsGridView({
 }: ManagementsGridViewProps) {
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
 
+  // Hook com dwell time (2s) para expandir o skeleton grande entre cards ao pousar o mouse,
+  // abertura imediata ao clicar no +, e auto-close de 4s com pausa no hover e barra regressiva
   const {
-    isGhostVisible,
-    slideDirection,
-    showGhost,
-    hideGhost,
-    keepGhost,
-  } = useKanbanEdgeHover({ leaveDelay: 220 });
+    expandedIndex,
+    startDwell,
+    cancelDwell,
+    openImmediate,
+    pauseAutoClose,
+    resumeAutoClose,
+    closeExpanded,
+    isPaused,
+    autoCloseTimeMs,
+  } = useDwellGhost({ dwellTimeMs: 2000, autoCloseTimeMs: 4000 });
 
-  function handleMouseMoveGrid(e: React.MouseEvent<HTMLDivElement>) {
-    if (!gridContainerRef.current) return;
-    const rect = gridContainerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    // Detecta aproximação nas bordas laterais (primeira coluna <= 48px, última coluna >= rect.width - 48px)
-    if (x <= 48) {
-      showGhost("left");
-    } else if (rect.width - x <= 48) {
-      showGhost("right");
-    }
-  }
+  // Animação FLIP suave para empurrar os cards existentes
+  useFlipGrid(gridContainerRef, expandedIndex, 360);
   const filteredManagements = useMemo(() => {
     let list = managements;
     if (visibilityFilter !== "all") {
@@ -127,101 +128,155 @@ export function ManagementsGridView({
       ) : viewMode === "cards" ? (
         <div
           ref={gridContainerRef}
-          onMouseMove={handleMouseMoveGrid}
-          onMouseLeave={hideGhost}
           className="relative"
         >
-          {/* Trigger de hover na borda lateral esquerda (primeira coluna) */}
-          <div
-            className="absolute -left-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
-            onMouseEnter={() => showGhost("left")}
-            onMouseLeave={hideGhost}
-            aria-hidden="true"
-          />
-
-          {/* Trigger de hover na borda lateral direita (última coluna) */}
-          <div
-            className="absolute -right-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
-            onMouseEnter={() => showGhost("right")}
-            onMouseLeave={hideGhost}
-            aria-hidden="true"
-          />
-
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredManagements.map((mgmt) => {
-              const projectCount = mgmt._count?.projects ?? 0;
-              const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
-
-              return (
-                <EntityCard
-                  key={mgmt.id}
-                  type="management"
-                  id={mgmt.id}
-                  name={mgmt.name}
-                  description={mgmt.description}
-                  code={mgmt.code}
-                  color={mgmt.color}
-                  coverPath={mgmt.coverPath}
-                  status={mgmt.status}
-                  visibility={mgmt.visibility}
-                  createdAt={mgmt.createdAt}
-                  projectCount={projectCount}
-                  memberCount={memberCount}
-                  members={mgmt.members}
-                  onSelect={() => onSelectManagement(mgmt.id)}
-                  canWrite={canWrite}
-                  canManageMembers={canManageMembers}
-                  currentUserId={currentUserId}
-                  onUpdate={
-                    onUpdateManagement
-                      ? (updates) => onUpdateManagement(mgmt.id, updates)
-                      : undefined
-                  }
-                  onDelete={
-                    onDeleteManagement
-                      ? () => onDeleteManagement(mgmt.id)
-                      : undefined
-                  }
-                  onLeave={
-                    onLeaveManagement
-                      ? () => onLeaveManagement(mgmt.id)
-                      : undefined
-                  }
-                  onManageMembers={onOpenMembers ? () => onOpenMembers(mgmt) : undefined}
-                />
-              );
-            })}
-
-            {/* Card Fantasma para criação rápida de nova Gestão */}
-            {canWrite && onCreateManagement && (
+            {/* Se o skeleton grande foi expandido na posição 0 (antes do primeiro card) */}
+            {expandedIndex === 0 && canWrite && onCreateManagement && (
               <div
-                onMouseEnter={keepGhost}
-                onMouseLeave={hideGhost}
-                className={cn(
-                  "transition-all duration-300 ease-out",
-                  isGhostVisible
-                    ? "opacity-100 scale-100 translate-x-0"
-                    : cn(
-                        "opacity-0 scale-95 pointer-events-none",
-                        slideDirection === "left" ? "-translate-x-5" : "translate-x-5"
-                      )
-                )}
+                data-flip-id="__ghost_0__"
+                onMouseEnter={pauseAutoClose}
+                onMouseLeave={resumeAutoClose}
+                className="animate-in fade-in zoom-in-95 slide-in-from-left-6 duration-300"
               >
                 <KanbanGhostCard
                   label="Novo"
-                  sublabel="Criar nova gestão"
+                  sublabel="Criar no início"
                   variant="entity"
-                  slideDirection={slideDirection}
-                  onClick={onCreateManagement}
-                  isVisible={isGhostVisible}
+                  slideDirection="left"
+                  autoCloseMs={autoCloseTimeMs}
+                  isPaused={isPaused}
+                  onClick={() => {
+                    closeExpanded();
+                    onCreateManagement();
+                  }}
+                  isVisible={true}
+                  onMouseEnter={pauseAutoClose}
+                  onMouseLeave={resumeAutoClose}
                 />
+              </div>
+            )}
+
+            {filteredManagements.map((mgmt, index) => {
+              const projectCount = mgmt._count?.projects ?? 0;
+              const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
+              const isFirst = index === 0;
+
+              return (
+                <React.Fragment key={mgmt.id}>
+                  <div
+                    data-flip-id={mgmt.id}
+                    className="relative group/card"
+                  >
+                    {/* Botãozinho + e linha vertical no lado esquerdo do primeiro card (posição 0) */}
+                    {isFirst && canWrite && onCreateManagement && (
+                      <CardInsertSeparator
+                        side="left"
+                        title="Criar gestão antes deste card"
+                        onHoverStart={() => startDwell(0)}
+                        onHoverEnd={cancelDwell}
+                        onClick={() => openImmediate(0)}
+                      />
+                    )}
+
+                    {/* Botãozinho + e linha vertical no lado direito de cada card (posição index + 1) */}
+                    {canWrite && onCreateManagement && (
+                      <CardInsertSeparator
+                        side="right"
+                        title="Criar gestão entre os cards"
+                        onHoverStart={() => startDwell(index + 1)}
+                        onHoverEnd={cancelDwell}
+                        onClick={() => openImmediate(index + 1)}
+                      />
+                    )}
+
+                    <EntityCard
+                      type="management"
+                      id={mgmt.id}
+                      name={mgmt.name}
+                      description={mgmt.description}
+                      code={mgmt.code}
+                      color={mgmt.color}
+                      coverPath={mgmt.coverPath}
+                      status={mgmt.status}
+                      visibility={mgmt.visibility}
+                      createdAt={mgmt.createdAt}
+                      projectCount={projectCount}
+                      memberCount={memberCount}
+                      members={mgmt.members}
+                      onSelect={() => onSelectManagement(mgmt.id)}
+                      canWrite={canWrite}
+                      canManageMembers={canManageMembers}
+                      currentUserId={currentUserId}
+                      onUpdate={
+                        onUpdateManagement
+                          ? (updates) => onUpdateManagement(mgmt.id, updates)
+                          : undefined
+                      }
+                      onDelete={
+                        onDeleteManagement
+                          ? () => onDeleteManagement(mgmt.id)
+                          : undefined
+                      }
+                      onLeave={
+                        onLeaveManagement
+                          ? () => onLeaveManagement(mgmt.id)
+                          : undefined
+                      }
+                      onManageMembers={onOpenMembers ? () => onOpenMembers(mgmt) : undefined}
+                    />
+                  </div>
+
+                  {/* Se o skeleton grande foi expandido nesta posição intermediária (empurrando os cards) */}
+                  {expandedIndex === index + 1 && canWrite && onCreateManagement && (
+                    <div
+                      data-flip-id={`__ghost_${index + 1}__`}
+                      onMouseEnter={pauseAutoClose}
+                      onMouseLeave={resumeAutoClose}
+                      className="animate-in fade-in zoom-in-95 slide-in-from-right-6 duration-300"
+                    >
+                      <KanbanGhostCard
+                        label="Novo"
+                        sublabel="Criar nova gestão"
+                        variant="entity"
+                        slideDirection="right"
+                        autoCloseMs={autoCloseTimeMs}
+                        isPaused={isPaused}
+                        onClick={() => {
+                          closeExpanded();
+                          onCreateManagement();
+                        }}
+                        isVisible={true}
+                        onMouseEnter={pauseAutoClose}
+                        onMouseLeave={resumeAutoClose}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            {/* Slot fantasma sutil para hover no final quando nenhum skeleton está aberto */}
+            {expandedIndex === null && canWrite && onCreateManagement && (
+              <div
+                onClick={onCreateManagement}
+                onMouseEnter={() => startDwell(filteredManagements.length)}
+                onMouseLeave={cancelDwell}
+                className="min-h-[190px] h-full rounded-xl border border-dashed border-border/30 hover:border-border/60 hover:bg-card/30 transition-all duration-200 flex items-center justify-center cursor-pointer group/ghostslot opacity-40 hover:opacity-100 select-none"
+              >
+                <div className="flex flex-col items-center gap-1.5 text-muted-foreground/60 group-hover/ghostslot:text-foreground transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-background/60 border border-border/50 flex items-center justify-center group-hover/ghostslot:bg-primary group-hover/ghostslot:text-primary-foreground group-hover/ghostslot:border-primary transition-all duration-200 group-hover/ghostslot:scale-105 shadow-2xs">
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <span className="text-xs font-semibold">Novo</span>
+                </div>
               </div>
             )}
           </div>
         </div>
       ) : (
         /* Lista Compacta */
-        <div className="divide-y divide-border rounded-xl border border-border/80 bg-card shadow-sm overflow-hidden">
+        <div className="divide-y divide-border rounded-xl border border-border/80 bg-card shadow-md overflow-hidden">
           {filteredManagements.map((mgmt) => {
             const projectCount = mgmt._count?.projects ?? 0;
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);

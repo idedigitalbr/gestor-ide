@@ -113,7 +113,7 @@ export function CrmLoginView({
       <div className="w-full max-w-md space-y-6">
         {/* Cabeçalho / Branding */}
         <div className="flex flex-col items-center text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-border bg-card shadow-xs">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-border bg-card shadow-md">
             <ShieldCheck className="size-6 text-primary" />
           </div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
@@ -149,7 +149,7 @@ export function CrmLoginView({
         </div>
 
         {/* Card de Autenticação */}
-        <div className="rounded-xl border border-border bg-card p-6 shadow-xs">
+        <div className="rounded-2xl border border-border bg-card p-6 shadow-2xl">
           <Tabs defaultValue="credentials" className="w-full">
             <TabsList className="grid h-9 w-full grid-cols-2 bg-muted/60 p-0.5">
               <TabsTrigger value="credentials" className="gap-1.5 text-xs">

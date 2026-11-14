@@ -455,7 +455,7 @@ export function EntityHeader({
       {/* ========================================================================= */}
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
-        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-sm flex items-center justify-between gap-3 transition-all mb-3.5">
+        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xl flex items-center justify-between gap-3 transition-all mb-3.5">
           {/* Esquerda: Iniciais + Badge + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <div
@@ -516,7 +516,7 @@ export function EntityHeader({
         </div>
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
-        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
+        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xl flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
           {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
           <div className="flex items-center gap-3.5 min-w-0 flex-1">
             {/* Badge Quadrado com Iniciais */}

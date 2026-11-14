@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #e2e8f0;
+  --background: #cbd5e1;
   --foreground: #09090b;
   --card: #ffffff;
   --card-foreground: #09090b;
@@ -12,14 +12,14 @@
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
   --muted: #f1f5f9;
-  --muted-foreground: #475569;
+  --muted-foreground: #334155;
   --accent: #f1f5f9;
   --accent-foreground: #0f172a;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #cbd5e1;
-  --input: #cbd5e1;
-  --ring: #64748b;
+  --border: #94a3b8;
+  --input: #94a3b8;
+  --ring: #475569;
   --radius: 0.5rem;
   --sidebar-background: #ffffff;
   --sidebar-foreground: #0f172a;
@@ -34,13 +34,13 @@
   --chart-4: #f59e0b;
   --chart-5: #8b5cf6;
   /* Semantic surface & text tokens */
-  --surface-hover: #f1f5f9;
-  --surface-active: #e2e8f0;
-  --surface-subtle: #f8fafc;
+  --surface-hover: #e2e8f0;
+  --surface-active: #cbd5e1;
+  --surface-subtle: #f1f5f9;
   --border-subtle: #cbd5e1;
-  --border-hover: #94a3b8;
-  --text-label: #475569;
-  --text-icon: #64748b;
+  --border-hover: #64748b;
+  --text-label: #334155;
+  --text-icon: #475569;
 }
 
 .dark {
@@ -132,6 +132,14 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Enhanced prominent shadows for cards and elevated surfaces */
+  --shadow-xs: 0 1px 3px 0 rgba(15, 23, 42, 0.08);
+  --shadow-sm: 0 2px 6px 0 rgba(15, 23, 42, 0.08), 0 1px 3px -1px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 6px 16px -2px rgba(15, 23, 42, 0.12), 0 2px 6px -1px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.16), 0 4px 10px -2px rgba(15, 23, 42, 0.10);
+  --shadow-xl: 0 20px 38px -6px rgba(15, 23, 42, 0.20), 0 8px 16px -4px rgba(15, 23, 42, 0.12);
+  --shadow-2xl: 0 28px 56px -12px rgba(15, 23, 42, 0.28);
 }
 
 html {
@@ -186,4 +194,14 @@ html[data-colored-chrome="true"] .planw-app-header {
   background-color: var(--chrome-background);
   color: var(--chrome-foreground);
   border-color: var(--chrome-border);
+}
+
+/* Animação da barra regressiva do skeleton/ghost card (encolhendo em direção à esquerda) */
+@keyframes ghost-progress {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
 }

@@ -294,6 +294,17 @@ export function KanbanColumn({
           />
         ))}
 
+        {/* Placeholder no final da lista da coluna */}
+        {tasks.length > 0 && !isDragging && (
+          <div
+            onClick={() => onQuickAdd(status)}
+            className="w-full py-1.5 px-3 rounded-lg border border-dashed border-border/30 hover:border-border/60 hover:bg-muted/40 transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer text-muted-foreground/60 hover:text-foreground text-xs font-medium opacity-50 hover:opacity-100 select-none mt-1"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2]" />
+            <span>Novo</span>
+          </div>
+        )}
+
         {tasks.length === 0 && !isGhostActive && (
           <div className="py-8 text-center text-[11px] text-text-icon/80">
             Nenhuma tarefa

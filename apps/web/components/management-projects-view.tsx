@@ -32,7 +32,12 @@ import {
   type ListDisplayMode,
 } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
-import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
+import {
+  KanbanGhostCard,
+  useFlipGrid,
+  CardInsertSeparator,
+  useDwellGhost,
+} from "@/components/kanban-ghost-card";
 
 interface ManagementProjectsViewProps {
   search: string;
@@ -224,26 +229,18 @@ export function ManagementProjectsView({
 
   // Hook de detecção de hover nas bordas do Kanban/Cards
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Hook com dwell time (~2.2s) para expandir o skeleton grande entre cards ao pousar o mouse
   const {
-    isGhostVisible,
-    slideDirection,
-    showGhost,
-    hideGhost,
-    keepGhost,
-  } = useKanbanEdgeHover({ leaveDelay: 220 });
+    expandedIndex,
+    startDwell,
+    cancelDwell,
+    keepExpanded,
+    closeExpanded,
+  } = useDwellGhost({ dwellTimeMs: 2200, leaveDelayMs: 280 });
 
-  function handleMouseMoveGrid(e: React.MouseEvent<HTMLDivElement>) {
-    if (!gridContainerRef.current) return;
-    const rect = gridContainerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    // Detecta aproximação nas bordas laterais (primeira coluna <= 48px, última coluna >= rect.width - 48px)
-    if (x <= 48) {
-      showGhost("left");
-    } else if (rect.width - x <= 48) {
-      showGhost("right");
-    }
-  }
+  // Animação FLIP suave para empurrar os cards existentes
+  useFlipGrid(gridContainerRef, expandedIndex, 260);
 
   // Projetos que pertencem a esta gestão
   const managementProjects = useMemo(() => {
@@ -556,7 +553,7 @@ export function ManagementProjectsView({
       {/* ========================================================================= */}
       {/* 2. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-sm space-y-3">
+      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xl space-y-3">
         {filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
@@ -636,7 +633,7 @@ export function ManagementProjectsView({
                       onSelectProject(project.id);
                     }
                   }}
-                  className="group relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 hover:border-primary/50 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-sm"
+                  className="group relative flex items-center justify-between p-2.5 sm:px-4 sm:py-3 rounded-2xl border border-border/80 bg-card hover:bg-muted/40 hover:border-primary/50 transition-all cursor-pointer overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-0.5"
                 >
                   {/* Faixa Fina Colorida na Lateral Esquerda do Bloco (3.5px) */}
                   <div
@@ -755,26 +752,8 @@ export function ManagementProjectsView({
             {/* Grade de Cards Compactos com detecção de hover nas bordas */}
             <div
               ref={gridContainerRef}
-              onMouseMove={handleMouseMoveGrid}
-              onMouseLeave={hideGhost}
               className="relative"
             >
-              {/* Trigger de hover na borda lateral esquerda (primeira coluna) */}
-              <div
-                className="absolute -left-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
-                onMouseEnter={() => showGhost("left")}
-                onMouseLeave={hideGhost}
-                aria-hidden="true"
-              />
-
-              {/* Trigger de hover na borda lateral direita (última coluna) */}
-              <div
-                className="absolute -right-3 top-0 bottom-0 w-8 z-20 cursor-pointer"
-                onMouseEnter={() => showGhost("right")}
-                onMouseLeave={hideGhost}
-                aria-hidden="true"
-              />
-
               <div
                 className={cn(
                   "grid gap-3.5",
@@ -783,78 +762,152 @@ export function ManagementProjectsView({
                     : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
                 )}
               >
-                {filteredProjects.map((project) => {
+                {/* Se o skeleton grande foi expandido na posição 0 (antes do primeiro card) */}
+                {expandedIndex === 0 && canWrite && onCreateProject && (
+                  <div
+                    data-flip-id="__ghost_0__"
+                    onMouseEnter={keepExpanded}
+                    onMouseLeave={cancelDwell}
+                    className="animate-in fade-in zoom-in-95 slide-in-from-left-6 duration-200"
+                  >
+                    <KanbanGhostCard
+                      label="Novo"
+                      sublabel="Criar no início"
+                      variant="entity"
+                      slideDirection="left"
+                      onClick={() => {
+                        closeExpanded();
+                        onCreateProject();
+                      }}
+                      isVisible={true}
+                      onMouseEnter={keepExpanded}
+                      onMouseLeave={cancelDwell}
+                    />
+                  </div>
+                )}
+
+                {filteredProjects.map((project, index) => {
                   const projectColor = project.color || "var(--primary)";
                   const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
                   const taskCount = stats.total || project._count?.tasks || 0;
                   const projMembers = project.members ?? [];
                   const pMemberCount = project._count?.members ?? (projMembers.length || 0);
+                  const isFirst = index === 0;
 
                   return (
-                    <EntityCard
-                      key={project.id}
-                      type="project"
-                      id={project.id}
-                      name={project.name}
-                      description={project.description}
-                      code={project.code}
-                      color={projectColor}
-                      coverPath={project.coverPath}
-                      status={project.status}
-                      visibility={project.visibility}
-                      createdAt={project.createdAt}
-                      dueDate={project.dueDate}
-                      priority={project.priority}
-                      taskCount={taskCount}
-                      memberCount={pMemberCount}
-                      members={projMembers}
-                      onSelect={() => onSelectProject(project.id)}
-                      canWrite={canWrite}
-                      canManageMembers={effectiveCanManageMembers}
-                      currentUserId={currentUserId}
-                      onUpdate={
-                        onUpdateProject
-                          ? (updates) => onUpdateProject(project.id, updates)
-                          : undefined
-                      }
-                      onDelete={
-                        onDeleteProject
-                          ? () => onDeleteProject(project.id)
-                          : undefined
-                      }
-                      onLeave={
-                        onLeaveProject
-                          ? () => onLeaveProject(project.id)
-                          : undefined
-                      }
-                      onManageMembers={() => void handleOpenMembersDialog()}
-                    />
+                    <React.Fragment key={project.id}>
+                      <div
+                        data-flip-id={project.id}
+                        className="relative group/card"
+                      >
+                        {/* Botãozinho + e linha vertical no lado esquerdo do primeiro card (posição 0) */}
+                        {isFirst && canWrite && onCreateProject && (
+                          <CardInsertSeparator
+                            side="left"
+                            title="Criar projeto antes deste card"
+                            onHoverStart={() => startDwell(0)}
+                            onHoverEnd={cancelDwell}
+                            onClick={() => {
+                              closeExpanded();
+                              onCreateProject();
+                            }}
+                          />
+                        )}
+
+                        {/* Botãozinho + e linha vertical no lado direito de cada card (posição index + 1) */}
+                        {canWrite && onCreateProject && (
+                          <CardInsertSeparator
+                            side="right"
+                            title="Criar projeto entre os cards"
+                            onHoverStart={() => startDwell(index + 1)}
+                            onHoverEnd={cancelDwell}
+                            onClick={() => {
+                              closeExpanded();
+                              onCreateProject();
+                            }}
+                          />
+                        )}
+
+                        <EntityCard
+                          type="project"
+                          id={project.id}
+                          name={project.name}
+                          description={project.description}
+                          code={project.code}
+                          color={projectColor}
+                          coverPath={project.coverPath}
+                          status={project.status}
+                          visibility={project.visibility}
+                          createdAt={project.createdAt}
+                          dueDate={project.dueDate}
+                          priority={project.priority}
+                          taskCount={taskCount}
+                          memberCount={pMemberCount}
+                          members={projMembers}
+                          onSelect={() => onSelectProject(project.id)}
+                          canWrite={canWrite}
+                          canManageMembers={effectiveCanManageMembers}
+                          currentUserId={currentUserId}
+                          onUpdate={
+                            onUpdateProject
+                              ? (updates) => onUpdateProject(project.id, updates)
+                              : undefined
+                          }
+                          onDelete={
+                            onDeleteProject
+                              ? () => onDeleteProject(project.id)
+                              : undefined
+                          }
+                          onLeave={
+                            onLeaveProject
+                              ? () => onLeaveProject(project.id)
+                              : undefined
+                          }
+                          onManageMembers={() => void handleOpenMembersDialog()}
+                        />
+                      </div>
+
+                      {/* Se o skeleton grande foi expandido nesta posição intermediária (empurrando os cards) */}
+                      {expandedIndex === index + 1 && canWrite && onCreateProject && (
+                        <div
+                          data-flip-id={`__ghost_${index + 1}__`}
+                          onMouseEnter={keepExpanded}
+                          onMouseLeave={cancelDwell}
+                          className="animate-in fade-in zoom-in-95 slide-in-from-right-6 duration-200"
+                        >
+                          <KanbanGhostCard
+                            label="Novo"
+                            sublabel="Criar novo projeto"
+                            variant="entity"
+                            slideDirection="right"
+                            onClick={() => {
+                              closeExpanded();
+                              onCreateProject();
+                            }}
+                            isVisible={true}
+                            onMouseEnter={keepExpanded}
+                            onMouseLeave={cancelDwell}
+                          />
+                        </div>
+                      )}
+                    </React.Fragment>
                   );
                 })}
 
-                {/* Card Fantasma para criação rápida de novo Projeto */}
-                {canWrite && onCreateProject && (
+                {/* Slot fantasma sutil para hover no final quando nenhum skeleton está aberto */}
+                {expandedIndex === null && canWrite && onCreateProject && (
                   <div
-                    onMouseEnter={keepGhost}
-                    onMouseLeave={hideGhost}
-                    className={cn(
-                      "transition-all duration-300 ease-out",
-                      isGhostVisible
-                        ? "opacity-100 scale-100 translate-x-0"
-                        : cn(
-                            "opacity-0 scale-95 pointer-events-none",
-                            slideDirection === "left" ? "-translate-x-5" : "translate-x-5"
-                          )
-                    )}
+                    onClick={onCreateProject}
+                    onMouseEnter={() => startDwell(filteredProjects.length)}
+                    onMouseLeave={cancelDwell}
+                    className="min-h-[190px] h-full rounded-xl border border-dashed border-border/30 hover:border-border/60 hover:bg-card/30 transition-all duration-200 flex items-center justify-center cursor-pointer group/ghostslot opacity-40 hover:opacity-100 select-none"
                   >
-                    <KanbanGhostCard
-                      label="Novo"
-                      sublabel="Criar novo projeto"
-                      variant="entity"
-                      slideDirection={slideDirection}
-                      onClick={onCreateProject}
-                      isVisible={isGhostVisible}
-                    />
+                    <div className="flex flex-col items-center gap-1.5 text-muted-foreground/60 group-hover/ghostslot:text-foreground transition-colors">
+                      <div className="w-8 h-8 rounded-lg bg-background/60 border border-border/50 flex items-center justify-center group-hover/ghostslot:bg-primary group-hover/ghostslot:text-primary-foreground group-hover/ghostslot:border-primary transition-all duration-200 group-hover/ghostslot:scale-105 shadow-2xs">
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                      </div>
+                      <span className="text-xs font-semibold">Novo</span>
+                    </div>
                   </div>
                 )}
               </div>

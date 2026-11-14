@@ -9,7 +9,7 @@ import { KanbanColumn } from "./kanban-column";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
+import { KanbanGhostCard, useKanbanEdgeHover, CardInsertSeparator } from "@/components/kanban-ghost-card";
 
 interface TaskKanbanProps {
   tasks: Task[];
@@ -41,6 +41,7 @@ export function TaskKanban({
     isGhostVisible: isLeftGhost,
     showGhost: showLeftGhost,
     hideGhost: hideLeftGhost,
+    keepGhost: keepLeftGhost,
   } = useKanbanEdgeHover({ leaveDelay: 220 });
 
   const {
@@ -140,6 +141,31 @@ export function TaskKanban({
 
         <ScrollArea className="w-full pb-4">
           <div className="flex gap-3 items-start min-w-[1200px] xl:min-w-0 pr-2">
+            {/* Placeholder lateral expansível no início das colunas (empurrando colunas à direita) */}
+            {visibleColumns.length > 0 && (
+              <div
+                onMouseEnter={keepLeftGhost}
+                onMouseLeave={hideLeftGhost}
+                className={cn(
+                  "transition-all duration-300 ease-out shrink-0 overflow-hidden",
+                  isLeftGhost && !isDragging
+                    ? "w-[240px] opacity-100 translate-x-0"
+                    : "w-0 opacity-0 -translate-x-4 pointer-events-none"
+                )}
+              >
+                <KanbanGhostCard
+                  label="Novo"
+                  sublabel="Adicionar card"
+                  variant="column"
+                  slideDirection="left"
+                  isVisible={isLeftGhost && !isDragging}
+                  onClick={() => onQuickAdd(visibleColumns[0] || "PENDENTE")}
+                  onMouseEnter={keepLeftGhost}
+                  onMouseLeave={hideLeftGhost}
+                />
+              </div>
+            )}
+
             {visibleColumns.map((colStatus, index) => {
               const colTasks = tasks.filter(
                 (t) => normalizeTaskStatus(t.status) === colStatus
@@ -149,28 +175,51 @@ export function TaskKanban({
               const isLastColumn = index === visibleColumns.length - 1;
 
               return (
-                <KanbanColumn
-                  key={colStatus}
-                  status={colStatus}
-                  tasks={colTasks}
-                  members={members}
-                  onChangeAssignee={onChangeAssignee}
-                  isCollapsed={isCollapsed}
-                  onToggleCollapse={() => toggleCollapse(colStatus)}
-                  onHideColumn={() => hideColumn(colStatus)}
-                  onUpdateTask={onUpdateTask}
-                  onDeleteTask={onDeleteTask}
-                  onOpenDetails={onOpenDetails}
-                  onQuickAdd={onQuickAdd}
-                  onDropTask={handleDropTask}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  isFirstColumn={isFirstColumn}
-                  isLastColumn={isLastColumn}
-                  isDragging={isDragging}
-                  forceShowGhost={isFirstColumn ? isLeftGhost : isLastColumn ? isRightGhost : false}
-                  ghostDirection={isFirstColumn ? "left" : "right"}
-                />
+                <div key={colStatus} className="relative flex-1 min-w-[240px] max-w-[300px]">
+                  {/* Separador com botãozinho + na borda esquerda da primeira coluna */}
+                  {isFirstColumn && !isDragging && (
+                    <CardInsertSeparator
+                      side="left"
+                      title="Adicionar coluna / card no início"
+                      onHoverStart={() => showLeftGhost("left")}
+                      onHoverEnd={hideLeftGhost}
+                      onClick={() => onQuickAdd(visibleColumns[0] || "PENDENTE")}
+                    />
+                  )}
+
+                  {/* Separador com botãozinho + entre as colunas */}
+                  {!isDragging && (
+                    <CardInsertSeparator
+                      side="right"
+                      title={`Adicionar card em ${colStatus}`}
+                      onHoverStart={() => showRightGhost("right")}
+                      onHoverEnd={hideRightGhost}
+                      onClick={() => onQuickAdd(colStatus)}
+                    />
+                  )}
+
+                  <KanbanColumn
+                    status={colStatus}
+                    tasks={colTasks}
+                    members={members}
+                    onChangeAssignee={onChangeAssignee}
+                    isCollapsed={isCollapsed}
+                    onToggleCollapse={() => toggleCollapse(colStatus)}
+                    onHideColumn={() => hideColumn(colStatus)}
+                    onUpdateTask={onUpdateTask}
+                    onDeleteTask={onDeleteTask}
+                    onOpenDetails={onOpenDetails}
+                    onQuickAdd={onQuickAdd}
+                    onDropTask={handleDropTask}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    isFirstColumn={isFirstColumn}
+                    isLastColumn={isLastColumn}
+                    isDragging={isDragging}
+                    forceShowGhost={isFirstColumn ? isLeftGhost : isLastColumn ? isRightGhost : false}
+                    ghostDirection={isFirstColumn ? "left" : "right"}
+                  />
+                </div>
               );
             })}
 
@@ -195,6 +244,8 @@ export function TaskKanban({
                   onClick={() =>
                     onQuickAdd(visibleColumns[visibleColumns.length - 1] || "PENDENTE")
                   }
+                  onMouseEnter={keepRightGhost}
+                  onMouseLeave={hideRightGhost}
                 />
               </div>
             )}
