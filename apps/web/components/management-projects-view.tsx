@@ -19,14 +19,11 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  LayoutGrid,
-  List,
   FileText,
   Play,
   Clock,
   CircleDot,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +50,6 @@ import {
 } from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
-  PROJECT_STATUS_LABELS,
   type ListDisplayMode,
 } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
@@ -86,7 +82,7 @@ const PRIORITY_TONES: Record<string, { label: string; bg: string; text: string }
 };
 
 /**
- * Formata data no formato brasileiro idêntico ao Anexo da tabela (ex: "sex (20/nov)")
+ * Formata data no formato brasileiro idêntico ao Print 3 (ex: "sex (20/nov)")
  */
 function formatProjectDate(dateString?: string | null): string {
   if (!dateString) return "Sem data";
@@ -118,7 +114,7 @@ function formatProjectDate(dateString?: string | null): string {
 }
 
 /**
- * Badge de status com ícone idêntico ao Anexo 2 e Anexo da tabela de tarefas
+ * Badge de status idêntico ao Print 3 e à tabela de tarefas do projeto
  */
 function ProjectStatusPill({ status }: { status?: string }) {
   const norm = (status || "").toLowerCase();
@@ -142,7 +138,7 @@ function ProjectStatusPill({ status }: { status?: string }) {
     return (
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-[11px] font-semibold tracking-wide border border-amber-500/20 select-none">
         <Clock className="size-3.5" />
-        <span>AGUARDANDO FEEDBACK</span>
+        <span>AGUARDANDO FEEDBACK...</span>
       </div>
     );
   }
@@ -155,8 +151,8 @@ function ProjectStatusPill({ status }: { status?: string }) {
 }
 
 /**
- * Barra de progresso segmentada idêntica ao Anexo 1 e Anexo 2
- * (PROJETOS [==---] 3/228)
+ * Barra de progresso segmentada idêntica ao Print 3
+ * ([==---] completed/total)
  */
 function SegmentedProgressBar({
   completed,
@@ -172,7 +168,7 @@ function SegmentedProgressBar({
   const segmentCount = 6;
   const filledSegments =
     total > 0
-      ? Math.min(segmentCount, Math.max(1, Math.round((completed / total) * segmentCount)))
+      ? Math.min(segmentCount, Math.round((completed / total) * segmentCount))
       : 0;
 
   return (
@@ -206,9 +202,7 @@ export function ManagementProjectsView({
   search,
   statusFilter,
   viewMode,
-  onViewModeChange,
   cardColumns = 4,
-  onCardColumnsChange,
   management,
   projects,
   tasks,
@@ -223,12 +217,12 @@ export function ManagementProjectsView({
 }: ManagementProjectsViewProps) {
   // Controle de expansão/recolhimento do cabeçalho com persistência em localStorage
   const [isHeaderExpanded, setIsHeaderExpanded] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") return false;
     try {
       const saved = localStorage.getItem(`gestor_mgmt_header_expanded_${management.id}`);
-      return saved !== null ? saved === "true" : true;
+      return saved !== null ? saved === "true" : false;
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -261,7 +255,7 @@ export function ManagementProjectsView({
     return projects.filter((p) => p.projectManagementId === management.id);
   }, [projects, management.id]);
 
-  // Contagem de tarefas e progresso específico por projeto
+  // Contagem de tarefas e progresso específico por projeto (SEM DADOS FALSOS)
   const projectTaskStats = useMemo(() => {
     const map = new Map<string, { total: number; completed: number }>();
     for (const p of managementProjects) {
@@ -269,7 +263,7 @@ export function ManagementProjectsView({
       let total = projTasks.length;
       let completed = projTasks.filter((t) => normalizeTaskStatus(t.status) === "CONCLUÍDO").length;
 
-      // Se tarefas ainda não foram carregadas individualmente, fallback para contadores de p._count
+      // Fallback para contagem do CRM se tarefas ainda não foram carregadas individualmente
       if (total === 0 && (p._count?.tasks ?? 0) > 0) {
         total = p._count?.tasks ?? 0;
         completed = p.status === "completed" ? total : 0;
@@ -418,7 +412,7 @@ export function ManagementProjectsView({
     }
   }
 
-  // Contadores KPI
+  // Contadores KPI REAIS (sem mocks)
   const completedProjectsCount = useMemo(() => {
     return managementProjects.filter((p) => p.status === "completed").length;
   }, [managementProjects]);
@@ -471,12 +465,12 @@ export function ManagementProjectsView({
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
       {/* ========================================================================= */}
-      {/* 1. CABEÇALHO DA GESTÃO: MODO RETRAÍDO (SLIM) OU EXPANDIDO (ANEXO 1)        */}
+      {/* 1. CABEÇALHO DA GESTÃO: MODO RETRAÍDO (PRINT 3) OU EXPANDIDO (ANEXO 1)     */}
       {/* ========================================================================= */}
       {!isHeaderExpanded ? (
-        /* Cabeçalho Retraído Minimalista (Linha Única) */
-        <div className="rounded-xl border border-border/70 bg-card p-2 sm:px-4 sm:py-2 shadow-xs flex items-center justify-between gap-3 transition-all">
-          {/* Esquerda: Voltar + Iniciais + Nome + Pills */}
+        /* Cabeçalho Retraído Minimalista - EXATAMENTE IGUAL AO PRINT 3 */
+        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all">
+          {/* Esquerda: Voltar + Iniciais + Nome */}
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {onBack && (
               <>
@@ -489,7 +483,7 @@ export function ManagementProjectsView({
                   title="Voltar para todas as gestões"
                 >
                   <ArrowLeft className="size-3.5" />
-                  <span className="hidden sm:inline">Gestões</span>
+                  <span>Gestões</span>
                 </Button>
                 <div className="h-4 w-px bg-border/60 shrink-0" />
               </>
@@ -505,47 +499,30 @@ export function ManagementProjectsView({
             <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
               {management.name}
             </span>
-
-            {management.code && (
-              <span className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.2 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
-                {management.code}
-              </span>
-            )}
-
-            <span className="hidden md:inline-block text-[10px] px-2 py-0.2 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground font-medium shrink-0">
-              {managementProjects.length} {managementProjects.length === 1 ? "projeto" : "projetos"}
-            </span>
-
-            <button
-              type="button"
-              onClick={() => void handleOpenMembersDialog()}
-              className="text-[10px] px-2 py-0.2 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-muted/60 font-medium shrink-0 cursor-pointer transition-colors"
-              title="Ver e gerenciar integrantes da gestão"
-            >
-              {memberCount} {memberCount === 1 ? "membro" : "membros"}
-            </button>
           </div>
 
-          {/* Direita: Mini KPIs + Avatares + Botão Expandir */}
+          {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down */}
           <div className="flex items-center gap-3 shrink-0">
-            <div className="hidden lg:flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1" title="Projetos">
+            {/* 3 KPIs: Projetos, Concluídos, Tarefas */}
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1 text-muted-foreground" title="Projetos">
                 <Folder className="size-3.5 text-blue-400" />
-                <span className="font-semibold text-foreground">{managementProjects.length}</span>
+                <span className="font-semibold text-foreground text-xs">{managementProjects.length}</span>
               </span>
-              <span className="flex items-center gap-1" title="Concluídos">
+              <span className="flex items-center gap-1 text-muted-foreground" title="Concluídos">
                 <CheckCircle2 className="size-3.5 text-emerald-400" />
-                <span className="font-semibold text-foreground">{completedProjectsCount}</span>
+                <span className="font-semibold text-foreground text-xs">{completedProjectsCount}</span>
               </span>
-              <span className="flex items-center gap-1" title="Tarefas">
+              <span className="flex items-center gap-1 text-muted-foreground" title="Tarefas">
                 <ListTodo className="size-3.5 text-purple-400" />
-                <span className="font-semibold text-foreground">{totalTasksCount}</span>
+                <span className="font-semibold text-foreground text-xs">{totalTasksCount}</span>
               </span>
             </div>
 
+            {/* Avatar do Membro */}
             {management.members && management.members.length > 0 && (
               <div className="flex -space-x-1.5 items-center">
-                {management.members.slice(0, 3).map((m, idx) => (
+                {management.members.slice(0, 1).map((m, idx) => (
                   <div
                     key={m.userId || idx}
                     className="size-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
@@ -557,7 +534,18 @@ export function ManagementProjectsView({
               </div>
             )}
 
-            {/* Toggle de Expandir Cabeçalho */}
+            {/* Contagem de Integrantes com Ícone de Usuários */}
+            <button
+              type="button"
+              onClick={() => void handleOpenMembersDialog()}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              title="Ver e gerenciar integrantes da gestão"
+            >
+              <Users className="size-3.5 text-muted-foreground/80" />
+              <span className="font-semibold text-foreground text-xs">{memberCount}</span>
+            </button>
+
+            {/* Toggle Chevron Down para Expandir */}
             <Button
               type="button"
               variant="ghost"
@@ -572,8 +560,8 @@ export function ManagementProjectsView({
           </div>
         </div>
       ) : (
-        /* Cabeçalho Expandido (Pixel-Perfect Anexo 1 com Toggle no canto direito) */
-        <div className="rounded-2xl border border-border/70 bg-card p-3.5 sm:px-5 sm:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition-all">
+        /* Cabeçalho Expandido (Pixel-Perfect Anexo 1 com Toggle Chevron Up no canto direito) */
+        <div className="rounded-2xl border border-border/80 bg-card p-3.5 sm:px-5 sm:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition-all">
           {/* Lado Esquerdo: Voltar + Avatar GE + Título, Descrição e Metadados */}
           <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
             {onBack && (
@@ -756,7 +744,7 @@ export function ManagementProjectsView({
                 <span className="font-semibold">{memberCount}</span>
               </Button>
 
-              {/* Botão Toggle de Recolher Cabeçalho (substitui os 3 pontos redundantes) */}
+              {/* Botão Toggle Chevron Up para Recolher */}
               <Button
                 type="button"
                 variant="ghost"
@@ -774,88 +762,9 @@ export function ManagementProjectsView({
       )}
 
       {/* ========================================================================= */}
-      {/* 2. CONTAINER DE PROJETOS DA GESTÃO (CARDS OU LISTA DA TABELA DE TAREFAS)   */}
+      {/* 2. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-border/70 bg-card p-4 sm:p-5 shadow-xs space-y-4">
-        {/* Cabeçalho do Bloco de Projetos: Título + Progresso Segmentado + Toggles + Botão [+] */}
-        <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              PROJETOS
-            </span>
-            <SegmentedProgressBar
-              completed={completedTasksCount > 0 ? completedTasksCount : 3}
-              total={totalTasksCount > 0 ? totalTasksCount : 228}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Seletor Visual Rápido: Cards ou Lista */}
-            {onViewModeChange && (
-              <div className="inline-flex items-center rounded-lg border border-border/70 bg-muted/40 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange("cards")}
-                  className={cn(
-                    "p-1 rounded-md transition-colors cursor-pointer",
-                    viewMode === "cards"
-                      ? "bg-background text-foreground shadow-2xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  title="Visualização em Cards"
-                  aria-label="Visualização em Cards"
-                >
-                  <LayoutGrid className="size-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange("list")}
-                  className={cn(
-                    "p-1 rounded-md transition-colors cursor-pointer",
-                    viewMode === "list"
-                      ? "bg-background text-foreground shadow-2xs font-semibold"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  title="Visualização em Lista"
-                  aria-label="Visualização em Lista"
-                >
-                  <List className="size-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Alternador de 4 ou 5 colunas para o modo Cards */}
-            {viewMode === "cards" && onCardColumnsChange && (
-              <button
-                type="button"
-                onClick={() => onCardColumnsChange(cardColumns === 4 ? 5 : 4)}
-                className="hidden sm:inline-flex items-center text-[10px] font-mono px-2 py-1 rounded-lg border border-border/70 bg-muted/40 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                title={`Alternar para ${cardColumns === 4 ? "5" : "4"} colunas`}
-              >
-                {cardColumns} col
-              </button>
-            )}
-
-            <span className="text-xs text-muted-foreground font-medium">
-              {filteredProjects.length} {filteredProjects.length === 1 ? "projeto" : "projetos"}
-            </span>
-
-            {/* Botão [+] estilo Anexo 1 para criar projeto */}
-            {onCreateProject && (
-              <button
-                type="button"
-                onClick={onCreateProject}
-                className="size-7 rounded-lg bg-foreground text-background hover:bg-foreground/90 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs transition-transform active:scale-95"
-                title="Adicionar novo projeto nesta gestão"
-                aria-label="Adicionar novo projeto nesta gestão"
-              >
-                <Plus className="size-4 stroke-[2.5]" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Conteúdo: Estado Vazio, Cards (4-5 colunas compactas) ou Lista da Tabela de Tarefas */}
+      <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-3">
         {filteredProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
@@ -874,27 +783,50 @@ export function ManagementProjectsView({
           </div>
         ) : viewMode === "list" ? (
           /* ========================================================================= */
-          /* MODO LISTA: Estilo idêntico à lista de tarefas/etapas de dentro do projeto */
+          /* MODO LISTA: CABEÇALHO UNIFICADO COM COLUNAS + LINHAS (EXATO PRINT 3)      */
           /* ========================================================================= */
           <div className="space-y-2">
-            {/* Cabeçalho das Colunas da Lista */}
-            <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/40 select-none">
-              <div className="flex items-center gap-2 flex-1 min-w-0 pl-7">
-                <span>PROJETO</span>
+            {/* Linha Única de Cabeçalho das Colunas: PROJETOS [progresso] | STATUS | DATA | RESPONSÁVEL | [+] */}
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border/50 select-none">
+              {/* Coluna 1: PROJETOS + Progresso Real da Gestão */}
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  PROJETOS
+                </span>
                 <SegmentedProgressBar
                   completed={completedTasksCount}
                   total={totalTasksCount}
-                  className="hidden md:inline-flex"
                 />
               </div>
-              <div className="hidden sm:flex items-center gap-4 lg:gap-8 shrink-0 text-right pr-6">
-                <span className="w-36 text-center">STATUS</span>
-                <span className="w-28 text-center">DATA</span>
-                <span className="w-24 text-center">RESPONSÁVEL</span>
+
+              {/* Colunas Direitas: STATUS | DATA | RESPONSÁVEL | [+] */}
+              <div className="flex items-center shrink-0">
+                <div className="w-36 sm:w-44 text-center px-2 border-l border-border/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  STATUS
+                </div>
+                <div className="hidden sm:block w-32 text-center px-2 border-l border-border/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  DATA
+                </div>
+                <div className="hidden sm:block w-28 text-center px-2 border-l border-border/50 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  RESPONSÁVEL
+                </div>
+                <div className="w-10 flex justify-end pl-2">
+                  {onCreateProject && (
+                    <button
+                      type="button"
+                      onClick={onCreateProject}
+                      className="size-7 rounded-lg bg-foreground text-background hover:bg-foreground/90 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs transition-transform active:scale-95 shrink-0"
+                      title="Adicionar novo projeto"
+                      aria-label="Adicionar novo projeto"
+                    >
+                      <Plus className="size-4 stroke-[2.5]" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Linhas dos Projetos formatadas como na tabela de tarefas */}
+            {/* Linhas dos Projetos formatadas como na tabela de tarefas do Print 3 */}
             {filteredProjects.map((project) => {
               const projectColor = project.color || "#3b82f6";
               const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
@@ -948,23 +880,23 @@ export function ManagementProjectsView({
                   </div>
 
                   {/* Lado Direito: Status + Data + Responsável + Seta */}
-                  <div className="flex items-center gap-3 sm:gap-6 lg:gap-8 shrink-0">
-                    <div className="w-32 sm:w-36 flex justify-center">
+                  <div className="flex items-center shrink-0">
+                    <div className="w-36 sm:w-44 flex justify-center px-2">
                       <ProjectStatusPill status={project.status} />
                     </div>
 
-                    <div className="hidden sm:flex w-28 items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="hidden sm:flex w-32 items-center justify-center gap-1.5 text-xs text-muted-foreground px-2">
                       <Calendar className="size-3.5 text-muted-foreground/70 shrink-0" />
                       <span>{formatProjectDate(project.createdAt || project.updatedAt)}</span>
                     </div>
 
-                    <div className="hidden sm:flex w-24 items-center justify-center">
+                    <div className="hidden sm:flex w-28 items-center justify-center px-2">
                       {projMembers.length > 0 ? (
                         <div className="flex -space-x-1.5 items-center">
                           {projMembers.slice(0, 2).map((m, idx) => (
                             <div
                               key={m.userId || idx}
-                              className="size-6 sm:size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground ring-1 ring-border"
+                              className="size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground ring-1 ring-border"
                               title={m.user?.name || "Membro"}
                             >
                               <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
@@ -981,118 +913,159 @@ export function ManagementProjectsView({
                       )}
                     </div>
 
-                    <div className="text-muted-foreground group-hover:text-primary transition-colors pr-1">
+                    <div className="w-10 flex justify-end pl-2 text-muted-foreground group-hover:text-primary transition-colors pr-1">
                       <ArrowRight className="size-4 transform group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
                 </div>
               );
             })}
+
+            {/* Botão + Novo item no rodapé da tabela (idêntico ao Print 3) */}
+            {onCreateProject && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={onCreateProject}
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2.5 py-1.5 rounded-lg hover:bg-muted/40 transition-colors font-medium"
+                >
+                  <Plus className="size-3.5" />
+                  <span>Novo item</span>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* ========================================================================= */
-          /* MODO CARDS: Compacto, proporcional, cabendo 4 a 5 cards sem esticar        */
+          /* MODO CARDS: CABEÇALHO LIMPO + CARDS COMPACTOS EM 4 A 5 COLUNAS            */
           /* ========================================================================= */
-          <div
-            className={cn(
-              "grid gap-3.5",
-              cardColumns === 5
-                ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
-                : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-            )}
-          >
-            {filteredProjects.map((project) => {
-              const projectColor = project.color || "#3b82f6";
-              const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "GE";
-              const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
-              const taskCount = stats.total || project._count?.tasks || 0;
-              const pMemberCount = project._count?.members ?? (project.members?.length || 1);
-              const priorityKey = project.priority || "medium";
-              const priorityTone = PRIORITY_TONES[priorityKey] || PRIORITY_TONES.medium;
+          <div className="space-y-4">
+            {/* Cabeçalho Limpo: PROJETOS [progresso real] na esquerda e [+] na direita */}
+            <div className="flex items-center justify-between gap-3 border-b border-border/50 pb-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  PROJETOS
+                </span>
+                <SegmentedProgressBar
+                  completed={completedTasksCount}
+                  total={totalTasksCount}
+                />
+              </div>
 
-              return (
-                <div
-                  key={project.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectProject(project.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onSelectProject(project.id);
-                    }
-                  }}
-                  className="group relative flex flex-col rounded-2xl border border-border/70 bg-card/90 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer overflow-hidden text-left"
+              {onCreateProject && (
+                <button
+                  type="button"
+                  onClick={onCreateProject}
+                  className="size-7 rounded-lg bg-foreground text-background hover:bg-foreground/90 font-bold text-sm flex items-center justify-center cursor-pointer shadow-xs transition-transform active:scale-95 shrink-0"
+                  title="Adicionar novo projeto"
+                  aria-label="Adicionar novo projeto"
                 >
-                  {/* Capa com Gradiente Compacto e Badge com Iniciais */}
+                  <Plus className="size-4 stroke-[2.5]" />
+                </button>
+              )}
+            </div>
+
+            {/* Grade de Cards Compactos */}
+            <div
+              className={cn(
+                "grid gap-3.5",
+                cardColumns === 5
+                  ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
+                  : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+              )}
+            >
+              {filteredProjects.map((project) => {
+                const projectColor = project.color || "#3b82f6";
+                const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "GE";
+                const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
+                const taskCount = stats.total || project._count?.tasks || 0;
+                const pMemberCount = project._count?.members ?? (project.members?.length || 1);
+                const priorityKey = project.priority || "medium";
+                const priorityTone = PRIORITY_TONES[priorityKey] || PRIORITY_TONES.medium;
+
+                return (
                   <div
-                    className="h-16 sm:h-20 w-full relative overflow-hidden flex items-end p-2.5 sm:p-3"
-                    style={{
-                      background: `linear-gradient(135deg, ${projectColor}dd 0%, ${projectColor} 60%, #38bdf8 100%)`,
+                    key={project.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectProject(project.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectProject(project.id);
+                      }
                     }}
+                    className="group relative flex flex-col rounded-2xl border border-border/70 bg-card/90 hover:border-primary/50 hover:shadow-md transition-all cursor-pointer overflow-hidden text-left"
                   >
-                    <div className="absolute inset-0 bg-black/15" />
-                    {/* Badge com as iniciais do projeto */}
+                    {/* Capa com Gradiente Compacto e Badge com Iniciais */}
                     <div
-                      className="relative z-10 size-7 sm:size-8 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-bold text-white shadow-md border border-white/20 backdrop-blur-xs"
-                      style={{ backgroundColor: projectColor }}
+                      className="h-16 sm:h-20 w-full relative overflow-hidden flex items-end p-2.5 sm:p-3"
+                      style={{
+                        background: `linear-gradient(135deg, ${projectColor}dd 0%, ${projectColor} 60%, #38bdf8 100%)`,
+                      }}
                     >
-                      {pInitials}
-                    </div>
-                  </div>
-
-                  {/* Corpo do Card */}
-                  <div className="p-3 pt-2.5 flex-1 flex flex-col justify-between space-y-2">
-                    <div>
-                      {/* Título e Código do Projeto */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
-                          {project.name}
-                        </h3>
-                        {project.code && (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/60 bg-muted/50 text-muted-foreground shrink-0">
-                            {project.code}
-                          </span>
-                        )}
+                      <div className="absolute inset-0 bg-black/15" />
+                      <div
+                        className="relative z-10 size-7 sm:size-8 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-bold text-white shadow-md border border-white/20 backdrop-blur-xs"
+                        style={{ backgroundColor: projectColor }}
+                      >
+                        {pInitials}
                       </div>
+                    </div>
 
-                      {/* Tag de Prioridade */}
-                      <div className="mt-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border border-current/20",
-                            priorityTone.bg,
-                            priorityTone.text
+                    {/* Corpo do Card */}
+                    <div className="p-3 pt-2.5 flex-1 flex flex-col justify-between space-y-2">
+                      <div>
+                        {/* Título e Código do Projeto */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-xs sm:text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                            {project.name}
+                          </h3>
+                          {project.code && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/60 bg-muted/50 text-muted-foreground shrink-0">
+                              {project.code}
+                            </span>
                           )}
-                        >
-                          {priorityTone.label}
-                        </span>
-                      </div>
-                    </div>
+                        </div>
 
-                    {/* Rodapé do Card: Tarefas, Integrantes e Seta */}
-                    <div className="border-t border-border/50 pt-2 mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                          <ListTodo className="size-3.5 shrink-0 text-muted-foreground/70" />
-                          <span>{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</span>
-                        </span>
-                        {pMemberCount > 0 && (
-                          <span className="flex items-center gap-1">
-                            <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
-                            <span>{pMemberCount}</span>
+                        {/* Tag de Prioridade */}
+                        <div className="mt-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border border-current/20",
+                              priorityTone.bg,
+                              priorityTone.text
+                            )}
+                          >
+                            {priorityTone.label}
                           </span>
-                        )}
+                        </div>
                       </div>
 
-                      <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                        <ArrowRight className="size-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                      {/* Rodapé do Card: Tarefas, Integrantes e Seta */}
+                      <div className="border-t border-border/50 pt-2 mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <ListTodo className="size-3.5 shrink-0 text-muted-foreground/70" />
+                            <span>{taskCount} {taskCount === 1 ? "tarefa" : "tarefas"}</span>
+                          </span>
+                          {pMemberCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Users className="size-3.5 shrink-0 text-muted-foreground/70" />
+                              <span>{pMemberCount}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-muted-foreground group-hover:text-primary transition-colors">
+                          <ArrowRight className="size-3.5 transform group-hover:translate-x-0.5 transition-transform" />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
