@@ -400,7 +400,6 @@ export function HeaderWorkspaceSelector({
               />
             )}
           </button></PopoverTrigger>
-        )}
 
           <PopoverContent
             align="start"
@@ -510,6 +509,8 @@ export function HeaderWorkspaceSelector({
           </PopoverContent>
       </div>
       </Popover>
+        </>
+      )}
 
       {/* Botão de Fixar / Desafixar (Tarracha / Pin para modo Breadcrumb) */}
       <button
