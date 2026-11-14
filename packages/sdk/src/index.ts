@@ -308,6 +308,25 @@ export class IdeCrmClient {
     });
   }
 
+  async updateManagement(
+    managementId: string,
+    input: {
+      name?: string;
+      description?: string;
+      color?: string;
+      visibility?: string;
+      status?: string;
+    }
+  ): Promise<{ management?: CrmProjectManagement; ok?: boolean }> {
+    return this.request<{ management?: CrmProjectManagement; ok?: boolean }>(
+      `/projects/managements/${encodeURIComponent(managementId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    );
+  }
+
   async listProjects(search?: string): Promise<{ projects: CrmProject[] }> {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";
     return this.request(`/projects/items${query}`);

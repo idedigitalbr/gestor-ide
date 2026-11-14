@@ -250,6 +250,8 @@ export interface CrmProject {
   coverPath?: string | null;
   visibility?: string;
   dueDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   projectManagementId: string;
   projectManagement?: {
     id: string;

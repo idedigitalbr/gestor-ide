@@ -188,6 +188,8 @@ interface AppHeaderProps {
   onOpenProjectMembers?: () => void;
   onRefreshSync?: () => void;
   isSyncing?: boolean;
+  cardColumns?: 4 | 5;
+  onCardColumnsChange?: (cols: 4 | 5) => void;
 }
 
 export function AppHeader({
@@ -241,6 +243,8 @@ export function AppHeader({
   onOpenProjectMembers,
   onRefreshSync,
   isSyncing = false,
+  cardColumns = 4,
+  onCardColumnsChange,
 }: AppHeaderProps) {
   const isInsideProject = Boolean(selectedProjectId);
 
@@ -729,6 +733,19 @@ export function AppHeader({
                   <DropdownMenuRadioItem value="cards">Cards</DropdownMenuRadioItem>
                   <DropdownMenuRadioItem value="list">Lista</DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
+                {listDisplayMode === "cards" && onCardColumnsChange && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel>Colunas dos cards</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={String(cardColumns ?? 4)}
+                      onValueChange={(val) => onCardColumnsChange(Number(val) as 4 | 5)}
+                    >
+                      <DropdownMenuRadioItem value="4">4 colunas</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="5">5 colunas</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel>{selectedManagementId ? "Status dos projetos" : "Visibilidade"}</DropdownMenuLabel>
                 <DropdownMenuRadioGroup value={listFilter} onValueChange={onListFilterChange}>

@@ -108,7 +108,39 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [managementVisibility, setManagementVisibility] = useState("all");
   const [projectStatus, setProjectStatus] = useState("all");
   const [managementViewMode, setManagementViewMode] = useState<ListDisplayMode>("cards");
-  const [projectViewMode, setProjectViewMode] = useState<ListDisplayMode>("cards");
+  const [projectViewMode, setProjectViewMode] = useState<ListDisplayMode>(() => {
+    if (typeof window === "undefined") return "cards";
+    try {
+      const saved = localStorage.getItem("gestor_project_view_mode");
+      return saved === "list" ? "list" : "cards";
+    } catch {
+      return "cards";
+    }
+  });
+
+  const handleProjectViewModeChange = (mode: ListDisplayMode) => {
+    setProjectViewMode(mode);
+    try {
+      localStorage.setItem("gestor_project_view_mode", mode);
+    } catch {}
+  };
+
+  const [cardColumns, setCardColumns] = useState<4 | 5>(() => {
+    if (typeof window === "undefined") return 4;
+    try {
+      const saved = localStorage.getItem("gestor_card_columns");
+      return saved === "5" ? 5 : 4;
+    } catch {
+      return 4;
+    }
+  });
+
+  const handleCardColumnsChange = (cols: 4 | 5) => {
+    setCardColumns(cols);
+    try {
+      localStorage.setItem("gestor_card_columns", String(cols));
+    } catch {}
+  };
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -1580,7 +1612,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           listSearch={listSearch}
           onListSearchChange={(value) => { setListSearch(value); if (isSecondaryPage) router.push("/"); }}
           listDisplayMode={selectedManagementId ? projectViewMode : managementViewMode}
-          onListDisplayModeChange={selectedManagementId ? setProjectViewMode : setManagementViewMode}
+          onListDisplayModeChange={selectedManagementId ? handleProjectViewModeChange : setManagementViewMode}
+          cardColumns={cardColumns}
+          onCardColumnsChange={handleCardColumnsChange}
           listFilter={selectedManagementId ? projectStatus : managementVisibility}
           onListFilterChange={selectedManagementId ? setProjectStatus : setManagementVisibility}
           onOpenNewProject={() => setIsNewProjectOpen(true)}
@@ -1669,6 +1703,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               search={listSearch}
               statusFilter={projectStatus}
               viewMode={projectViewMode}
+              onViewModeChange={handleProjectViewModeChange}
+              cardColumns={cardColumns}
+              onCardColumnsChange={handleCardColumnsChange}
               management={currentManagement}
               projects={visibleProjects}
               tasks={tasks}
