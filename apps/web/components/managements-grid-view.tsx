@@ -83,7 +83,7 @@ export function ManagementsGridView({
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
             const displayName = stripManagementPrefix(mgmt.name);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const bgColor = mgmt.color || "#2563eb";
+            const bgColor = mgmt.color || "var(--primary)";
 
             return (
               <div
@@ -138,9 +138,11 @@ export function ManagementsGridView({
                         {displayName}
                       </h3>
                     </div>
-                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                      {mgmt.description?.trim() || "Sem descrição disponível."}
-                    </p>
+                    {mgmt.description?.trim() && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                        {mgmt.description.trim()}
+                      </p>
+                    )}
                   </div>
 
                   {/* Rodapé do Card */}
@@ -195,7 +197,7 @@ export function ManagementsGridView({
             const memberCount = mgmt._count?.members ?? (mgmt.members?.length || 0);
             const displayName = stripManagementPrefix(mgmt.name);
             const initials = mgmt.name.trim().slice(0, 2).toUpperCase() || "GE";
-            const bgColor = mgmt.color || "#2563eb";
+            const bgColor = mgmt.color || "var(--primary)";
 
             return (
               <div
@@ -227,9 +229,11 @@ export function ManagementsGridView({
                         {displayName}
                       </span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate max-w-xl">
-                      {mgmt.description || "Sem descrição disponível."}
-                    </p>
+                    {mgmt.description?.trim() && (
+                      <p className="text-[11px] text-muted-foreground truncate max-w-xl">
+                        {mgmt.description.trim()}
+                      </p>
+                    )}
                   </div>
                 </div>
 

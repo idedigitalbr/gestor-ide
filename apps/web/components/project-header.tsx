@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import { normalizeTaskStatus } from "@gestor-ide/core";
 import {
@@ -36,11 +36,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import type { TeamMemberItem } from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
   PROJECT_STATUS_LABELS,
+  stripProjectPrefix,
 } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
 
@@ -136,10 +138,17 @@ export function ProjectHeader({
     });
   };
 
-  // Edição rápida de descrição
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  // Edição rápida de projeto (nome e descrição)
+  const [isEditingProject, setIsEditingProject] = useState(false);
+  const [editNameText, setEditNameText] = useState(project.name || "");
   const [editDescriptionText, setEditDescriptionText] = useState(project.description || "");
-  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
+
+  // Sincroniza estados quando o projeto mudar
+  useEffect(() => {
+    setEditNameText(project.name || "");
+    setEditDescriptionText(project.description || "");
+  }, [project.name, project.description]);
 
   // Contagem de tarefas do projeto
   const projectTasks = useMemo(() => {
@@ -158,7 +167,7 @@ export function ProjectHeader({
   const pendingTasksCount = Math.max(0, totalTasksCount - completedTasksCount);
 
   // Iniciais e cor do projeto
-  const projectColor = project.color || management?.color || "#3b82f6";
+  const projectColor = project.color || management?.color || "var(--primary)";
   const initials = useMemo(() => {
     const trimmed = (project.name || "PR").trim();
     const parts = trimmed.split(/\s+/).filter(Boolean);
@@ -220,16 +229,19 @@ export function ProjectHeader({
     return project.status || "Ativo";
   }, [project.status]);
 
-  async function handleSaveDescription() {
-    setIsSavingDescription(true);
+  async function handleSaveProject() {
+    setIsSavingProject(true);
     try {
-      await onUpdateProject?.({ description: editDescriptionText });
-      setIsEditingDescription(false);
+      await onUpdateProject?.({
+        name: editNameText.trim() || project.name,
+        description: editDescriptionText.trim(),
+      });
+      setIsEditingProject(false);
       onRefresh?.();
     } catch (err) {
-      console.error("Erro ao salvar descrição do projeto:", err);
+      console.error("Erro ao salvar dados do projeto:", err);
     } finally {
-      setIsSavingDescription(false);
+      setIsSavingProject(false);
     }
   }
 
@@ -279,8 +291,11 @@ export function ProjectHeader({
               {initials}
             </div>
 
+            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+              Projeto
+            </span>
             <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
-              {project.name}
+              {stripProjectPrefix(project.name)}
             </span>
           </div>
 
@@ -376,10 +391,27 @@ export function ProjectHeader({
             {/* Bloco Central de Textos do Projeto */}
             <div className="min-w-0 flex-1 space-y-0.5">
               {/* Linha 1: Título + Código + Pílula de Tarefas + Pílula de Membros (+ Gestão) */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                  Projeto
+                </span>
                 <h1 className="text-sm sm:text-base font-bold text-foreground truncate tracking-tight">
-                  {project.name}
+                  {stripProjectPrefix(project.name)}
                 </h1>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditNameText(project.name || "");
+                      setEditDescriptionText(project.description || "");
+                      setIsEditingProject(true);
+                    }}
+                    className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                    title="Editar nome e descrição do projeto"
+                  >
+                    <Pencil className="size-3" />
+                  </button>
+                )}
                 {project.code && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
                     {project.code}
@@ -412,8 +444,9 @@ export function ProjectHeader({
                   <button
                     type="button"
                     onClick={() => {
+                      setEditNameText(project.name || "");
                       setEditDescriptionText(project.description || "");
-                      setIsEditingDescription(true);
+                      setIsEditingProject(true);
                     }}
                     className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
                     title="Editar descrição do projeto"
@@ -575,26 +608,44 @@ export function ProjectHeader({
         </div>
       )}
 
-      {/* Diálogo Rápido para Editar a Descrição do Projeto */}
-      <Dialog open={isEditingDescription} onOpenChange={setIsEditingDescription}>
+      {/* Diálogo Rápido para Editar o Projeto (Nome e Descrição) */}
+      <Dialog open={isEditingProject} onOpenChange={setIsEditingProject}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-foreground">
-              Editar descrição do projeto
+              Editar projeto
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Atualize o texto descritivo e os objetivos deste projeto.
+              Atualize o nome e o texto descritivo deste projeto.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-2">
-            <Textarea
-              value={editDescriptionText}
-              onChange={(e) => setEditDescriptionText(e.target.value)}
-              placeholder="Descreva as metas, escopo e entregas deste projeto..."
-              rows={4}
-              className="text-xs"
-            />
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label htmlFor="edit-project-name" className="text-xs font-semibold text-foreground">
+                Nome do projeto
+              </label>
+              <Input
+                id="edit-project-name"
+                value={editNameText}
+                onChange={(e) => setEditNameText(e.target.value)}
+                placeholder="Ex: Redesign da Interface"
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="edit-project-desc" className="text-xs font-semibold text-foreground">
+                Descrição e objetivos
+              </label>
+              <Textarea
+                id="edit-project-desc"
+                value={editDescriptionText}
+                onChange={(e) => setEditDescriptionText(e.target.value)}
+                placeholder="Descreva as metas, escopo e entregas deste projeto..."
+                rows={4}
+                className="text-xs"
+              />
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -602,8 +653,8 @@ export function ProjectHeader({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsEditingDescription(false)}
-              disabled={isSavingDescription}
+              onClick={() => setIsEditingProject(false)}
+              disabled={isSavingProject}
               className="text-xs"
             >
               Cancelar
@@ -611,11 +662,11 @@ export function ProjectHeader({
             <Button
               type="button"
               size="sm"
-              onClick={() => void handleSaveDescription()}
-              disabled={isSavingDescription}
+              onClick={() => void handleSaveProject()}
+              disabled={isSavingProject}
               className="text-xs font-semibold gap-1.5"
             >
-              {isSavingDescription ? "Salvando..." : "Salvar descrição"}
+              {isSavingProject ? "Salvando..." : "Salvar alterações"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -370,6 +370,27 @@ export class IdeCrmClient {
     }
   }
 
+  async deleteManagement(managementId: string): Promise<{ ok?: boolean }> {
+    return this.request<{ ok?: boolean }>(
+      `/projects/managements/${encodeURIComponent(managementId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  async deleteProject(projectId: string): Promise<{ ok?: boolean }> {
+    try {
+      return await this.request<{ ok?: boolean }>(
+        `/projects/items/${encodeURIComponent(projectId)}`,
+        { method: "DELETE" }
+      );
+    } catch {
+      return this.request<{ ok?: boolean }>(
+        `/projects/${encodeURIComponent(projectId)}`,
+        { method: "DELETE" }
+      );
+    }
+  }
+
   async listTasks(params?: {
     projectId?: string;
     status?: string;

@@ -6,6 +6,7 @@ import type { CrmProject, CrmProjectManagement } from "@gestor-ide/core";
 import { Check, ChevronDown, Folder, Layers3, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { stripManagementPrefix, stripProjectPrefix } from "@/lib/list-view-options";
 
 interface HeaderWorkspaceSelectorProps {
   managements: CrmProjectManagement[];
@@ -93,10 +94,17 @@ export function HeaderWorkspaceSelector({
   const activeProject =
     projects.find((p) => p.id === selectedProjectId) ?? null;
 
-  const managementLabel =
-    activeManagement?.name || currentManagementName || `Todas as Gestões (${managements.length})`;
-  const projectLabel =
-    activeProject?.name || currentProjectName || "Todos os Projetos";
+  const rawManagementLabel =
+    activeManagement?.name || currentManagementName;
+  const managementLabel = rawManagementLabel
+    ? stripManagementPrefix(rawManagementLabel)
+    : `Todas as Gestões (${managements.length})`;
+
+  const rawProjectLabel =
+    activeProject?.name || currentProjectName;
+  const projectLabel = rawProjectLabel
+    ? stripProjectPrefix(rawProjectLabel)
+    : "Todos os Projetos";
   const hasManagementSelected = Boolean(selectedManagementId);
 
   return (
@@ -135,6 +143,11 @@ export function HeaderWorkspaceSelector({
             aria-label={`Gestão: ${managementLabel}`}
             title={`Gestão: ${managementLabel}`}
           >
+            {rawManagementLabel && (
+              <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                Gestão
+              </span>
+            )}
             <span className="truncate">{managementLabel}</span>
             <ChevronDown
               className={cn(
@@ -230,7 +243,12 @@ export function HeaderWorkspaceSelector({
                           {initials}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground">{mgmt.name}</p>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                              Gestão
+                            </span>
+                            <p className="truncate font-medium text-foreground">{stripManagementPrefix(mgmt.name)}</p>
+                          </div>
                           <p className="text-[10px] text-muted-foreground">
                             {count} {count === 1 ? "projeto" : "projetos"}
                             {mgmt.code ? ` • ${mgmt.code}` : ""}
@@ -270,6 +288,11 @@ export function HeaderWorkspaceSelector({
             aria-label={`Projeto: ${projectLabel}`}
             title={`Projeto: ${projectLabel}`}
           >
+            {rawProjectLabel && (
+              <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                Projeto
+              </span>
+            )}
             <span className="truncate">{projectLabel}</span>
             <ChevronDown
               className={cn(
@@ -360,7 +383,12 @@ export function HeaderWorkspaceSelector({
                           <Folder className="w-3 h-3" />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground">{proj.name}</p>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                              Projeto
+                            </span>
+                            <p className="truncate font-medium text-foreground">{stripProjectPrefix(proj.name)}</p>
+                          </div>
                           <p className="text-[10px] text-muted-foreground">
                             {(proj as { tasksCount?: number }).tasksCount ?? 0}{" "}
                             {(proj as { tasksCount?: number }).tasksCount === 1 ? "tarefa" : "tarefas"}

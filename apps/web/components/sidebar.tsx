@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { ThemeSelector } from "@/components/theme/theme-selector";
+import { stripManagementPrefix, stripProjectPrefix } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -104,7 +105,7 @@ export function Sidebar({
                       IDE Gestor
                     </div>
                     <div className="text-[10px] leading-tight text-muted-foreground truncate">
-                      {activeManagement ? activeManagement.name : "Todas as Gestões"}
+                      {activeManagement ? stripManagementPrefix(activeManagement.name) : "Todas as Gestões"}
                     </div>
                   </div>
                 </div>
@@ -150,12 +151,15 @@ export function Sidebar({
                       "bg-secondary text-secondary-foreground font-medium"
                   )}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: mgmt.color || "#6d28d9" }}
                     />
-                    <span className="truncate">{mgmt.name}</span>
+                    <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                      Gestão
+                    </span>
+                    <span className="truncate">{stripManagementPrefix(mgmt.name)}</span>
                   </div>
                   {typeof mgmt._count?.projects === "number" && (
                     <Badge
@@ -250,12 +254,15 @@ export function Sidebar({
                   )}
                   title={project.name}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <span
                       className="w-2 h-2 rounded-full shrink-0"
                       style={{ backgroundColor: project.color || "#3b82f6" }}
                     />
-                    <span className="truncate">{project.name}</span>
+                    <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                      Projeto
+                    </span>
+                    <span className="truncate">{stripProjectPrefix(project.name)}</span>
                   </div>
                   {typeof project._count?.tasks === "number" &&
                     project._count.tasks > 0 && (

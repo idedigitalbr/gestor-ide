@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
 import { normalizeTaskStatus } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import {
   MembersDialog,
@@ -50,6 +51,8 @@ import {
 } from "@/components/members-dialog";
 import {
   MANAGEMENT_VISIBILITY_LABELS,
+  stripManagementPrefix,
+  stripProjectPrefix,
   type ListDisplayMode,
 } from "@/lib/list-view-options";
 import { cn } from "@/lib/utils";
@@ -237,10 +240,16 @@ export function ManagementProjectsView({
   const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
   const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
 
-  // Edição rápida de descrição e status
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  // Edição rápida de gestão (nome e descrição) e status
+  const [isEditingManagement, setIsEditingManagement] = useState(false);
+  const [editNameText, setEditNameText] = useState(management.name || "");
   const [editDescriptionText, setEditDescriptionText] = useState(management.description || "");
-  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [isSavingManagement, setIsSavingManagement] = useState(false);
+
+  useEffect(() => {
+    setEditNameText(management.name || "");
+    setEditDescriptionText(management.description || "");
+  }, [management.name, management.description]);
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
 
   // Projetos que pertencem a esta gestão
@@ -425,7 +434,7 @@ export function ManagementProjectsView({
   }, [managementProjects, tasks]);
 
   const initials = management.name.trim().slice(0, 2).toUpperCase() || "GE";
-  const mgmtColor = management.color || "#8b5cf6";
+  const mgmtColor = management.color || "var(--primary)";
   const memberCount = resolvedMembers.length || management.members?.length || 1;
 
   const formattedDate = useMemo(() => {
@@ -438,20 +447,21 @@ export function ManagementProjectsView({
     }
   }, [management.createdAt]);
 
-  async function handleSaveDescription() {
-    setIsSavingDescription(true);
+  async function handleSaveManagement() {
+    setIsSavingManagement(true);
     try {
       if (isConnectedCrm) {
         await ideCrmClient.updateManagement(management.id, {
-          description: editDescriptionText,
+          name: editNameText.trim() || management.name,
+          description: editDescriptionText.trim(),
         });
         onRefresh?.();
       }
-      setIsEditingDescription(false);
+      setIsEditingManagement(false);
     } catch (err) {
-      console.error("Erro ao salvar descrição da gestão:", err);
+      console.error("Erro ao salvar gestão:", err);
     } finally {
-      setIsSavingDescription(false);
+      setIsSavingManagement(false);
     }
   }
 
@@ -489,8 +499,11 @@ export function ManagementProjectsView({
               {initials}
             </div>
 
+            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+              Gestão
+            </span>
             <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
-              {management.name}
+              {stripManagementPrefix(management.name)}
             </span>
           </div>
 
@@ -585,10 +598,25 @@ export function ManagementProjectsView({
             {/* Bloco Central de Textos da Gestão */}
             <div className="min-w-0 flex-1 space-y-0.5">
               {/* Linha 1: Título + Código + Pílula de Projetos + Pílula de Membros */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                  Gestão
+                </span>
                 <h1 className="text-sm sm:text-base font-bold text-foreground truncate tracking-tight">
-                  {management.name}
+                  {stripManagementPrefix(management.name)}
                 </h1>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditNameText(management.name || "");
+                    setEditDescriptionText(management.description || "");
+                    setIsEditingManagement(true);
+                  }}
+                  className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
+                  title="Editar nome e descrição da gestão"
+                >
+                  <Pencil className="size-3" />
+                </button>
                 {management.code && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
                     {management.code}
@@ -610,8 +638,9 @@ export function ManagementProjectsView({
                 <button
                   type="button"
                   onClick={() => {
+                    setEditNameText(management.name || "");
                     setEditDescriptionText(management.description || "");
-                    setIsEditingDescription(true);
+                    setIsEditingManagement(true);
                   }}
                   className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
                   title="Editar descrição da gestão"
@@ -821,7 +850,7 @@ export function ManagementProjectsView({
 
             {/* Linhas dos Projetos formatadas como na tabela de tarefas do Print 3 */}
             {filteredProjects.map((project) => {
-              const projectColor = project.color || "#3b82f6";
+              const projectColor = project.color || "var(--primary)";
               const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
               const projMembers = project.members ?? [];
 
@@ -853,15 +882,13 @@ export function ManagementProjectsView({
 
                     <FileText className="size-4 text-muted-foreground/80 shrink-0" />
 
-                    <div className="flex items-center gap-2 min-w-0 truncate">
-                      <span className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
-                        {project.name}
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                        Projeto
                       </span>
-                      {project.code && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
-                          {project.code}
-                        </span>
-                      )}
+                      <span className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors truncate">
+                        {stripProjectPrefix(project.name)}
+                      </span>
                     </div>
 
                     {/* Progresso Segmentado específico deste projeto */}
@@ -968,7 +995,8 @@ export function ManagementProjectsView({
               )}
             >
               {filteredProjects.map((project) => {
-                const projectColor = project.color || "#2563eb";
+                const projectColor = project.color || "var(--primary)";
+                const displayProjectName = stripProjectPrefix(project.name);
                 const pInitials = project.name.trim().slice(0, 2).toUpperCase() || "PR";
                 const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
                 const taskCount = stats.total || project._count?.tasks || 0;
@@ -1022,18 +1050,18 @@ export function ManagementProjectsView({
                     <div className="p-3.5 pt-5 flex-1 flex flex-col justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
+                          <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
+                            Projeto
+                          </span>
                           <h3 className="font-semibold text-xs md:text-sm text-foreground line-clamp-1 group-hover:text-primary transition-colors">
-                            {project.name}
+                            {displayProjectName}
                           </h3>
-                          {project.code && (
-                            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.2 rounded border border-border bg-muted/60 text-muted-foreground">
-                              {project.code}
-                            </span>
-                          )}
                         </div>
-                        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                          {project.description?.trim() || "Sem descrição disponível."}
-                        </p>
+                        {project.description?.trim() && (
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                            {project.description.trim()}
+                          </p>
+                        )}
                       </div>
 
                       {/* Rodapé do Card */}
@@ -1102,26 +1130,44 @@ export function ManagementProjectsView({
         onSelfLeave={onBack}
       />
 
-      {/* Diálogo Rápido para Editar a Descrição da Gestão */}
-      <Dialog open={isEditingDescription} onOpenChange={setIsEditingDescription}>
+      {/* Diálogo Rápido para Editar a Gestão (Nome e Descrição) */}
+      <Dialog open={isEditingManagement} onOpenChange={setIsEditingManagement}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-foreground">
-              Editar descrição da gestão
+              Editar gestão
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Atualize o texto descritivo desta gestão empresarial.
+              Atualize o nome e o texto descritivo desta gestão empresarial.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-2">
-            <Textarea
-              value={editDescriptionText}
-              onChange={(e) => setEditDescriptionText(e.target.value)}
-              placeholder="Descreva as atividades e objetivos desta gestão..."
-              rows={4}
-              className="text-xs"
-            />
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label htmlFor="edit-mgmt-name" className="text-xs font-semibold text-foreground">
+                Nome da gestão
+              </label>
+              <Input
+                id="edit-mgmt-name"
+                value={editNameText}
+                onChange={(e) => setEditNameText(e.target.value)}
+                placeholder="Ex: Gestão Operacional"
+                className="text-xs h-8"
+              />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="edit-mgmt-desc" className="text-xs font-semibold text-foreground">
+                Descrição e objetivos
+              </label>
+              <Textarea
+                id="edit-mgmt-desc"
+                value={editDescriptionText}
+                onChange={(e) => setEditDescriptionText(e.target.value)}
+                placeholder="Descreva as atividades e objetivos desta gestão..."
+                rows={4}
+                className="text-xs"
+              />
+            </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
@@ -1129,8 +1175,8 @@ export function ManagementProjectsView({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIsEditingDescription(false)}
-              disabled={isSavingDescription}
+              onClick={() => setIsEditingManagement(false)}
+              disabled={isSavingManagement}
               className="text-xs"
             >
               Cancelar
@@ -1138,11 +1184,11 @@ export function ManagementProjectsView({
             <Button
               type="button"
               size="sm"
-              onClick={() => void handleSaveDescription()}
-              disabled={isSavingDescription}
+              onClick={() => void handleSaveManagement()}
+              disabled={isSavingManagement}
               className="text-xs font-semibold gap-1.5"
             >
-              {isSavingDescription ? "Salvando..." : "Salvar descrição"}
+              {isSavingManagement ? "Salvando..." : "Salvar alterações"}
             </Button>
           </DialogFooter>
         </DialogContent>
