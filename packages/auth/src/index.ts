@@ -45,6 +45,17 @@ export function hasCrmPermission(
   permissionCode: string
 ): boolean {
   if (!user) return false;
-  if (user.roles?.includes("admin")) return true;
+  const userRole = (user.role ?? "").toLowerCase();
+  const userRoles = (user.roles ?? []).map((r) => r.toLowerCase());
+  if (
+    userRole === "admin" ||
+    userRole === "owner" ||
+    userRole === "manager" ||
+    userRoles.includes("admin") ||
+    userRoles.includes("owner") ||
+    userRoles.includes("manager")
+  ) {
+    return true;
+  }
   return Boolean(user.permissions?.includes(permissionCode));
 }

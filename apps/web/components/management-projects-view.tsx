@@ -10,14 +10,8 @@ import {
   ListTodo,
   Calendar,
   Users,
-  Shield,
-  ArrowLeft,
   ArrowRight,
   Plus,
-  Pencil,
-  Check,
-  ChevronDown,
-  ChevronUp,
   ChevronRight,
   FileText,
   Play,
@@ -25,33 +19,15 @@ import {
   CircleDot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { EntityHeader, type HeaderKpiItem } from "@/components/entity-header";
 import {
   MembersDialog,
+  normalizeMemberRole,
   type TeamMemberItem,
   type CanonicalMemberRole,
 } from "@/components/members-dialog";
 import {
-  MANAGEMENT_VISIBILITY_LABELS,
-  stripManagementPrefix,
   stripProjectPrefix,
   type ListDisplayMode,
 } from "@/lib/list-view-options";
@@ -68,6 +44,7 @@ interface ManagementProjectsViewProps {
   projects: CrmProject[];
   tasks: Task[];
   currentUserId?: string | null;
+  currentUserEmail?: string | null;
   isConnectedCrm?: boolean;
   canWrite?: boolean;
   canManageMembers?: boolean;
@@ -203,6 +180,7 @@ export function ManagementProjectsView({
   projects,
   tasks,
   currentUserId = null,
+  currentUserEmail = null,
   isConnectedCrm = false,
   canWrite = true,
   canManageMembers = false,
@@ -211,27 +189,6 @@ export function ManagementProjectsView({
   onBack,
   onSelectProject,
 }: ManagementProjectsViewProps) {
-  // Controle de expansão/recolhimento do cabeçalho com persistência em localStorage
-  const [isHeaderExpanded, setIsHeaderExpanded] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      const saved = localStorage.getItem(`gestor_mgmt_header_expanded_${management.id}`);
-      return saved !== null ? saved === "true" : false;
-    } catch {
-      return false;
-    }
-  });
-
-  const toggleHeaderExpanded = () => {
-    setIsHeaderExpanded((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(`gestor_mgmt_header_expanded_${management.id}`, String(next));
-      } catch {}
-      return next;
-    });
-  };
-
   // Estados de membros
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
@@ -240,11 +197,7 @@ export function ManagementProjectsView({
   const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
   const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
 
-  // Edição rápida de gestão (nome e descrição) e status
-  const [isEditingManagement, setIsEditingManagement] = useState(false);
-  const [editNameText, setEditNameText] = useState(management.name || "");
-  const [editDescriptionText, setEditDescriptionText] = useState(management.description || "");
-  const [isSavingManagement, setIsSavingManagement] = useState(false);
+  // Status atual da gestão
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
 
   // Projetos que pertencem a esta gestão
@@ -339,6 +292,21 @@ export function ManagementProjectsView({
     return Array.from(byId.values());
   }, [management.members, managementProjects, remoteMemberIds, removedUserIds, localRoleOverrides]);
 
+  // Permissão efetiva para gerenciar integrantes da gestão
+  const effectiveCanManageMembers = useMemo(() => {
+    return (
+      canManageMembers ||
+      canWrite ||
+      !isConnectedCrm ||
+      resolvedMembers.some(
+        (m) =>
+          (Boolean(currentUserId && m.userId === currentUserId) ||
+            Boolean(currentUserEmail && m.email && m.email.toLowerCase() === currentUserEmail.toLowerCase())) &&
+          (normalizeMemberRole(m.role) === "manager" || normalizeMemberRole(m.role) === "editor")
+      )
+    );
+  }, [canManageMembers, canWrite, isConnectedCrm, resolvedMembers, currentUserId, currentUserEmail]);
+
   async function handleOpenMembersDialog() {
     setMembersDialogOpen(true);
     setMembersError(null);
@@ -421,359 +389,74 @@ export function ManagementProjectsView({
     return managementProjects.reduce((acc, p) => acc + (p._count?.tasks ?? 0), 0);
   }, [managementProjects, tasks]);
 
-  const initials = management.name.trim().slice(0, 2).toUpperCase() || "GE";
   const mgmtColor = management.color || "var(--primary)";
   const memberCount = resolvedMembers.length || management.members?.length || 1;
 
-  const formattedDate = useMemo(() => {
-    if (!management.createdAt) return "08/07/2026";
-    try {
-      const d = new Date(management.createdAt);
-      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-    } catch {
-      return "08/07/2026";
-    }
-  }, [management.createdAt]);
-
-  async function handleSaveManagement() {
-    setIsSavingManagement(true);
-    try {
-      if (isConnectedCrm) {
-        await ideCrmClient.updateManagement(management.id, {
-          name: editNameText.trim() || management.name,
-          description: editDescriptionText.trim(),
-        });
-        onRefresh?.();
-      }
-      setIsEditingManagement(false);
-    } catch (err) {
-      console.error("Erro ao salvar gestão:", err);
-    } finally {
-      setIsSavingManagement(false);
-    }
-  }
+  // 3 KPIs da Gestão (Projetos, Concluídos, Tarefas)
+  const managementKpis = useMemo<HeaderKpiItem[]>(() => {
+    return [
+      {
+        key: "projects",
+        label: "Projetos",
+        value: managementProjects.length,
+        icon: <Folder className="size-4 text-blue-400" />,
+        iconBgColor: "bg-blue-500/10 text-blue-400",
+      },
+      {
+        key: "completed",
+        label: "Concluídos",
+        value: completedProjectsCount,
+        icon: <CheckCircle2 className="size-4 text-emerald-400" />,
+        iconBgColor: "bg-emerald-500/10 text-emerald-400",
+      },
+      {
+        key: "tasks",
+        label: "Tarefas",
+        value: totalTasksCount,
+        icon: <ListTodo className="size-4 text-purple-400" />,
+        iconBgColor: "bg-purple-500/10 text-purple-400",
+      },
+    ];
+  }, [managementProjects.length, completedProjectsCount, totalTasksCount]);
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 animate-in fade-in duration-150">
       {/* ========================================================================= */}
-      {/* 1. CABEÇALHO DA GESTÃO: MODO RETRAÍDO (PRINT 3) OU EXPANDIDO (ANEXO 1)     */}
+      {/* 1. CABEÇALHO UNIFICADO DA GESTÃO (EXATO MESMO COMPONENTE EntityHeader)    */}
       {/* ========================================================================= */}
-      {!isHeaderExpanded ? (
-        /* Cabeçalho Retraído Minimalista - EXATAMENTE IGUAL AO PRINT 3 */
-        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xs flex items-center justify-between gap-3 transition-all">
-          {/* Esquerda: Voltar + Iniciais + Nome */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            {onBack && (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title="Voltar para todas as gestões"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span>Gestões</span>
-                </Button>
-                <div className="h-4 w-px bg-border/60 shrink-0" />
-              </>
-            )}
-
-            <div
-              className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0"
-              style={{ backgroundColor: mgmtColor }}
-            >
-              {initials}
-            </div>
-
-            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
-              Gestão
-            </span>
-            <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
-              {stripManagementPrefix(management.name)}
-            </span>
-          </div>
-
-          {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down */}
-          <div className="flex items-center gap-3 shrink-0">
-            {/* 3 KPIs: Projetos, Concluídos, Tarefas */}
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1 text-muted-foreground" title="Projetos">
-                <Folder className="size-3.5 text-blue-400" />
-                <span className="font-semibold text-foreground text-xs">{managementProjects.length}</span>
-              </span>
-              <span className="flex items-center gap-1 text-muted-foreground" title="Concluídos">
-                <CheckCircle2 className="size-3.5 text-emerald-400" />
-                <span className="font-semibold text-foreground text-xs">{completedProjectsCount}</span>
-              </span>
-              <span className="flex items-center gap-1 text-muted-foreground" title="Tarefas">
-                <ListTodo className="size-3.5 text-purple-400" />
-                <span className="font-semibold text-foreground text-xs">{totalTasksCount}</span>
-              </span>
-            </div>
-
-            {/* Avatar do Membro */}
-            {management.members && management.members.length > 0 && (
-              <div className="flex -space-x-1.5 items-center">
-                {management.members.slice(0, 1).map((m, idx) => (
-                  <div
-                    key={m.userId || idx}
-                    className="size-6 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[8px] font-bold text-foreground"
-                    title={m.user?.name || "Membro"}
-                  >
-                    <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Contagem de Integrantes com Ícone de Usuários */}
-            <button
-              type="button"
-              onClick={() => void handleOpenMembersDialog()}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-              title="Ver e gerenciar integrantes da gestão"
-            >
-              <Users className="size-3.5 text-muted-foreground/80" />
-              <span className="font-semibold text-foreground text-xs">{memberCount}</span>
-            </button>
-
-            {/* Toggle Chevron Down para Expandir */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={toggleHeaderExpanded}
-              className="size-7 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
-              title="Expandir cabeçalho"
-              aria-label="Expandir cabeçalho"
-            >
-              <ChevronDown className="size-4" />
-            </Button>
-          </div>
-        </div>
-      ) : (
-        /* Cabeçalho Expandido (Pixel-Perfect Anexo 1 com Toggle Chevron Up no canto direito) */
-        <div className="rounded-2xl border border-border/80 bg-card p-3.5 sm:px-5 sm:py-3.5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4 transition-all">
-          {/* Lado Esquerdo: Voltar + Avatar GE + Título, Descrição e Metadados */}
-          <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-            {onBack && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
-                  title="Voltar para todas as gestões"
-                >
-                  <ArrowLeft className="size-3.5" />
-                  <span className="hidden sm:inline">Gestões</span>
-                </Button>
-                <div className="h-5 w-px bg-border/60 shrink-0" />
-              </div>
-            )}
-
-            {/* Badge Quadrado com Iniciais da Gestão */}
-            <div
-              className="size-10 sm:size-11 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-xs shrink-0"
-              style={{ backgroundColor: mgmtColor }}
-            >
-              {initials}
-            </div>
-
-            {/* Bloco Central de Textos da Gestão */}
-            <div className="min-w-0 flex-1 space-y-0.5">
-              {/* Linha 1: Título + Código + Pílula de Projetos + Pílula de Membros */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground">
-                  Gestão
-                </span>
-                <h1 className="text-sm sm:text-base font-bold text-foreground truncate tracking-tight">
-                  {stripManagementPrefix(management.name)}
-                </h1>
-                {canWrite && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditNameText(management.name || "");
-                      setEditDescriptionText(management.description || "");
-                      setIsEditingManagement(true);
-                    }}
-                    className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
-                    title="Editar nome e descrição da gestão"
-                  >
-                    <Pencil className="size-3" />
-                  </button>
-                )}
-                {management.code && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-border/70 bg-muted/60 text-muted-foreground shrink-0">
-                    {management.code}
-                  </span>
-                )}
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground font-medium shrink-0">
-                  {managementProjects.length} {managementProjects.length === 1 ? "projeto" : "projetos"}
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/70 bg-secondary/50 text-muted-foreground font-medium shrink-0">
-                  {memberCount} {memberCount === 1 ? "membro" : "membros"}
-                </span>
-              </div>
-
-              {/* Linha 2: Descrição da Gestão com Ícone de Lápis para Edição */}
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
-                <span className="truncate">
-                  {management.description?.trim() || "Gestão das atividades relacionadas à plataforma StudUPlay."}
-                </span>
-                {canWrite && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditNameText(management.name || "");
-                      setEditDescriptionText(management.description || "");
-                      setIsEditingManagement(true);
-                    }}
-                    className="text-muted-foreground/60 hover:text-foreground transition-colors shrink-0 cursor-pointer"
-                    title="Editar descrição da gestão"
-                  >
-                    <Pencil className="size-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Linha 3: Metadados (Data de Criação | Visibilidade | Status com Lápis) */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
-                <span className="flex items-center gap-1 shrink-0">
-                  <Calendar className="size-3 text-muted-foreground/70" />
-                  <span>Criada em {formattedDate}</span>
-                </span>
-                <span className="text-border shrink-0">|</span>
-                <span className="flex items-center gap-1 shrink-0">
-                  <Shield className="size-3 text-muted-foreground/70" />
-                  <span>
-                    Visibilidade: {MANAGEMENT_VISIBILITY_LABELS[management.visibility || "company"] || management.visibility || "Empresa"}
-                  </span>
-                </span>
-                <span className="text-border shrink-0">|</span>
-                <span className="flex items-center gap-1 shrink-0">
-                  <Folder className="size-3 text-muted-foreground/70" />
-                  <span>Status: {currentStatus}</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-muted-foreground/60 hover:text-foreground transition-colors ml-0.5 cursor-pointer"
-                        title="Alterar status da gestão"
-                      >
-                        <Pencil className="size-3" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-36">
-                      <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground">
-                        Status da gestão
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {["Ativa", "Pausada", "Concluída", "Arquivada"].map((st) => (
-                        <DropdownMenuItem
-                          key={st}
-                          onClick={() => setCurrentStatus(st)}
-                          className={cn("text-xs cursor-pointer", currentStatus === st && "font-bold text-primary")}
-                        >
-                          {st}
-                          {currentStatus === st && <Check className="size-3 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Lado Direito: KPIs Em Linha + Membros + Botão Toggle de Recolher */}
-          <div className="flex items-center justify-between xl:justify-end gap-3 sm:gap-4 shrink-0 pt-2 xl:pt-0 border-t xl:border-t-0 border-border/50">
-            {/* 3 KPIs Compactos em Linha Horizontal */}
-            <div className="flex items-center gap-4 sm:gap-5">
-              {/* KPI 1: Projetos */}
-              <div className="flex items-center gap-2">
-                <div className="size-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0">
-                  <Folder className="size-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Projetos</p>
-                  <p className="text-sm font-bold text-foreground leading-tight">{managementProjects.length}</p>
-                </div>
-              </div>
-
-              {/* KPI 2: Concluídos */}
-              <div className="flex items-center gap-2">
-                <div className="size-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="size-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Concluídos</p>
-                  <p className="text-sm font-bold text-foreground leading-tight">{completedProjectsCount}</p>
-                </div>
-              </div>
-
-              {/* KPI 3: Tarefas */}
-              <div className="flex items-center gap-2">
-                <div className="size-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
-                  <ListTodo className="size-4" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Tarefas</p>
-                  <p className="text-sm font-bold text-foreground leading-tight">{totalTasksCount}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="h-6 w-px bg-border/60 shrink-0 hidden sm:block" />
-
-            {/* Membros da Gestão (Avatares Empilhados + Botão com Contagem) */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {management.members && management.members.length > 0 && (
-                <div className="flex -space-x-2 items-center mr-0.5">
-                  {management.members.slice(0, 3).map((m, idx) => (
-                    <div
-                      key={m.userId || idx}
-                      className="size-7 rounded-full border-2 border-card bg-muted overflow-hidden shadow-2xs flex items-center justify-center text-[9px] font-bold text-foreground"
-                      title={m.user?.name || "Membro"}
-                    >
-                      <MemberAvatarContent name={m.user?.name} src={m.user?.avatarUrl} />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void handleOpenMembersDialog()}
-                className="h-7 px-2 gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-lg hover:bg-muted/60"
-                title="Ver e gerenciar integrantes da gestão"
-              >
-                <Users className="size-3.5" />
-                <span className="font-semibold">{memberCount}</span>
-              </Button>
-
-              {/* Botão Toggle Chevron Up para Recolher */}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={toggleHeaderExpanded}
-                className="size-7 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
-                title="Recolher cabeçalho"
-                aria-label="Recolher cabeçalho"
-              >
-                <ChevronUp className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EntityHeader
+        type="management"
+        id={management.id}
+        name={management.name}
+        description={management.description}
+        code={management.code}
+        color={mgmtColor}
+        createdAt={management.createdAt}
+        status={currentStatus}
+        visibility={management.visibility}
+        onBack={onBack}
+        backLabel="Gestões"
+        kpis={managementKpis}
+        members={resolvedMembers}
+        memberCount={memberCount}
+        onOpenMembers={() => void handleOpenMembersDialog()}
+        canWrite={canWrite}
+        onUpdate={async (updates) => {
+          if (isConnectedCrm) {
+            await ideCrmClient.updateManagement(management.id, {
+              name: updates.name,
+              description: updates.description,
+              status: updates.status,
+              visibility: updates.visibility,
+            });
+            onRefresh?.();
+          }
+          if (updates.status) {
+            setCurrentStatus(updates.status);
+          }
+        }}
+        onRefresh={onRefresh}
+      />
 
       {/* ========================================================================= */}
       {/* 2. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
@@ -1113,78 +796,15 @@ export function ManagementProjectsView({
         members={resolvedMembers}
         loading={loadingMembers}
         error={membersError}
-        canManageMembers={canManageMembers}
+        canManageMembers={effectiveCanManageMembers}
         currentUserId={currentUserId}
+        currentUserEmail={currentUserEmail}
         entityType="management"
         onChangeRole={handleChangeMemberRole}
         onRemoveMember={handleRemoveMember}
         onAddMember={handleAddMember}
         onSelfLeave={onBack}
       />
-
-      {/* Diálogo Rápido para Editar a Gestão (Nome e Descrição) */}
-      <Dialog open={isEditingManagement} onOpenChange={setIsEditingManagement}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold text-foreground">
-              Editar gestão
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Atualize o nome e o texto descritivo desta gestão empresarial.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2">
-            <div className="space-y-1">
-              <label htmlFor="edit-mgmt-name" className="text-xs font-semibold text-foreground">
-                Nome da gestão
-              </label>
-              <Input
-                id="edit-mgmt-name"
-                value={editNameText}
-                onChange={(e) => setEditNameText(e.target.value)}
-                placeholder="Ex: Gestão Operacional"
-                className="text-xs h-8"
-              />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="edit-mgmt-desc" className="text-xs font-semibold text-foreground">
-                Descrição e objetivos
-              </label>
-              <Textarea
-                id="edit-mgmt-desc"
-                value={editDescriptionText}
-                onChange={(e) => setEditDescriptionText(e.target.value)}
-                placeholder="Descreva as atividades e objetivos desta gestão..."
-                rows={4}
-                className="text-xs"
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditingManagement(false)}
-              disabled={isSavingManagement}
-              className="text-xs"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void handleSaveManagement()}
-              disabled={isSavingManagement}
-              className="text-xs font-semibold gap-1.5"
-            >
-              {isSavingManagement ? "Salvando..." : "Salvar alterações"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

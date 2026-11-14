@@ -54,6 +54,7 @@ import { canPerformProjectAction } from "@/lib/crm-permissions";
 import { reconcileRemoteTasks } from "@/lib/task-sync";
 import {
   MembersDialog,
+  normalizeMemberRole,
   type TeamMemberItem,
   type CanonicalMemberRole,
 } from "@/components/members-dialog";
@@ -1419,11 +1420,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     "projects.write"
   );
 
-  const canManageProjectMembers = canPerformProjectAction(
-    currentUser,
-    isConnectedCrm,
-    "projects.members"
-  );
+  const canManageProjectMembers =
+    canPerformProjectAction(currentUser, isConnectedCrm, "projects.members") ||
+    canPerformProjectAction(currentUser, isConnectedCrm, "projects.write") ||
+    !isConnectedCrm;
 
   function handleOpenNewTask(initialStatus: TaskStatus = "PENDENTE") {
     if (!canWriteProjects) return;
@@ -1448,33 +1448,74 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return [];
   }, [projectMembers, selectedProjectId]);
 
+  // Estados locais para mutações otimistas de membros do projeto
+  const [projectRoleOverrides, setProjectRoleOverrides] = useState<Map<string, CanonicalMemberRole>>(
+    () => new Map()
+  );
+  const [projectRemovedUserIds, setProjectRemovedUserIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [projectAddedMembers, setProjectAddedMembers] = useState<TeamMemberItem[]>([]);
+  const [prevSelectedProjectId, setPrevSelectedProjectId] = useState(selectedProjectId);
+
+  if (selectedProjectId !== prevSelectedProjectId) {
+    setPrevSelectedProjectId(selectedProjectId);
+    setProjectRoleOverrides(new Map());
+    setProjectRemovedUserIds(new Set());
+    setProjectAddedMembers([]);
+  }
+
   const projectDialogMembers = useMemo<TeamMemberItem[]>(() => {
     const byUserId = new Map<string, TeamMemberItem>();
     for (const m of activeProjectMembers) {
-      byUserId.set(m.userId, {
-        userId: m.userId,
+      const uid = m.userId || m.user?.id;
+      if (!uid || projectRemovedUserIds.has(uid)) continue;
+      byUserId.set(uid, {
+        userId: uid,
         name: m.user?.name,
         email: m.user?.email,
         avatarUrl: m.user?.avatarUrl,
-        role: m.role,
+        role: projectRoleOverrides.get(uid) ?? m.role,
       });
     }
     for (const m of currentProject?.members ?? []) {
       const uid = m.userId ?? m.user?.id;
-      if (uid && !byUserId.has(uid)) {
-        byUserId.set(uid, {
-          userId: uid,
-          name: m.user?.name,
-          email: m.user?.email,
-          avatarUrl: m.user?.avatarUrl,
-          role: m.role,
+      if (!uid || projectRemovedUserIds.has(uid) || byUserId.has(uid)) continue;
+      byUserId.set(uid, {
+        userId: uid,
+        name: m.user?.name,
+        email: m.user?.email,
+        avatarUrl: m.user?.avatarUrl,
+        role: projectRoleOverrides.get(uid) ?? m.role,
+      });
+    }
+    for (const m of projectAddedMembers) {
+      if (!projectRemovedUserIds.has(m.userId) && !byUserId.has(m.userId)) {
+        byUserId.set(m.userId, {
+          ...m,
+          role: projectRoleOverrides.get(m.userId) ?? m.role,
         });
       }
     }
     return Array.from(byUserId.values());
-  }, [activeProjectMembers, currentProject]);
+  }, [activeProjectMembers, currentProject, projectRemovedUserIds, projectRoleOverrides, projectAddedMembers]);
+
+  const effectiveCanManageProjectMembers = useMemo(() => {
+    return (
+      canManageProjectMembers ||
+      canWriteProjects ||
+      !isConnectedCrm ||
+      projectDialogMembers.some(
+        (m) =>
+          (Boolean(currentUser?.id && m.userId === currentUser.id) ||
+            Boolean(currentUser?.email && m.email && m.email.toLowerCase() === currentUser.email.toLowerCase())) &&
+          (normalizeMemberRole(m.role) === "manager" || normalizeMemberRole(m.role) === "editor")
+      )
+    );
+  }, [canManageProjectMembers, canWriteProjects, isConnectedCrm, projectDialogMembers, currentUser]);
 
   async function handleUpdateProjectMemberRole(member: TeamMemberItem, newRole: CanonicalMemberRole) {
+    setProjectRoleOverrides((prev) => new Map(prev).set(member.userId, newRole));
     if (!selectedProjectId || !isConnectedCrm) return;
     try {
       await ideCrmClient.updateProjectMemberRole(selectedProjectId, member.userId, newRole);
@@ -1493,11 +1534,17 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao alterar papel do integrante.";
       setSyncError(msg);
+      setProjectRoleOverrides((prev) => {
+        const next = new Map(prev);
+        next.delete(member.userId);
+        return next;
+      });
       throw err;
     }
   }
 
   async function handleRemoveProjectMember(member: TeamMemberItem) {
+    setProjectRemovedUserIds((prev) => new Set([...prev, member.userId]));
     if (!selectedProjectId || !isConnectedCrm) return;
     try {
       await ideCrmClient.removeProjectMember(selectedProjectId, member.userId);
@@ -1514,16 +1561,29 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao remover integrante do projeto.";
       setSyncError(msg);
+      setProjectRemovedUserIds((prev) => {
+        const next = new Set(prev);
+        next.delete(member.userId);
+        return next;
+      });
       throw err;
     }
   }
 
   async function handleAddProjectMember(data: { emailOrId: string; role: CanonicalMemberRole }) {
+    const isEmail = data.emailOrId.includes("@");
+    const tempMember: TeamMemberItem = {
+      userId: isEmail ? `temp-${Date.now()}` : data.emailOrId,
+      name: isEmail ? data.emailOrId.split("@")[0] : data.emailOrId,
+      email: isEmail ? data.emailOrId : null,
+      role: data.role,
+    };
+    setProjectAddedMembers((prev) => [...prev, tempMember]);
     if (!selectedProjectId || !isConnectedCrm) return;
     try {
       await ideCrmClient.addProjectMember(selectedProjectId, {
-        email: data.emailOrId.includes("@") ? data.emailOrId : undefined,
-        userId: !data.emailOrId.includes("@") ? data.emailOrId : undefined,
+        email: isEmail ? data.emailOrId : undefined,
+        userId: !isEmail ? data.emailOrId : undefined,
         role: data.role,
       });
       const res = await ideCrmClient.listProjectMembers(selectedProjectId);
@@ -1540,6 +1600,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     status?: string;
     priority?: string;
     name?: string;
+    dueDate?: string | null;
+    visibility?: string;
   }) => {
     if (!currentProject) return;
     setProjects((prev) =>
@@ -1735,6 +1797,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               projects={visibleProjects}
               tasks={tasks}
               currentUserId={currentUser?.id}
+              currentUserEmail={currentUser?.email}
               isConnectedCrm={isConnectedCrm}
               canWrite={canWriteProjects}
               canManageMembers={canManageProjectMembers}
@@ -1875,8 +1938,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           description="Pessoas liberadas no funil operacional deste projeto."
           members={projectDialogMembers}
           loading={Boolean(isConnectedCrm && selectedProjectId && projectMembers?.projectId !== selectedProjectId)}
-          canManageMembers={canManageProjectMembers}
+          canManageMembers={effectiveCanManageProjectMembers}
           currentUserId={currentUser?.id}
+          currentUserEmail={currentUser?.email}
           entityType="project"
           onChangeRole={handleUpdateProjectMemberRole}
           onRemoveMember={handleRemoveProjectMember}

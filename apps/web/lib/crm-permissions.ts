@@ -24,10 +24,12 @@ export function canPerformProjectAction(
     (user.roles?.length ?? 0) > 0 || (user.permissions?.length ?? 0) > 0;
   if (!hasExplicitClaims) return true;
 
-  if (permission === "projects.write") {
+  if (permission === "projects.write" || permission === "projects.members") {
     return (
       hasCrmPermission(user, "projects.write") ||
-      hasCrmPermission(user, "projects.manage")
+      hasCrmPermission(user, "projects.manage") ||
+      hasCrmPermission(user, "projects.members") ||
+      hasCrmPermission(user, "projects.admin")
     );
   }
 

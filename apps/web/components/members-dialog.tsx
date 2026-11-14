@@ -89,9 +89,9 @@ export const ROLE_DEFINITIONS: Record<CanonicalMemberRole, RoleDefinition> = {
 };
 
 export const AVAILABLE_ROLES: RoleDefinition[] = [
-  ROLE_DEFINITIONS.manager,
-  ROLE_DEFINITIONS.editor,
   ROLE_DEFINITIONS.viewer,
+  ROLE_DEFINITIONS.editor,
+  ROLE_DEFINITIONS.manager,
 ];
 
 export function normalizeMemberRole(role?: string | null): CanonicalMemberRole {
@@ -126,6 +126,7 @@ interface MembersDialogProps {
   error?: string | null;
   canManageMembers?: boolean;
   currentUserId?: string | null;
+  currentUserEmail?: string | null;
   entityType?: "management" | "project";
   onChangeRole?: (
     member: TeamMemberItem,
@@ -149,6 +150,7 @@ export function MembersDialog({
   error = null,
   canManageMembers = false,
   currentUserId = null,
+  currentUserEmail = null,
   entityType = "project",
   onChangeRole,
   onRemoveMember,
@@ -430,7 +432,8 @@ export function MembersDialog({
                   const canonicalRole = normalizeMemberRole(member.role);
                   const roleDef = ROLE_DEFINITIONS[canonicalRole];
                   const isCurrentUser = Boolean(
-                    currentUserId && member.userId === currentUserId
+                    (currentUserId && member.userId === currentUserId) ||
+                    (currentUserEmail && member.email && member.email.toLowerCase() === currentUserEmail.toLowerCase())
                   );
                   const isUpdating = activeUpdatingUserId === member.userId;
                   const isRemoving = activeRemovingUserId === member.userId;
@@ -575,8 +578,6 @@ export function MembersDialog({
                             >
                               {isRemoving ? (
                                 <Loader2 className="size-3.5 animate-spin" />
-                              ) : isCurrentUser ? (
-                                <LogOut className="size-3.5" />
                               ) : (
                                 <Trash2 className="size-3.5" />
                               )}
