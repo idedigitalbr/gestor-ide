@@ -1,0 +1,76 @@
+name: Release Desktop Apps
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão do Release (ex: v0.1.0)'
+        required: false
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install project dependencies
+        run: bun install
+
+      - name: Build Tauri Desktop Application
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: './apps/desktop'
+          tagName: ${{ github.ref_name != 'main' && github.ref_name || inputs.version || 'v0.1.0' }}
+          releaseName: 'IDE Gestor Desktop ${{ github.ref_name != 'main' && github.ref_name || inputs.version || 'v0.1.0' }}'
+          releaseBody: |
+            🚀 **IDE Gestor — Aplicativo Desktop Oficial**
+            
+            Versão de alta performance construída com Tauri v2.
+            
+            ### Arquivos disponíveis:
+            - **Windows**: `.exe` (instalador) e `.msi`
+            - **macOS**: `.dmg` (Universal para Intel e Apple Silicon M1/M2/M3/M4)
+            - **Linux**: `.deb` e `.AppImage`
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

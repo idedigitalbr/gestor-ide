@@ -1,0 +1,16 @@
+{
+  "name": "@gestor-ide/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "echo @gestor-ide/desktop: web dist ready",
+    "build:desktop": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.7"
+  }
+}

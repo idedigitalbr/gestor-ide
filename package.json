@@ -15,7 +15,9 @@
     "lint": "turbo lint",
     "test": "bun test",
     "typecheck": "turbo typecheck",
-    "test:themes": "bun run --cwd apps/web test:themes"
+    "test:themes": "bun run --cwd apps/web test:themes",
+    "desktop:dev": "bun run --cwd apps/desktop dev",
+    "desktop:build": "bun run --cwd apps/desktop build:desktop"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
