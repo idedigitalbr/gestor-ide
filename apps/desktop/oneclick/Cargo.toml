@@ -1,6 +1,6 @@
 [package]
-name = "instalador-ide-gestor-v0-1-5-oneclick"
-version = "0.1.5"
+name = "instalador-ide-gestor-v0-1-6-oneclick"
+version = "0.1.6"
 edition = "2021"
 
 [dependencies]

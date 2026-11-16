@@ -4,8 +4,8 @@ fn main() {
         res.set_icon("icon.ico");
         res.set("FileDescription", "IDE Gestor Instalador Rápido");
         res.set("ProductName", "IDE Gestor");
-        res.set("ProductVersion", "0.1.5.0");
-        res.set("FileVersion", "0.1.5.0");
+        res.set("ProductVersion", "0.1.6.0");
+        res.set("FileVersion", "0.1.6.0");
         res.set("LegalCopyright", "IDE Digital");
         res.compile().unwrap();
     }

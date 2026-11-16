@@ -245,7 +245,7 @@ unsafe extern "system" fn window_proc(
             // Badge / Subheading
             SelectObject(mem_dc, G_FONT_BADGE as _);
             SetTextColor(mem_dc, rgb(59, 130, 246)); // Vibrant blue #3b82f6
-            let badge = to_wide("INSTALADOR OFICIAL • VERSÃO 0.1.5");
+            let badge = to_wide("INSTALADOR OFICIAL • VERSÃO 0.1.6");
             TextOutW(mem_dc, 104, 56, badge.as_ptr(), (badge.len() - 1) as i32);
 
             // Subtitle Description
