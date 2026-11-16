@@ -1,4 +1,4 @@
-export type AppearanceMode = "dark" | "light";
+export type AppearanceMode = "system" | "dark" | "light";
 
 /** Apenas um conjunto de IDs cromáticos: derivado do registro real em theme-catalog. */
 import type { ColorFamily } from "@/lib/themes/theme-catalog";

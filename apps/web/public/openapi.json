@@ -1,0 +1,309 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "IDE Gestor API",
+    "description": "API oficial do IDE Gestor para gestão de projetos, tarefas, checklists e equipe.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://crm.suporteide.digital/api"
+    }
+  ],
+  "paths": {
+    "/projects/managements": {
+      "get": {
+        "operationId": "listarGestoes",
+        "summary": "Listar todas as gestões (clientes ou departamentos)",
+        "responses": {
+          "200": {
+            "description": "Lista de gestões retornada com sucesso"
+          }
+        }
+      }
+    },
+    "/projects/items": {
+      "get": {
+        "operationId": "listarProjetos",
+        "summary": "Listar projetos disponíveis",
+        "parameters": [
+          {
+            "name": "managementId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da gestão para filtrar projetos"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de projetos retornada com sucesso"
+          }
+        }
+      }
+    },
+    "/projects/tasks": {
+      "get": {
+        "operationId": "listarTarefas",
+        "summary": "Listar tarefas de projetos",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID do projeto para filtrar tarefas"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["todo", "in_progress", "review", "completed"]
+            },
+            "description": "Status da tarefa"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de tarefas retornada com sucesso"
+          }
+        }
+      },
+      "post": {
+        "operationId": "criarTarefa",
+        "summary": "Criar uma nova tarefa em um projeto",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["projectId", "title"],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "description": "ID do projeto onde a tarefa será criada"
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Título da tarefa"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Descrição detalhada da tarefa"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["todo", "in_progress", "review", "completed"],
+                    "description": "Status inicial da tarefa"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "urgent"],
+                    "description": "Prioridade da tarefa"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Data de entrega no formato AAAA-MM-DD"
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Data de início no formato AAAA-MM-DD"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tarefa criada com sucesso"
+          }
+        }
+      }
+    },
+    "/projects/tasks/{id}": {
+      "get": {
+        "operationId": "consultarTarefa",
+        "summary": "Obter detalhes de uma tarefa específica",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da tarefa"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalhes da tarefa retornados com sucesso"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "atualizarTarefa",
+        "summary": "Atualizar título, descrição, status, prazo ou prioridade de uma tarefa",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da tarefa a ser alterada"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Novo título da tarefa"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Nova descrição da tarefa"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["todo", "in_progress", "review", "completed"],
+                    "description": "Novo status da tarefa"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "urgent"],
+                    "description": "Nova prioridade da tarefa"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Nova data de vencimento no formato AAAA-MM-DD"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tarefa atualizada com sucesso"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "excluirTarefa",
+        "summary": "Excluir uma tarefa",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da tarefa a ser excluída"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tarefa excluída com sucesso"
+          }
+        }
+      }
+    },
+    "/projects/tasks/{id}/comments": {
+      "post": {
+        "operationId": "adicionarComentarioTarefa",
+        "summary": "Adicionar um comentário na tarefa",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da tarefa"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["content"],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "Texto do comentário"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comentário adicionado com sucesso"
+          }
+        }
+      }
+    },
+    "/projects/tasks/{id}/checklist": {
+      "post": {
+        "operationId": "adicionarItemChecklist",
+        "summary": "Adicionar um item de checklist ou subtarefa na tarefa",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID da tarefa"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Título do item do checklist"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Item de checklist adicionado com sucesso"
+          }
+        }
+      }
+    }
+  }
+}
