@@ -83,6 +83,18 @@ export interface McpTokenItem {
 
 const DEFAULT_MCP_TOKENS: McpTokenItem[] = [
   {
+    id: "mcp-0",
+    name: "will-antigravity2-escritorio",
+    tokenMasked: "sp_mcp_3ca44ed5...",
+    rawToken: "sp_mcp_3ca44ed587aa12f3d1c16de7fc83b006bbc5",
+    userName: "Will",
+    userEmail: "will.ideinstituto@gmail.com",
+    permissions: ["read", "write", "members", "manage"],
+    status: "active",
+    lastUsedAt: "Nunca",
+    createdAt: "16 de nov de 2026",
+  },
+  {
     id: "mcp-1",
     name: "will-antigravity",
     tokenMasked: "sp_mcp_TgKCAlN...",
@@ -156,18 +168,47 @@ export function SettingsView() {
   const [generatedSecret, setGeneratedSecret] = useState<string | null>(null);
   const [copiedNewToken, setCopiedNewToken] = useState(false);
 
-  // Carregar configurações do CRM
+  // Estados de sessão do usuário logado
+  const [currentUser, setCurrentUser] = useState<{
+    name: string;
+    email: string;
+  } | null>(null);
+
+  // Carregar configurações do CRM e sessão do usuário
   useEffect(() => {
     let active = true;
+
+    // Carrega usuário da sessão (ex: Will)
+    void ideCrmClient
+      .getSession()
+      .then((sess) => {
+        if (!active || !sess.user) return;
+        setCurrentUser({
+          name: sess.user.name || "Will",
+          email: sess.user.email || "will.ideinstituto@gmail.com",
+        });
+      })
+      .catch(() => {});
+
     void ideCrmClient
       .getSettings()
       .then((res) => {
         if (!active) return;
         const s = res.settings || {};
         setSettings(s);
-        // Se houver tokens persistidos no settings, carrega
+        // Se houver tokens persistidos no settings, carrega e sanitiza
         if (Array.isArray(s.mcpTokens) && s.mcpTokens.length > 0) {
-          setMcpTokens(s.mcpTokens as McpTokenItem[]);
+          const sanitized = (s.mcpTokens as McpTokenItem[]).map((t) => {
+            if (t.name.toLowerCase().includes("will")) {
+              return {
+                ...t,
+                userName: "Will",
+                userEmail: "will.ideinstituto@gmail.com",
+              };
+            }
+            return t;
+          });
+          setMcpTokens(sanitized);
         }
       })
       .catch((err) => {
@@ -273,12 +314,16 @@ export function SettingsView() {
     const generated = `sp_mcp_${randomHex}`;
     const masked = `${generated.slice(0, 15)}...`;
 
-    const userProfile = settings?.profileName
+    const userProfile = currentUser?.name
+      ? currentUser.name
+      : settings?.profileName
       ? String(settings.profileName)
-      : "Usuário Admin";
-    const userEmail = settings?.profileEmail
+      : "Will";
+    const userEmail = currentUser?.email
+      ? currentUser.email
+      : settings?.profileEmail
       ? String(settings.profileEmail)
-      : "admin@suporteide.digital";
+      : "will.ideinstituto@gmail.com";
 
     const now = new Intl.DateTimeFormat("pt-BR", {
       day: "2-digit",
