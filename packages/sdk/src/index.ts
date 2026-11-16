@@ -18,6 +18,9 @@ import type {
   CrmUserProfile,
 } from "@gestor-ide/core";
 import { getStoredCrmToken, setStoredCrmToken } from "@gestor-ide/auth";
+import { crmCache, IdeCrmCache } from "./cache";
+
+export { crmCache, IdeCrmCache };
 
 declare const process: { env?: Record<string, string | undefined> } | undefined;
 
@@ -35,6 +38,7 @@ export class IdeCrmApiError extends Error {
 export interface IdeCrmClientOptions {
   baseUrl?: string;
   getToken?: () => string | null;
+  enableCache?: boolean;
 }
 
 function generateIdempotencyKey(): string {
@@ -47,6 +51,8 @@ function generateIdempotencyKey(): string {
 export class IdeCrmClient {
   private readonly baseUrl: string;
   private readonly getTokenFn: () => string | null;
+  private readonly enableCache: boolean;
+  public readonly cache = crmCache;
 
   constructor(options: IdeCrmClientOptions = {}) {
     // No browser, usamos por padrão o proxy integrado /api/crm (configurado no next.config.ts)
@@ -57,6 +63,47 @@ export class IdeCrmClient {
         : "/api/crm";
     this.baseUrl = (options.baseUrl ?? defaultBase).replace(/\/+$/, "");
     this.getTokenFn = options.getToken ?? getStoredCrmToken;
+    this.enableCache = options.enableCache ?? (typeof window !== "undefined");
+  }
+
+  private revalidateInBackground<T>(
+    url: string,
+    init: RequestInit,
+    headers: Headers,
+    cacheKey: string
+  ): void {
+    void fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const fresh = await res.json().catch(() => null);
+          if (fresh) {
+            await this.cache.set(cacheKey, fresh);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("ide-crm:revalidated", {
+                  detail: { key: cacheKey, data: fresh },
+                })
+              );
+            }
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
+  private invalidateRelatedCaches(path: string): void {
+    if (path.includes("/tasks") || path.includes("/projects")) {
+      void this.cache.invalidatePrefix("crm_/projects");
+      void this.cache.invalidatePrefix("crm_/calendar");
+    } else if (path.includes("/calendar")) {
+      void this.cache.invalidatePrefix("crm_/calendar");
+    } else if (path.includes("/account") || path.includes("/auth")) {
+      void this.cache.clear();
+    }
   }
 
   private async request<T>(
@@ -81,26 +128,60 @@ export class IdeCrmClient {
       headers.set("Idempotency-Key", generateIdempotencyKey());
     }
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      credentials: "include",
-    });
+    const method = init.method?.toUpperCase() ?? "GET";
+    const cacheKey = `crm_${normalizedPath}`;
 
-    const payload = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      const errorMsg =
-        payload &&
-        typeof payload === "object" &&
-        "error" in payload &&
-        typeof (payload as { error?: unknown }).error === "string"
-          ? (payload as { error: string }).error
-          : `Erro HTTP ${response.status}`;
-      throw new IdeCrmApiError(response.status, errorMsg, payload);
+    // 1. Verificação de Cache para GET (0ms Stale-While-Revalidate)
+    if (this.enableCache && method === "GET" && !headers.has("Cache-Control")) {
+      const cached = await this.cache.get<T>(cacheKey);
+      if (cached !== null) {
+        // Dispara revalidação silenciosa em segundo plano para manter atualizado
+        this.revalidateInBackground<T>(url, init, headers, cacheKey);
+        return cached;
+      }
     }
 
-    return payload as T;
+    try {
+      const response = await fetch(url, {
+        ...init,
+        headers,
+        credentials: "include",
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMsg =
+          payload &&
+          typeof payload === "object" &&
+          "error" in payload &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : `Erro HTTP ${response.status}`;
+        throw new IdeCrmApiError(response.status, errorMsg, payload);
+      }
+
+      // Se for GET com sucesso, grava no cache (Memória + IndexedDB)
+      if (this.enableCache && method === "GET") {
+        void this.cache.set(cacheKey, payload);
+      }
+
+      // Se for mutação (POST/PATCH/DELETE/PUT), invalida caches relacionados
+      if (this.enableCache && method !== "GET") {
+        this.invalidateRelatedCaches(normalizedPath);
+      }
+
+      return payload as T;
+    } catch (error) {
+      // Se falhar a rede (offline / queda transitória da VPS) e houver cache anterior, resgata do cache!
+      if (this.enableCache && method === "GET") {
+        const fallback = await this.cache.get<T>(cacheKey);
+        if (fallback !== null) {
+          return fallback;
+        }
+      }
+      throw error;
+    }
   }
 
   // --------------------------------------------------------------------------
