@@ -1,6 +1,6 @@
 [package]
 name = "ide-gestor"
-version = "0.1.1"
+version = "0.1.2"
 description = "IDE Gestor Desktop"
 authors = ["IDE Digital"]
 edition = "2024"
