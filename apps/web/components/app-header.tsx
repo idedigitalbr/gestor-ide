@@ -15,6 +15,8 @@ import type {
 } from "@/types/task";
 import {
   ArrowLeft,
+  ArrowUpDown,
+  Calendar,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -29,13 +31,35 @@ import {
   LogOut,
   Palette,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   SlidersHorizontal,
+  Tag,
   UserRound,
   Users,
   X,
 } from "lucide-react";
+import {
+  type ManagementSortOption,
+  MANAGEMENT_SORT_LABELS,
+  type ProjectSortOption,
+  PROJECT_SORT_LABELS,
+  type TaskSortOption,
+  TASK_SORT_LABELS,
+  type ManagementGroupBy,
+  MANAGEMENT_GROUP_LABELS,
+  type ProjectGroupBy,
+  PROJECT_GROUP_LABELS,
+  type ManagementFilters,
+  DEFAULT_MANAGEMENT_FILTERS,
+  type ProjectFilters,
+  DEFAULT_PROJECT_FILTERS,
+  countActiveManagementFilters,
+  countActiveProjectFilters,
+  extractManagementTags,
+  extractProjectTags,
+} from "@/lib/organization-options";
 import { ThemeSelector } from "@/components/theme/theme-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -191,8 +215,24 @@ interface AppHeaderProps {
   onOpenProjectMembers?: () => void;
   onRefreshSync?: () => void;
   isSyncing?: boolean;
-  cardColumns?: 4 | 5;
-  onCardColumnsChange?: (cols: 4 | 5) => void;
+  cardColumns?: 3 | 4 | 5;
+  onCardColumnsChange?: (cols: 3 | 4 | 5) => void;
+  managementSort?: ManagementSortOption;
+  onManagementSortChange?: (sort: ManagementSortOption) => void;
+  managementFilters?: ManagementFilters;
+  onManagementFiltersChange?: (filters: ManagementFilters) => void;
+  managementGroupBy?: ManagementGroupBy;
+  onManagementGroupByChange?: (groupBy: ManagementGroupBy) => void;
+  projectSort?: ProjectSortOption;
+  onProjectSortChange?: (sort: ProjectSortOption) => void;
+  projectFilters?: ProjectFilters;
+  onProjectFiltersChange?: (filters: ProjectFilters) => void;
+  projectGroupBy?: ProjectGroupBy;
+  onProjectGroupByChange?: (groupBy: ProjectGroupBy) => void;
+  taskSort?: TaskSortOption;
+  onTaskSortChange?: (sort: TaskSortOption) => void;
+  onResetManagementSettings?: () => void;
+  onResetProjectSettings?: () => void;
 }
 
 export function AppHeader({
@@ -249,6 +289,22 @@ export function AppHeader({
   onOpenProjectMembers,
   cardColumns = 4,
   onCardColumnsChange,
+  managementSort = "none",
+  onManagementSortChange,
+  managementFilters = DEFAULT_MANAGEMENT_FILTERS,
+  onManagementFiltersChange,
+  managementGroupBy = "none",
+  onManagementGroupByChange,
+  projectSort = "none",
+  onProjectSortChange,
+  projectFilters = DEFAULT_PROJECT_FILTERS,
+  onProjectFiltersChange,
+  projectGroupBy = "none",
+  onProjectGroupByChange,
+  taskSort = "none",
+  onTaskSortChange,
+  onResetManagementSettings,
+  onResetProjectSettings,
 }: AppHeaderProps) {
   const isInsideProject = Boolean(selectedProjectId);
 
@@ -257,7 +313,17 @@ export function AppHeader({
   const [isThemeSelectorOpen, setIsThemeSelectorOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<
-    "main" | "grupo" | "subtarefas" | "filtro"
+    | "main"
+    | "grupo"
+    | "subtarefas"
+    | "filtro"
+    | "task-ordenar"
+    | "mgmt-ordenar"
+    | "mgmt-filtros"
+    | "mgmt-agrupar"
+    | "proj-ordenar"
+    | "proj-filtros"
+    | "proj-agrupar"
   >("main");
 
   // Quantidade de filtros ativos
@@ -272,6 +338,22 @@ export function AppHeader({
     if (filters.tags && filters.tags.length > 0) count++;
     return count;
   }, [filters]);
+
+  const activeMgmtFiltersCount = useMemo(() => {
+    return managementFilters ? countActiveManagementFilters(managementFilters) : 0;
+  }, [managementFilters]);
+
+  const activeProjFiltersCount = useMemo(() => {
+    return projectFilters ? countActiveProjectFilters(projectFilters) : 0;
+  }, [projectFilters]);
+
+  const availableMgmtTags = useMemo(() => {
+    return extractManagementTags(managements);
+  }, [managements]);
+
+  const availableProjTags = useMemo(() => {
+    return extractProjectTags(projects);
+  }, [projects]);
 
   const groupByLabel = getGroupByLabel(groupBy);
   const subtaskLabel =
@@ -319,7 +401,6 @@ export function AppHeader({
           currentProjectName={currentProjectName}
           selectableProjects={selectableProjects}
         />
-        <HeaderTooltip label="Calendário"><Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0"><Link href="/projects/calendar" aria-label="Calendário"><CalendarDays className="size-4" /></Link></Button></HeaderTooltip>
       </div>
 
       {/* ========================================================= */}
@@ -824,23 +905,17 @@ export function AppHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" collisionPadding={8} className="w-68 max-w-[calc(100vw-1rem)] p-1.5">
-              {/* Usuário + Minha Conta */}
+              {/* Usuário */}
               <div className="px-3 pt-2.5 pb-1.5">
                 <div className="truncate font-semibold text-xs text-foreground">{displayName}</div>
                 {currentUser?.email && (
                   <div className="truncate text-[11px] text-muted-foreground mt-0.5">{currentUser.email}</div>
                 )}
               </div>
-              <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
-                <Link href="/settings/account">
-                  <UserRound className="size-4 shrink-0 text-muted-foreground" />
-                  <span>Minha Conta</span>
-                </Link>
-              </DropdownMenuItem>
 
               <DropdownMenuSeparator className="my-1" />
 
-              {/* Dashboard, Aparência e Configurações Admin */}
+              {/* Dashboard */}
               <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
                 <Link href="/projects/dashboard">
                   <LayoutDashboard className="size-4 shrink-0 text-muted-foreground" />
@@ -848,20 +923,11 @@ export function AppHeader({
                 </Link>
               </DropdownMenuItem>
 
-              <DropdownMenuItem
-                className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium"
-                onSelect={() => {
-                  setTimeout(() => setIsThemeSelectorOpen(true), 50);
-                }}
-              >
-                <Palette className="size-4 shrink-0 text-primary" />
-                <span>Aparência</span>
-              </DropdownMenuItem>
-
+              {/* Calendário (depois do Dashboard) */}
               <DropdownMenuItem asChild className="cursor-pointer gap-2.5 p-2 rounded-lg text-xs font-medium">
-                <Link href="/settings">
-                  <Settings className="size-4 shrink-0 text-muted-foreground" />
-                  <span>Configurações Admin</span>
+                <Link href="/projects/calendar">
+                  <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+                  <span>Calendário</span>
                 </Link>
               </DropdownMenuItem>
 
@@ -889,50 +955,88 @@ export function AppHeader({
 
               {isPreferencesOpen && (
                 <div
-                  className="mx-1 my-1 p-2.5 rounded-lg bg-muted/40 border border-border/50 space-y-2 text-xs animate-in fade-in-50 duration-150"
+                  className="mx-1 my-1 p-2 rounded-lg bg-muted/40 border border-border/50 space-y-2 text-xs animate-in fade-in-50 duration-150"
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
                   onKeyDown={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-center justify-between gap-2.5">
-                    <label htmlFor="only-my-managements" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
-                      Ver somente gestões que faço parte
-                    </label>
-                    <Switch
-                      id="only-my-managements"
-                      checked={onlyMyManagements}
-                      onCheckedChange={onOnlyMyManagementsChange}
-                    />
+                  {/* Minha Conta, Aparência e Configurações Admin dentro de Preferências */}
+                  <div className="space-y-0.5">
+                    <Link
+                      href="/settings/account"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                      onClick={() => setIsPreferencesOpen(false)}
+                    >
+                      <UserRound className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span>Minha Conta</span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors text-left cursor-pointer"
+                      onClick={() => {
+                        setIsPreferencesOpen(false);
+                        setTimeout(() => setIsThemeSelectorOpen(true), 50);
+                      }}
+                    >
+                      <Palette className="size-3.5 shrink-0 text-primary" />
+                      <span>Aparência</span>
+                    </button>
+
+                    <Link
+                      href="/settings"
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                      onClick={() => setIsPreferencesOpen(false)}
+                    >
+                      <Settings className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span>Configurações Admin</span>
+                    </Link>
                   </div>
-                  <div className="flex items-center justify-between gap-2.5">
-                    <label htmlFor="only-my-projects" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
-                      Ver somente projetos que faço parte
-                    </label>
-                    <Switch
-                      id="only-my-projects"
-                      checked={onlyMyProjects}
-                      onCheckedChange={onOnlyMyProjectsChange}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-2.5">
-                    <label htmlFor="only-my-tasks" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
-                      Ver somente tarefas que sou responsável
-                    </label>
-                    <Switch
-                      id="only-my-tasks"
-                      checked={onlyMyTasks}
-                      onCheckedChange={onOnlyMyTasksChange}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-2.5">
-                    <label htmlFor="only-my-task-notifications" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
-                      Notificações somente de tarefas que faço parte
-                    </label>
-                    <Switch
-                      id="only-my-task-notifications"
-                      checked={onlyMyTaskNotifications}
-                      onCheckedChange={onOnlyMyTaskNotificationsChange}
-                    />
+
+                  <div className="h-px bg-border/60 my-1" />
+
+                  {/* Switches de preferências de filtro */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2.5">
+                      <label htmlFor="only-my-managements" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                        Ver somente gestões que faço parte
+                      </label>
+                      <Switch
+                        id="only-my-managements"
+                        checked={onlyMyManagements}
+                        onCheckedChange={onOnlyMyManagementsChange}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2.5">
+                      <label htmlFor="only-my-projects" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                        Ver somente projetos que faço parte
+                      </label>
+                      <Switch
+                        id="only-my-projects"
+                        checked={onlyMyProjects}
+                        onCheckedChange={onOnlyMyProjectsChange}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2.5">
+                      <label htmlFor="only-my-tasks" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                        Ver somente tarefas que sou responsável
+                      </label>
+                      <Switch
+                        id="only-my-tasks"
+                        checked={onlyMyTasks}
+                        onCheckedChange={onOnlyMyTasksChange}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2.5">
+                      <label htmlFor="only-my-task-notifications" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none">
+                        Notificações somente de tarefas que faço parte
+                      </label>
+                      <Switch
+                        id="only-my-task-notifications"
+                        checked={onlyMyTaskNotifications}
+                        onCheckedChange={onOnlyMyTaskNotificationsChange}
+                      />
+                    </div>
                   </div>
                 </div>
               )}

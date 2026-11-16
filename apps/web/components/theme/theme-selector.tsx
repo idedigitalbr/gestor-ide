@@ -146,7 +146,7 @@ export function ThemeSelector({
       role="dialog"
       aria-label="Aparência"
       className={cn(
-        "fixed z-[100] flex h-[240px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl",
+        "fixed z-[100] flex h-[80vh] min-h-[460px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl",
         position === "top-right"
           ? "top-[56px] right-[16px]"
           : position === "center"
@@ -322,7 +322,7 @@ export function ThemeSelector({
               <X className="size-3" />
             </Button>
           </div>
-          <div className="grid max-h-[175px] grid-cols-3 gap-x-1 gap-y-3 overflow-y-auto px-[7px] py-3">
+          <div className="grid max-h-[340px] grid-cols-3 gap-x-1 gap-y-3 overflow-y-auto px-[7px] py-3">
             {/* Opção Livre (Todas as cores com gradiente) */}
             <button
               type="button"
