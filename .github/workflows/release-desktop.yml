@@ -40,10 +40,15 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup Rust
+      - name: Setup Rust (Windows & Ubuntu)
+        if: matrix.platform != 'macos-latest'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust (macOS Universal)
+        if: matrix.platform == 'macos-latest'
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -60,8 +65,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: './apps/desktop'
-          tagName: ${{ github.ref_name != 'main' && github.ref_name || inputs.version || 'v0.1.0' }}
-          releaseName: 'IDE Gestor Desktop ${{ github.ref_name != 'main' && github.ref_name || inputs.version || 'v0.1.0' }}'
+          tagName: ${{ inputs.version || github.ref_name }}
+          releaseName: 'IDE Gestor Desktop ${{ inputs.version || github.ref_name }}'
           releaseBody: |
             🚀 **IDE Gestor — Aplicativo Desktop Oficial**
             
