@@ -20,7 +20,6 @@ import {
   type TaskGroupBy,
   type CustomProjectView,
   type CustomViewOpenMode,
-  getDefaultProjectViews,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
@@ -394,58 +393,48 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    try {
-      const stored = localStorage.getItem(`gestor_custom_views_${selectedProjectId}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomViews(parsed);
-        } else {
-          setCustomViews(getDefaultProjectViews(selectedProjectId));
-        }
-      } else {
-        setCustomViews(getDefaultProjectViews(selectedProjectId));
-      }
-    } catch {
-      setCustomViews(getDefaultProjectViews(selectedProjectId));
-    }
+    // Limpa a lista anterior enquanto o cache IndexedDB/CRM responde
+    setCustomViews([]);
 
     let active = true;
     void ideCrmClient
       .listProjectCustomViews(selectedProjectId)
       .then(({ views }) => {
-        if (!active) return;
-        if (views && views.length > 0) {
+        if (active && views && views.length > 0) {
           setCustomViews(views);
-          try {
-            localStorage.setItem(
-              `gestor_custom_views_${selectedProjectId}`,
-              JSON.stringify(views)
-            );
-          } catch {}
         }
       })
-      .catch(() => {
-        void fetch(`/api/projects/${encodeURIComponent(selectedProjectId)}/views`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (!active) return;
-            if (data?.views && Array.isArray(data.views)) {
-              setCustomViews(data.views);
-              try {
-                localStorage.setItem(
-                  `gestor_custom_views_${selectedProjectId}`,
-                  JSON.stringify(data.views)
-                );
-              } catch {}
-            }
-          })
-          .catch(() => {});
-      });
+      .catch(() => {});
 
     return () => {
       active = false;
     };
+  }, [selectedProjectId]);
+
+  // Atualiza as visualizações quando o cache Local-First revalida as configurações
+  useEffect(() => {
+    if (!selectedProjectId) return;
+
+    function handleRevalidated(event: Event) {
+      const detail = (
+        event as CustomEvent<{
+          key?: string;
+          data?: { settings?: Record<string, unknown> };
+        }>
+      ).detail;
+      if (!detail?.key?.startsWith("crm_/settings")) return;
+
+      const map = detail.data?.settings?.projectCustomViews as
+        | Record<string, CustomProjectView[]>
+        | undefined;
+      const stored = map?.[selectedProjectId as string];
+      if (Array.isArray(stored) && stored.length > 0) {
+        setCustomViews(stored);
+      }
+    }
+
+    window.addEventListener("ide-crm:revalidated", handleRevalidated);
+    return () => window.removeEventListener("ide-crm:revalidated", handleRevalidated);
   }, [selectedProjectId]);
 
   const activeCustomView = useMemo(() => {
@@ -494,25 +483,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       }
 
       setCustomViews(nextList);
-      try {
-        localStorage.setItem(
-          `gestor_custom_views_${selectedProjectId}`,
-          JSON.stringify(nextList)
-        );
-      } catch {}
 
       try {
         await ideCrmClient.saveProjectCustomViews(selectedProjectId, nextList);
       } catch {}
-
-      void fetch(
-        `/api/projects/${encodeURIComponent(selectedProjectId)}/views`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ views: nextList }),
-        }
-      ).catch(() => {});
     },
     [selectedProjectId, customViews]
   );
@@ -522,12 +496,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       if (!selectedProjectId) return;
       const nextList = customViews.filter((v) => v.id !== viewId);
       setCustomViews(nextList);
-      try {
-        localStorage.setItem(
-          `gestor_custom_views_${selectedProjectId}`,
-          JSON.stringify(nextList)
-        );
-      } catch {}
       if (activeCustomViewId === viewId) {
         setActiveCustomViewId(null);
       }
@@ -536,11 +504,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       try {
         await ideCrmClient.deleteProjectCustomView(selectedProjectId, viewId);
       } catch {}
-
-      void fetch(
-        `/api/projects/${encodeURIComponent(selectedProjectId)}/views?viewId=${encodeURIComponent(viewId)}`,
-        { method: "DELETE" }
-      ).catch(() => {});
     },
     [selectedProjectId, customViews, activeCustomViewId]
   );
@@ -549,25 +512,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     async (newViews: CustomProjectView[]) => {
       if (!selectedProjectId) return;
       setCustomViews(newViews);
-      try {
-        localStorage.setItem(
-          `gestor_custom_views_${selectedProjectId}`,
-          JSON.stringify(newViews)
-        );
-      } catch {}
 
       try {
         await ideCrmClient.saveProjectCustomViews(selectedProjectId, newViews);
       } catch {}
-
-      void fetch(
-        `/api/projects/${encodeURIComponent(selectedProjectId)}/views`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ views: newViews }),
-        }
-      ).catch(() => {});
     },
     [selectedProjectId]
   );

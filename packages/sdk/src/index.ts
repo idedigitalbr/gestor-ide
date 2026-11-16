@@ -108,6 +108,8 @@ export class IdeCrmClient {
       void this.cache.invalidatePrefix("crm_/calendar");
     } else if (path.includes("/account") || path.includes("/auth")) {
       void this.cache.clear();
+    } else if (path.includes("/settings")) {
+      void this.cache.invalidatePrefix("crm_/settings");
     }
   }
 
@@ -373,11 +375,13 @@ export class IdeCrmClient {
         ...currentMap,
         [projectId]: sanitizedViews,
       };
-      await this.saveSettings({
+      const updatedSettings = {
         ...settings,
         projectCustomViews: updatedMap,
-      });
-      void this.cache.invalidatePrefix(`crm_/projects`);
+      };
+      await this.saveSettings(updatedSettings);
+      // Mantém o cache Local-First (RAM + IndexedDB) alinhado ao CRM
+      void this.cache.set("crm_/settings", { settings: updatedSettings });
     } catch (err) {
       console.warn("Aviso ao persistir visualizações no CRM Settings:", err);
     }
