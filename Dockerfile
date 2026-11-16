@@ -12,16 +12,17 @@ COPY packages/sdk/package.json ./packages/sdk/
 COPY packages/ui/package.json ./packages/ui/
 COPY apps/api/package.json ./apps/api/
 COPY apps/worker/package.json ./apps/worker/
+COPY apps/desktop/package.json ./apps/desktop/
 
 RUN bun install --frozen-lockfile
 
 # Copiar todo o código-fonte
 COPY . .
 
-# Build de produção do Next.js
+# Build de produção do Next.js (apenas web e seus pacotes de dependência)
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN bun run build
+RUN bun run build --filter=web...
 
 # Runner stage limpo
 FROM oven/bun:1-slim AS runner

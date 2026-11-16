@@ -16,6 +16,15 @@ import {
   Play,
   Clock,
   CircleDot,
+  ArrowUpDown,
+  SlidersHorizontal,
+  Layers,
+  LayoutGrid,
+  List,
+  RotateCcw,
+  Check,
+  X,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MemberAvatarGroup } from "@/components/member-avatar-group";
@@ -29,8 +38,30 @@ import {
 } from "@/components/members-dialog";
 import {
   stripProjectPrefix,
+  PROJECT_STATUS_LABELS,
   type ListDisplayMode,
 } from "@/lib/list-view-options";
+import {
+  type ProjectSortOption,
+  PROJECT_SORT_LABELS,
+  type ProjectFilters,
+  DEFAULT_PROJECT_FILTERS,
+  type ProjectGroupBy,
+  PROJECT_GROUP_LABELS,
+  filterProjects,
+  sortProjects,
+  countActiveProjectFilters,
+  extractProjectTags,
+} from "@/lib/organization-options";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
   KanbanGhostCard,
@@ -44,8 +75,15 @@ interface ManagementProjectsViewProps {
   statusFilter: string;
   viewMode: ListDisplayMode;
   onViewModeChange?: (mode: ListDisplayMode) => void;
-  cardColumns?: 4 | 5;
-  onCardColumnsChange?: (cols: 4 | 5) => void;
+  cardColumns?: 3 | 4 | 5;
+  onCardColumnsChange?: (cols: 3 | 4 | 5) => void;
+  sortOption?: ProjectSortOption;
+  onSortOptionChange?: (sort: ProjectSortOption) => void;
+  filters?: ProjectFilters;
+  onFiltersChange?: (filters: ProjectFilters) => void;
+  groupBy?: ProjectGroupBy;
+  onGroupByChange?: (groupBy: ProjectGroupBy) => void;
+  onResetSettings?: () => void;
   management: CrmProjectManagement;
   projects: CrmProject[];
   tasks: Task[];
@@ -197,7 +235,16 @@ export function ManagementProjectsView({
   search,
   statusFilter,
   viewMode,
+  onViewModeChange,
   cardColumns = 4,
+  onCardColumnsChange,
+  sortOption = "none",
+  onSortOptionChange,
+  filters,
+  onFiltersChange,
+  groupBy = "none",
+  onGroupByChange,
+  onResetSettings,
   management,
   projects,
   tasks,
@@ -223,6 +270,7 @@ export function ManagementProjectsView({
   const [localRoleOverrides, setLocalRoleOverrides] = useState<Map<string, string>>(new Map());
   const [removedUserIds, setRemovedUserIds] = useState<Set<string>>(new Set());
   const [optimisticAddedMembers, setOptimisticAddedMembers] = useState<TeamMemberItem[]>([]);
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
 
   // Status atual da gestão
   const [currentStatus, setCurrentStatus] = useState<string>("Ativa");
@@ -264,23 +312,88 @@ export function ManagementProjectsView({
     return map;
   }, [managementProjects, tasks]);
 
-  // Filtragem local conforme pesquisa e status
+  // Filtros efetivos combinando prop filters com fallback em statusFilter
+  const effectiveFilters = useMemo<ProjectFilters>(() => {
+    if (filters) return filters;
+    return {
+      ...DEFAULT_PROJECT_FILTERS,
+      status: statusFilter || "all",
+    };
+  }, [filters, statusFilter]);
+
+  // Filtragem e ordenação local compartilhada
   const filteredProjects = useMemo(() => {
-    return managementProjects.filter((project) => {
-      const matchesSearch =
-        search === "" ||
-        project.name.toLowerCase().includes(search.toLowerCase()) ||
-        (project.description && project.description.toLowerCase().includes(search.toLowerCase())) ||
-        (project.code && project.code.toLowerCase().includes(search.toLowerCase()));
+    return filterProjects(managementProjects, effectiveFilters, search, projectTaskStats);
+  }, [managementProjects, effectiveFilters, search, projectTaskStats]);
 
-      const matchesStatus =
-        statusFilter === "all" ||
-        project.status === statusFilter ||
-        (statusFilter === "active" && (!project.status || project.status === "active"));
+  const sortedProjects = useMemo(() => {
+    return sortProjects(filteredProjects, sortOption, projectTaskStats);
+  }, [filteredProjects, sortOption, projectTaskStats]);
 
-      return matchesSearch && matchesStatus;
-    });
-  }, [managementProjects, search, statusFilter]);
+  const activeFiltersCount = useMemo(() => {
+    return countActiveProjectFilters(effectiveFilters);
+  }, [effectiveFilters]);
+
+  const availableTags = useMemo(() => {
+    return extractProjectTags(managementProjects);
+  }, [managementProjects]);
+
+  const gridColsClass = useMemo(() => {
+    if (cardColumns === 3) {
+      return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+    }
+    if (cardColumns === 5) {
+      return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5";
+    }
+    return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+  }, [cardColumns]);
+
+  // Agrupamento de projetos
+  const groupedSections = useMemo(() => {
+    if (groupBy === "none") return null;
+
+    if (groupBy === "status") {
+      const order = ["active", "in_progress", "planning", "paused", "completed"];
+      const labels: Record<string, string> = {
+        active: "Ativo",
+        in_progress: "Em andamento",
+        planning: "Planejamento",
+        paused: "Pausado",
+        completed: "Concluído",
+      };
+      const groups: { key: string; label: string; items: CrmProject[] }[] = [];
+      for (const st of order) {
+        const items = sortedProjects.filter((p) => {
+          const s = (p.status || "active").toLowerCase();
+          return s === st;
+        });
+        if (items.length > 0) {
+          groups.push({ key: st, label: labels[st] || st, items });
+        }
+      }
+      return groups;
+    }
+
+    if (groupBy === "priority") {
+      const order = ["urgent", "high", "medium", "low"];
+      const labels: Record<string, string> = {
+        urgent: "Urgente",
+        high: "Alta",
+        medium: "Média",
+        low: "Baixa",
+      };
+      const groups: { key: string; label: string; items: CrmProject[] }[] = [];
+      for (const pr of order) {
+        const items = sortedProjects.filter((p) => (p.priority || "medium").toLowerCase() === pr);
+        if (items.length > 0) {
+          groups.push({ key: pr, label: labels[pr] || pr, items });
+        }
+      }
+      return groups;
+    }
+
+    return null;
+  }, [sortedProjects, groupBy]);
 
   // Resolução unificada de integrantes com mutações locais
   const resolvedMembers = useMemo<TeamMemberItem[]>(() => {
@@ -551,10 +664,480 @@ export function ManagementProjectsView({
       />
 
       {/* ========================================================================= */}
-      {/* 2. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
+      {/* 2. BARRA DE FERRAMENTAS CLICKUP/NOTION: Ordenar, Filtros, Agrupar, Layout */}
+      {/* ========================================================================= */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl border border-border/70 bg-card/60 backdrop-blur-xs">
+        {/* Lado Esquerdo: Controles Rápidos */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* 1. Botão Ordenar */}
+          {onSortOptionChange && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2.5 gap-1.5 text-xs rounded-lg cursor-pointer transition-colors border-border/70",
+                    sortOption !== "none" && "bg-accent font-semibold text-primary border-primary/40"
+                  )}
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="truncate max-w-[140px]">
+                    {sortOption !== "none" ? PROJECT_SORT_LABELS[sortOption] : "Ordenar"}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-60">
+                <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Organizar projetos por
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(Object.entries(PROJECT_SORT_LABELS) as [ProjectSortOption, string][]).map(([key, label]) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onClick={() => onSortOptionChange(key)}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer",
+                      sortOption === key && "font-semibold text-primary"
+                    )}
+                  >
+                    <span>{label}</span>
+                    {sortOption === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* 2. Botão Filtros */}
+          {onFiltersChange && (
+            <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2.5 gap-1.5 text-xs rounded-lg cursor-pointer transition-colors border-border/70",
+                    activeFiltersCount > 0 && "bg-accent font-semibold text-primary border-primary/40"
+                  )}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Filtros</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-primary/15 text-primary text-[10px] font-mono font-bold">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                  <ChevronDown className="w-3 h-3 text-muted-foreground opacity-70" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 sm:w-80 rounded-xl p-3 shadow-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold text-foreground">Filtros de projetos</span>
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onFiltersChange(DEFAULT_PROJECT_FILTERS)}
+                      className="text-[11px] text-primary hover:underline cursor-pointer"
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {/* Status */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Status
+                    </label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { value: "all", label: "Todos" },
+                        { value: "active", label: "Ativo" },
+                        { value: "in_progress", label: "Em andamento" },
+                        { value: "planning", label: "Planejamento" },
+                        { value: "paused", label: "Pausado" },
+                        { value: "completed", label: "Concluído" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFiltersChange({
+                              ...effectiveFilters,
+                              status: opt.value,
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                            effectiveFilters.status === opt.value &&
+                              "bg-accent font-semibold border-primary/50 text-primary"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Prioridade */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Prioridade
+                    </label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { value: "all", label: "Todas" },
+                        { value: "urgent", label: "Urgente" },
+                        { value: "high", label: "Alta" },
+                        { value: "medium", label: "Média" },
+                        { value: "low", label: "Baixa" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFiltersChange({
+                              ...effectiveFilters,
+                              priority: opt.value,
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                            effectiveFilters.priority === opt.value &&
+                              "bg-accent font-semibold border-primary/50 text-primary"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Prazo */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Prazo / Vencimento
+                    </label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { value: "all", label: "Todos os prazos" },
+                        { value: "overdue", label: "Atrasados" },
+                        { value: "today", label: "Vence hoje" },
+                        { value: "week", label: "Esta semana" },
+                        { value: "month", label: "Este mês" },
+                        { value: "no_date", label: "Sem prazo" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFiltersChange({
+                              ...effectiveFilters,
+                              dueDateRange: opt.value,
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                            effectiveFilters.dueDateRange === opt.value &&
+                              "bg-accent font-semibold border-primary/50 text-primary"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Escopo de Tarefas */}
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Tarefas vinculadas
+                    </label>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { value: "all", label: "Todos" },
+                        { value: "with_tasks", label: "Com tarefas" },
+                        { value: "without_tasks", label: "Sem tarefas" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFiltersChange({
+                              ...effectiveFilters,
+                              hasTasks: opt.value,
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-1 text-center rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                            effectiveFilters.hasTasks === opt.value &&
+                              "bg-accent font-semibold border-primary/50 text-primary"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  {availableTags.length > 0 && (
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                        Tags / Categorias
+                      </label>
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onFiltersChange({
+                              ...effectiveFilters,
+                              tag: "all",
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                            effectiveFilters.tag === "all" &&
+                              "bg-primary text-primary-foreground font-semibold border-primary"
+                          )}
+                        >
+                          Todas
+                        </button>
+                        {availableTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() =>
+                              onFiltersChange({
+                                ...effectiveFilters,
+                                tag: effectiveFilters.tag === tag ? "all" : tag,
+                              })
+                            }
+                            className={cn(
+                              "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                              effectiveFilters.tag === tag &&
+                                "bg-primary text-primary-foreground font-semibold border-primary"
+                            )}
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* 3. Botão Agrupar */}
+          {onGroupByChange && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-2.5 gap-1.5 text-xs rounded-lg cursor-pointer transition-colors border-border/70",
+                    groupBy !== "none" && "bg-accent font-semibold text-primary border-primary/40"
+                  )}
+                >
+                  <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>{groupBy !== "none" ? PROJECT_GROUP_LABELS[groupBy] : "Agrupar"}</span>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  Agrupar projetos por
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(Object.entries(PROJECT_GROUP_LABELS) as [ProjectGroupBy, string][]).map(([key, label]) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onClick={() => onGroupByChange(key)}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer",
+                      groupBy === key && "font-semibold text-primary"
+                    )}
+                  >
+                    <span>{label}</span>
+                    {groupBy === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Lado Direito: Layout e Colunas */}
+        <div className="flex items-center gap-1.5">
+          {viewMode === "cards" && onCardColumnsChange && (
+            <div className="hidden sm:flex items-center rounded-lg border border-border/60 p-0.5 bg-muted/40">
+              {([3, 4, 5] as const).map((col) => (
+                <button
+                  key={col}
+                  type="button"
+                  onClick={() => onCardColumnsChange(col)}
+                  className={cn(
+                    "px-2 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer",
+                    cardColumns === col
+                      ? "bg-background text-foreground shadow-2xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title={`Exibir em ${col} colunas`}
+                >
+                  {col}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {onViewModeChange && (
+            <div className="flex items-center rounded-lg border border-border/60 p-0.5 bg-muted/40">
+              <button
+                type="button"
+                onClick={() => onViewModeChange("cards")}
+                className={cn(
+                  "p-1.5 rounded transition-colors cursor-pointer",
+                  viewMode === "cards"
+                    ? "bg-background text-foreground shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Visualização em Cards"
+                aria-label="Visualização em Cards"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange("list")}
+                className={cn(
+                  "p-1.5 rounded transition-colors cursor-pointer",
+                  viewMode === "list"
+                    ? "bg-background text-foreground shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Visualização em Lista"
+                aria-label="Visualização em Lista"
+              >
+                <List className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Badges de Filtros e Ordenação Ativos */}
+      {(sortOption !== "none" || activeFiltersCount > 0 || groupBy !== "none") && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1 text-xs">
+          <span className="text-[11px] text-muted-foreground">Filtros ativos:</span>
+
+          {sortOption !== "none" && (
+            <button
+              type="button"
+              onClick={() => onSortOptionChange?.("none")}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+              <span>Ordenar: {PROJECT_SORT_LABELS[sortOption]}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {effectiveFilters.status !== "all" && (
+            <button
+              type="button"
+              onClick={() => onFiltersChange?.({ ...effectiveFilters, status: "all" })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <span>Status: {effectiveFilters.status}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {effectiveFilters.priority !== "all" && (
+            <button
+              type="button"
+              onClick={() => onFiltersChange?.({ ...effectiveFilters, priority: "all" })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <span>Prioridade: {effectiveFilters.priority}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {effectiveFilters.dueDateRange !== "all" && (
+            <button
+              type="button"
+              onClick={() => onFiltersChange?.({ ...effectiveFilters, dueDateRange: "all" })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <span>Prazo: {effectiveFilters.dueDateRange}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {effectiveFilters.hasTasks !== "all" && (
+            <button
+              type="button"
+              onClick={() => onFiltersChange?.({ ...effectiveFilters, hasTasks: "all" })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <span>{effectiveFilters.hasTasks === "with_tasks" ? "Com tarefas" : "Sem tarefas"}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {effectiveFilters.tag !== "all" && (
+            <button
+              type="button"
+              onClick={() => onFiltersChange?.({ ...effectiveFilters, tag: "all" })}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <span>Tag: #{effectiveFilters.tag}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          {groupBy !== "none" && (
+            <button
+              type="button"
+              onClick={() => onGroupByChange?.("none")}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent border border-border/80 text-[11px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+            >
+              <Layers className="w-3 h-3 text-muted-foreground" />
+              <span>Agrupamento: {PROJECT_GROUP_LABELS[groupBy]}</span>
+              <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              onSortOptionChange?.("none");
+              onFiltersChange?.(DEFAULT_PROJECT_FILTERS);
+              onGroupByChange?.("none");
+              onResetSettings?.();
+            }}
+            className="text-[11px] text-destructive hover:underline ml-1 cursor-pointer font-medium"
+          >
+            Limpar tudo
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. CONTAINER DE PROJETOS DA GESTÃO: EXATAMENTE IGUAL AO PRINT 3           */}
       {/* ========================================================================= */}
       <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xl space-y-3">
-        {filteredProjects.length === 0 ? (
+        {sortedProjects.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-12 text-center bg-card/40">
             <Folder className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-60" />
             <h3 className="text-sm font-semibold text-foreground mb-1">
@@ -616,7 +1199,7 @@ export function ManagementProjectsView({
             </div>
 
             {/* Linhas dos Projetos formatadas como na tabela de tarefas do Print 3 */}
-            {filteredProjects.map((project) => {
+            {sortedProjects.map((project) => {
               const projectColor = project.color || "var(--primary)";
               const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
               const projMembers = project.members ?? [];
@@ -754,14 +1337,7 @@ export function ManagementProjectsView({
               ref={gridContainerRef}
               className="relative"
             >
-              <div
-                className={cn(
-                  "grid gap-3.5",
-                  cardColumns === 5
-                    ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5"
-                    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
-                )}
-              >
+              <div className={cn("grid gap-3.5", gridColsClass)}>
                 {/* Se o skeleton grande foi expandido na posição 0 (antes do primeiro card) */}
                 {expandedIndex === 0 && canWrite && onCreateProject && (
                   <div
@@ -786,7 +1362,7 @@ export function ManagementProjectsView({
                   </div>
                 )}
 
-                {filteredProjects.map((project, index) => {
+                {sortedProjects.map((project, index) => {
                   const projectColor = project.color || "var(--primary)";
                   const stats = projectTaskStats.get(project.id) || { total: 0, completed: 0 };
                   const taskCount = stats.total || project._count?.tasks || 0;
@@ -898,7 +1474,7 @@ export function ManagementProjectsView({
                 {expandedIndex === null && canWrite && onCreateProject && (
                   <div
                     onClick={onCreateProject}
-                    onMouseEnter={() => startDwell(filteredProjects.length)}
+                    onMouseEnter={() => startDwell(sortedProjects.length)}
                     onMouseLeave={cancelDwell}
                     className="min-h-[190px] h-full rounded-xl border border-dashed border-border/30 hover:border-border/60 hover:bg-card/30 transition-all duration-200 flex items-center justify-center cursor-pointer group/ghostslot opacity-40 hover:opacity-100 select-none"
                   >

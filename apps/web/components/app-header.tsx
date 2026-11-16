@@ -423,10 +423,8 @@ export function AppHeader({
             />
           </div>
 
-          {/* Divisor vertical "|" - exibido apenas quando houver botões de ferramentas intermediários */}
-          {(isInsideProject || Boolean(selectedManagementId)) && (
-            <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
-          )}
+          {/* Divisor vertical "|" - exibido sempre antes dos botões de ação do header */}
+          <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
 
           {!isProjectPage && isInsideProject && onOpenProjectMembers && (
             <HeaderTooltip label={`Membros do projeto (${projectMembersCount})`}>
@@ -446,42 +444,60 @@ export function AppHeader({
             </HeaderTooltip>
           )}
 
-          {/* Configurações da Visualização (Engrenagem) - Abre o Popover Completo do Anexo 2 */}
+          {/* Configurações da Visualização (Engrenagem) - Popover Unificado para Gestões, Projetos e Tarefas */}
           {isProjectPage ? (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização"><Settings className="w-4 h-4" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end"><DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}><Copy className="w-3.5 h-3.5" /> Copiar link da visualização</DropdownMenuItem></DropdownMenuContent>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização">
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}>
+                  <Copy className="w-3.5 h-3.5" /> Copiar link da visualização
+                </DropdownMenuItem>
+              </DropdownMenuContent>
             </DropdownMenu>
-          ) : isInsideProject ? <Popover open={isSettingsPopoverOpen} onOpenChange={(open) => { setIsSettingsPopoverOpen(open); if (!open) setActiveSubView("main"); }}>
-            <HeaderTooltip label="Personalize as configurações da sua visualização">
-              <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer",
-                  isSettingsPopoverOpen && "bg-muted text-foreground ring-1 ring-border"
-                )}
-                aria-label="Personalize as configurações da sua visualização"
-                aria-expanded={isSettingsPopoverOpen}
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              </PopoverTrigger>
-            </HeaderTooltip>
+          ) : (
+            <Popover
+              open={isSettingsPopoverOpen}
+              onOpenChange={(open) => {
+                setIsSettingsPopoverOpen(open);
+                if (!open) setActiveSubView("main");
+              }}
+            >
+              <HeaderTooltip label="Personalize as configurações da sua visualização">
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer",
+                      isSettingsPopoverOpen && "bg-muted text-foreground ring-1 ring-border"
+                    )}
+                    aria-label="Personalize as configurações da sua visualização"
+                    aria-expanded={isSettingsPopoverOpen}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </PopoverTrigger>
+              </HeaderTooltip>
 
-            {/* Menu Dropdown idêntico ao Anexo 2 */}
               <PopoverContent
                 align="end"
                 collisionPadding={8}
                 aria-label="Personalizar visualização"
-                className="w-72 rounded-xl p-2 shadow-2xl"
+                className="w-72 sm:w-80 rounded-xl p-2 shadow-2xl"
               >
                 {activeSubView === "main" && (
                   <>
-                    {/* Header com X */}
+                    {/* Header com Título e X */}
                     <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
                       <span className="text-xs font-bold text-foreground">
-                        Personalizar visualização
+                        {isInsideProject
+                          ? "Personalizar tarefas"
+                          : selectedManagementId
+                          ? "Personalizar projetos"
+                          : "Personalizar gestões"}
                       </span>
                       <button
                         type="button"
@@ -492,110 +508,347 @@ export function AppHeader({
                       </button>
                     </div>
 
-                    <div className="border-b border-border px-2 py-2">
-                      <span className="text-xs font-semibold text-foreground">Visualizar em:</span>
-                      <div role="radiogroup" aria-label="Visualizar em" className="mt-1 space-y-0.5">
-                        {([ ["table", "Tabela"], ["kanban", "Kanban"], ["calendar", "Calendário"], ["gantt", "Gantt"], ["workload", "Carga de Trabalho"] ] as const).map(([mode, label]) => (
-                          <button key={mode} type="button" role="radio" aria-checked={viewMode === mode} onClick={() => { onViewModeChange?.(mode); setIsSettingsPopoverOpen(false); }} className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                            {label}{viewMode === mode && <Check className="h-3.5 w-3.5" />}
-                          </button>
-                        ))}
+                    {/* Modo de Visualização */}
+                    {isInsideProject ? (
+                      <div className="border-b border-border px-2 py-2">
+                        <span className="text-xs font-semibold text-foreground">Visualizar em:</span>
+                        <div role="radiogroup" aria-label="Visualizar em" className="mt-1 space-y-0.5">
+                          {([
+                            ["table", "Tabela"],
+                            ["kanban", "Kanban"],
+                            ["calendar", "Calendário"],
+                            ["gantt", "Gantt"],
+                            ["workload", "Carga de Trabalho"],
+                          ] as const).map(([mode, label]) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              role="radio"
+                              aria-checked={viewMode === mode}
+                              onClick={() => {
+                                onViewModeChange?.(mode);
+                                setIsSettingsPopoverOpen(false);
+                              }}
+                              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {label}
+                              {viewMode === mode && <Check className="h-3.5 w-3.5 text-primary" />}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="border-b border-border px-2 py-2 space-y-2">
+                        <div>
+                          <span className="text-xs font-semibold text-foreground">Visualizar em:</span>
+                          <div role="radiogroup" aria-label="Visualizar em" className="mt-1 grid grid-cols-2 gap-1">
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={listDisplayMode === "cards"}
+                              onClick={() => onListDisplayModeChange("cards")}
+                              className={cn(
+                                "flex items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground border border-border/60 hover:bg-accent",
+                                listDisplayMode === "cards" && "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              <span>Cards</span>
+                              {listDisplayMode === "cards" && <Check className="h-3.5 w-3.5 text-primary" />}
+                            </button>
+                            <button
+                              type="button"
+                              role="radio"
+                              aria-checked={listDisplayMode === "list"}
+                              onClick={() => onListDisplayModeChange("list")}
+                              className={cn(
+                                "flex items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-foreground border border-border/60 hover:bg-accent",
+                                listDisplayMode === "list" && "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              <span>Lista</span>
+                              {listDisplayMode === "list" && <Check className="h-3.5 w-3.5 text-primary" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {listDisplayMode === "cards" && onCardColumnsChange && (
+                          <div>
+                            <span className="text-[11px] font-medium text-muted-foreground">Colunas na grade:</span>
+                            <div className="mt-1 grid grid-cols-3 gap-1">
+                              {([3, 4, 5] as const).map((col) => (
+                                <button
+                                  key={col}
+                                  type="button"
+                                  onClick={() => onCardColumnsChange(col)}
+                                  className={cn(
+                                    "px-2 py-1 text-center rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                    cardColumns === col && "bg-primary text-primary-foreground font-semibold border-primary"
+                                  )}
+                                >
+                                  {col} cols
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Lista de Opções */}
                     <div className="py-1 space-y-0.5">
-                      {/* 1. Campos */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsSettingsPopoverOpen(false);
-                          onOpenFieldsModal?.();
-                        }}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Columns3 className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>Campos</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {visibleColumnsCount} exibido &gt;
-                        </span>
-                      </button>
+                      {isInsideProject ? (
+                        <>
+                          {/* 1. Campos */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsSettingsPopoverOpen(false);
+                              onOpenFieldsModal?.();
+                            }}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Columns3 className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Campos</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {visibleColumnsCount} exibido &gt;
+                            </span>
+                          </button>
 
-                      {/* 2. Filtro */}
-                      <button
-                        type="button"
-                        onClick={() => setActiveSubView("filtro")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>Filtro</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {activeFiltersCount > 0
-                            ? `${activeFiltersCount} ativo`
-                            : "Nenhum"}{" "}
-                          &gt;
-                        </span>
-                      </button>
+                          {/* 2. Organizar Tarefas */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("task-ordenar")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Organizar</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
+                              {TASK_SORT_LABELS[taskSort || "none"]} &gt;
+                            </span>
+                          </button>
 
-                      {/* 3. Grupo */}
-                      <button
-                        type="button"
-                        onClick={() => setActiveSubView("grupo")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>Grupo</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {groupByLabel} &gt;
-                        </span>
-                      </button>
+                          {/* 3. Filtro */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("filtro")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Filtro</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {activeFiltersCount > 0 ? `${activeFiltersCount} ativo` : "Nenhum"} &gt;
+                            </span>
+                          </button>
 
-                      {/* 4. Subtarefas */}
-                      <button
-                        type="button"
-                        onClick={() => setActiveSubView("subtarefas")}
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2">
-                          <SubtaskBranchIcon />
-                          <span>Subtarefas</span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {subtaskLabel} &gt;
-                        </span>
-                      </button>
+                          {/* 4. Grupo */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("grupo")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Grupo</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {groupByLabel} &gt;
+                            </span>
+                          </button>
 
-                      {/* 5. Tarefas Concluídas / Fechadas */}
-                      <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-foreground">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>Tarefas concluídas</span>
-                        </div>
-                        <Switch
-                          checked={showClosedTasks}
-                          onCheckedChange={(checked) =>
-                            onToggleShowClosedTasks?.(checked)
-                          }
-                        />
-                      </div>
+                          {/* 5. Subtarefas */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("subtarefas")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <SubtaskBranchIcon />
+                              <span>Subtarefas</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {subtaskLabel} &gt;
+                            </span>
+                          </button>
+
+                          {/* 6. Tarefas Concluídas */}
+                          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-foreground">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Tarefas concluídas</span>
+                            </div>
+                            <Switch
+                              checked={showClosedTasks}
+                              onCheckedChange={(checked) => onToggleShowClosedTasks?.(checked)}
+                            />
+                          </div>
+                        </>
+                      ) : selectedManagementId ? (
+                        <>
+                          {/* Projetos: Organizar */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("proj-ordenar")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Organizar</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate max-w-[130px]">
+                              {PROJECT_SORT_LABELS[projectSort || "none"]} &gt;
+                            </span>
+                          </button>
+
+                          {/* Projetos: Filtros */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("proj-filtros")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Filtros</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {activeProjFiltersCount > 0 ? `${activeProjFiltersCount} ativo` : "Nenhum"} &gt;
+                            </span>
+                          </button>
+
+                          {/* Projetos: Agrupar */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("proj-agrupar")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Agrupar</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {PROJECT_GROUP_LABELS[projectGroupBy || "none"]} &gt;
+                            </span>
+                          </button>
+
+                          {/* Projetos: Somente meus projetos */}
+                          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-foreground">
+                            <div className="flex items-center gap-2">
+                              <UserRound className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Meus projetos</span>
+                            </div>
+                            <Switch
+                              checked={onlyMyProjects}
+                              onCheckedChange={(checked) => onOnlyMyProjectsChange?.(checked)}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {/* Gestões (Nível 1): Organizar */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("mgmt-ordenar")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Organizar</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground truncate max-w-[130px]">
+                              {MANAGEMENT_SORT_LABELS[managementSort || "none"]} &gt;
+                            </span>
+                          </button>
+
+                          {/* Gestões: Filtros */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("mgmt-filtros")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Filtros</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {activeMgmtFiltersCount > 0 ? `${activeMgmtFiltersCount} ativo` : "Nenhum"} &gt;
+                            </span>
+                          </button>
+
+                          {/* Gestões: Agrupar */}
+                          <button
+                            type="button"
+                            onClick={() => setActiveSubView("mgmt-agrupar")}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Agrupar</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">
+                              {MANAGEMENT_GROUP_LABELS[managementGroupBy || "none"]} &gt;
+                            </span>
+                          </button>
+
+                          {/* Gestões: Somente minhas gestões */}
+                          <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-foreground">
+                            <div className="flex items-center gap-2">
+                              <UserRound className="w-3.5 h-3.5 text-muted-foreground" />
+                              <span>Minhas gestões</span>
+                            </div>
+                            <Switch
+                              checked={onlyMyManagements}
+                              onCheckedChange={(checked) => onOnlyMyManagementsChange?.(checked)}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Ações Inferiores */}
                     <div className="border-t border-border pt-1 mt-1 space-y-0.5">
+                      {!isInsideProject && selectedManagementId && (
+                        (projectSort !== "none" || activeProjFiltersCount > 0 || projectGroupBy !== "none") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onResetProjectSettings?.();
+                              setIsSettingsPopoverOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Limpar filtros e ordenação</span>
+                          </button>
+                        )
+                      )}
+
+                      {!isInsideProject && !selectedManagementId && (
+                        (managementSort !== "none" || activeMgmtFiltersCount > 0 || managementGroupBy !== "none") && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onResetManagementSettings?.();
+                              setIsSettingsPopoverOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Limpar filtros e ordenação</span>
+                          </button>
+                        )
+                      )}
+
                       {/* Copiar link */}
                       <button
                         type="button"
                         onClick={() => {
                           if (typeof window !== "undefined") {
-                            void navigator.clipboard.writeText(
-                              window.location.href
-                            );
+                            void navigator.clipboard.writeText(window.location.href);
                           }
                           setIsSettingsPopoverOpen(false);
                         }}
@@ -605,23 +858,643 @@ export function AppHeader({
                         <span>Copiar link da visualização</span>
                       </button>
 
-                      {/* Exportar visualização */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          exportTasksToCsv(tasks);
-                          setIsSettingsPopoverOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span>Exportar visualização</span>
-                      </button>
+                      {/* Exportar visualização (somente dentro de projeto com tarefas) */}
+                      {isInsideProject && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            exportTasksToCsv(tasks);
+                            setIsSettingsPopoverOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>Exportar visualização</span>
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
 
-                {/* Sub-view: Grupo */}
+                {/* Sub-view: Organizar Tarefas */}
+                {activeSubView === "task-ordenar" && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubView("main")}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-foreground">
+                        Organizar tarefas por
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-0.5 max-h-64 overflow-y-auto">
+                      {(Object.entries(TASK_SORT_LABELS) as [TaskSortOption, string][]).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onTaskSortChange?.(key);
+                            setActiveSubView("main");
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                            taskSort === key
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {taskSort === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Organizar Gestões */}
+                {activeSubView === "mgmt-ordenar" && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubView("main")}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-foreground">
+                        Organizar gestões por
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-0.5 max-h-64 overflow-y-auto">
+                      {(Object.entries(MANAGEMENT_SORT_LABELS) as [ManagementSortOption, string][]).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onManagementSortChange?.(key);
+                            setActiveSubView("main");
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                            managementSort === key
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {managementSort === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Filtros de Gestões */}
+                {activeSubView === "mgmt-filtros" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1 py-1.5 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubView("main")}
+                          className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-xs font-bold text-foreground">
+                          Filtros de gestões
+                        </span>
+                      </div>
+                      {activeMgmtFiltersCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onManagementFiltersChange?.(DEFAULT_MANAGEMENT_FILTERS)}
+                          className="text-[11px] text-primary hover:underline cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="py-1 space-y-3 max-h-72 overflow-y-auto pr-1">
+                      {/* Visibilidade */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Visibilidade
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Todas" },
+                            { value: "company", label: "Empresa" },
+                            { value: "unit", label: "Unidade" },
+                            { value: "team", label: "Equipe" },
+                            { value: "private", label: "Privada" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onManagementFiltersChange?.({
+                                  ...managementFilters,
+                                  visibility: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                managementFilters.visibility === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Status
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Todos" },
+                            { value: "active", label: "Ativa" },
+                            { value: "in_progress", label: "Fazendo agora" },
+                            { value: "paused", label: "Pausada" },
+                            { value: "completed", label: "Concluída" },
+                            { value: "archived", label: "Arquivada" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onManagementFiltersChange?.({
+                                  ...managementFilters,
+                                  status: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                managementFilters.status === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Data de criação */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Data de criação
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Qualquer data" },
+                            { value: "today", label: "Criada hoje" },
+                            { value: "week", label: "Esta semana" },
+                            { value: "month", label: "Este mês" },
+                            { value: "year", label: "Este ano" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onManagementFiltersChange?.({
+                                  ...managementFilters,
+                                  dateRange: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                managementFilters.dateRange === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Escopo de Projetos */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Projetos vinculados
+                        </label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[
+                            { value: "all", label: "Todas" },
+                            { value: "with_projects", label: "Com proj." },
+                            { value: "without_projects", label: "Sem proj." },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onManagementFiltersChange?.({
+                                  ...managementFilters,
+                                  hasProjects: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-center rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                managementFilters.hasProjects === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      {availableMgmtTags.length > 0 && (
+                        <div>
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                            Tags / Categorias
+                          </label>
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onManagementFiltersChange?.({
+                                  ...managementFilters,
+                                  tag: "all",
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                                managementFilters.tag === "all" &&
+                                  "bg-primary text-primary-foreground font-semibold border-primary"
+                              )}
+                            >
+                              Todas
+                            </button>
+                            {availableMgmtTags.map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() =>
+                                  onManagementFiltersChange?.({
+                                    ...managementFilters,
+                                    tag: managementFilters.tag === tag ? "all" : tag,
+                                  })
+                                }
+                                className={cn(
+                                  "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                                  managementFilters.tag === tag &&
+                                    "bg-primary text-primary-foreground font-semibold border-primary"
+                                )}
+                              >
+                                #{tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Agrupar Gestões */}
+                {activeSubView === "mgmt-agrupar" && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubView("main")}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-foreground">
+                        Agrupar gestões por
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-0.5">
+                      {(Object.entries(MANAGEMENT_GROUP_LABELS) as [ManagementGroupBy, string][]).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onManagementGroupByChange?.(key);
+                            setActiveSubView("main");
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                            managementGroupBy === key
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {managementGroupBy === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Organizar Projetos */}
+                {activeSubView === "proj-ordenar" && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubView("main")}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-foreground">
+                        Organizar projetos por
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-0.5 max-h-64 overflow-y-auto">
+                      {(Object.entries(PROJECT_SORT_LABELS) as [ProjectSortOption, string][]).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onProjectSortChange?.(key);
+                            setActiveSubView("main");
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                            projectSort === key
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {projectSort === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Filtros de Projetos */}
+                {activeSubView === "proj-filtros" && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1 py-1.5 border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubView("main")}
+                          className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-xs font-bold text-foreground">
+                          Filtros de projetos
+                        </span>
+                      </div>
+                      {activeProjFiltersCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onProjectFiltersChange?.(DEFAULT_PROJECT_FILTERS)}
+                          className="text-[11px] text-primary hover:underline cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="py-1 space-y-3 max-h-72 overflow-y-auto pr-1">
+                      {/* Status */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Status
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Todos" },
+                            { value: "active", label: "Ativo" },
+                            { value: "in_progress", label: "Em andamento" },
+                            { value: "planning", label: "Planejamento" },
+                            { value: "paused", label: "Pausado" },
+                            { value: "completed", label: "Concluído" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onProjectFiltersChange?.({
+                                  ...projectFilters,
+                                  status: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                projectFilters.status === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Prioridade */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Prioridade
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Todas" },
+                            { value: "urgent", label: "Urgente" },
+                            { value: "high", label: "Alta" },
+                            { value: "medium", label: "Média" },
+                            { value: "low", label: "Baixa" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onProjectFiltersChange?.({
+                                  ...projectFilters,
+                                  priority: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                projectFilters.priority === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Prazo / Data de entrega */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Prazo / Vencimento
+                        </label>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[
+                            { value: "all", label: "Todos os prazos" },
+                            { value: "overdue", label: "Atrasados" },
+                            { value: "today", label: "Vence hoje" },
+                            { value: "week", label: "Esta semana" },
+                            { value: "month", label: "Este mês" },
+                            { value: "no_date", label: "Sem prazo" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onProjectFiltersChange?.({
+                                  ...projectFilters,
+                                  dueDateRange: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-left rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                projectFilters.dueDateRange === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Escopo de Tarefas */}
+                      <div>
+                        <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                          Tarefas vinculadas
+                        </label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[
+                            { value: "all", label: "Todos" },
+                            { value: "with_tasks", label: "Com tarefas" },
+                            { value: "without_tasks", label: "Sem tarefas" },
+                          ].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                onProjectFiltersChange?.({
+                                  ...projectFilters,
+                                  hasTasks: opt.value,
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-1 text-center rounded text-xs border border-border/60 hover:bg-accent transition-colors",
+                                projectFilters.hasTasks === opt.value &&
+                                  "bg-accent font-semibold border-primary/50 text-primary"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      {availableProjTags.length > 0 && (
+                        <div>
+                          <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                            Tags / Categorias
+                          </label>
+                          <div className="flex flex-wrap gap-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onProjectFiltersChange?.({
+                                  ...projectFilters,
+                                  tag: "all",
+                                })
+                              }
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                                projectFilters.tag === "all" &&
+                                  "bg-primary text-primary-foreground font-semibold border-primary"
+                              )}
+                            >
+                              Todas
+                            </button>
+                            {availableProjTags.map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() =>
+                                  onProjectFiltersChange?.({
+                                    ...projectFilters,
+                                    tag: projectFilters.tag === tag ? "all" : tag,
+                                  })
+                                }
+                                className={cn(
+                                  "px-2 py-0.5 rounded-full text-[11px] border border-border/60 hover:bg-accent transition-colors",
+                                  projectFilters.tag === tag &&
+                                    "bg-primary text-primary-foreground font-semibold border-primary"
+                                )}
+                              >
+                                #{tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Agrupar Projetos */}
+                {activeSubView === "proj-agrupar" && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
+                      <button
+                        type="button"
+                        onClick={() => setActiveSubView("main")}
+                        className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-xs font-bold text-foreground">
+                        Agrupar projetos por
+                      </span>
+                    </div>
+                    <div className="py-1 space-y-0.5">
+                      {(Object.entries(PROJECT_GROUP_LABELS) as [ProjectGroupBy, string][]).map(([key, label]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onProjectGroupByChange?.(key);
+                            setActiveSubView("main");
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left",
+                            projectGroupBy === key
+                              ? "bg-accent text-accent-foreground font-semibold"
+                              : "hover:bg-accent text-foreground"
+                          )}
+                        >
+                          <span>{label}</span>
+                          {projectGroupBy === key && <Check className="w-3.5 h-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-view: Grupo Tarefas */}
                 {activeSubView === "grupo" && (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
@@ -767,7 +1640,7 @@ export function AppHeader({
                   </div>
                 )}
 
-                {/* Sub-view: Filtro */}
+                {/* Sub-view: Filtro de Tarefas */}
                 {activeSubView === "filtro" && (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 px-1 py-1.5 border-b border-border">
@@ -791,44 +1664,8 @@ export function AppHeader({
                   </div>
                 )}
               </PopoverContent>
-          </Popover>
-
-          : selectedManagementId ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Configurações da visualização"><Settings className="w-4 h-4" /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Visualização</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={listDisplayMode} onValueChange={(value) => onListDisplayModeChange(value as ListDisplayMode)}>
-                  <DropdownMenuRadioItem value="cards">Cards</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="list">Lista</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                {listDisplayMode === "cards" && onCardColumnsChange && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuLabel>Colunas dos cards</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={String(cardColumns ?? 4)}
-                      onValueChange={(val) => onCardColumnsChange(Number(val) as 4 | 5)}
-                    >
-                      <DropdownMenuRadioItem value="4">4 colunas</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="5">5 colunas</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Status dos projetos</DropdownMenuLabel>
-                <DropdownMenuRadioGroup value={listFilter} onValueChange={onListFilterChange}>
-                  {Object.entries(PROJECT_STATUS_LABELS).map(([value, label]) => (
-                    <DropdownMenuRadioItem key={value} value={value}>{label}</DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => void navigator.clipboard.writeText(window.location.href)}><Copy className="w-3.5 h-3.5" /> Copiar link da visualização</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
+            </Popover>
+          )}
 
           {/* Botão Roxo ClickUp "+ Tarefa ▾" */}
           {!isProjectPage ? (isInsideProject ? <div className={cn("inline-flex items-center rounded-lg bg-primary text-primary-foreground shadow-xs transition-colors overflow-hidden ml-1", canWrite ? "hover:bg-primary/90" : "opacity-50")}>

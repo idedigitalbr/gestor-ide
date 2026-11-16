@@ -46,6 +46,18 @@ import { NewProjectDialog } from "@/components/new-project-dialog";
 import { NewManagementDialog } from "@/components/new-management-dialog";
 import type { ListDisplayMode } from "@/lib/list-view-options";
 import {
+  type ManagementSortOption,
+  type ManagementFilters,
+  DEFAULT_MANAGEMENT_FILTERS,
+  type ManagementGroupBy,
+  type ProjectSortOption,
+  type ProjectFilters,
+  DEFAULT_PROJECT_FILTERS,
+  type ProjectGroupBy,
+  type TaskSortOption,
+  sortTasks,
+} from "@/lib/organization-options";
+import {
   applyBatchTaskDragAndDrop,
   applyTaskDragAndDrop,
   type TaskDropMode,
@@ -130,20 +142,171 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
-  const [cardColumns, setCardColumns] = useState<4 | 5>(() => {
+  const [cardColumns, setCardColumns] = useState<3 | 4 | 5>(() => {
     if (typeof window === "undefined") return 4;
     try {
       const saved = localStorage.getItem("gestor_card_columns");
-      return saved === "5" ? 5 : 4;
+      if (saved === "3") return 3;
+      if (saved === "5") return 5;
+      return 4;
     } catch {
       return 4;
     }
   });
 
-  const handleCardColumnsChange = (cols: 4 | 5) => {
+  const handleCardColumnsChange = (cols: 3 | 4 | 5) => {
     setCardColumns(cols);
     try {
       localStorage.setItem("gestor_card_columns", String(cols));
+    } catch {}
+  };
+
+  // Estados de ordenação, filtros e agrupamento para Gestões
+  const [managementSort, setManagementSort] = useState<ManagementSortOption>(() => {
+    if (typeof window === "undefined") return "none";
+    try {
+      return (localStorage.getItem("gestor_management_sort") as ManagementSortOption) || "none";
+    } catch {
+      return "none";
+    }
+  });
+
+  const handleManagementSortChange = (sort: ManagementSortOption) => {
+    setManagementSort(sort);
+    try {
+      localStorage.setItem("gestor_management_sort", sort);
+    } catch {}
+  };
+
+  const [managementFilters, setManagementFilters] = useState<ManagementFilters>(() => {
+    if (typeof window === "undefined") return DEFAULT_MANAGEMENT_FILTERS;
+    try {
+      const saved = localStorage.getItem("gestor_management_filters");
+      return saved ? JSON.parse(saved) : DEFAULT_MANAGEMENT_FILTERS;
+    } catch {
+      return DEFAULT_MANAGEMENT_FILTERS;
+    }
+  });
+
+  const handleManagementFiltersChange = (newFilters: ManagementFilters) => {
+    setManagementFilters(newFilters);
+    if (newFilters.visibility !== managementVisibility) {
+      setManagementVisibility(newFilters.visibility);
+    }
+    try {
+      localStorage.setItem("gestor_management_filters", JSON.stringify(newFilters));
+    } catch {}
+  };
+
+  const [managementGroupBy, setManagementGroupBy] = useState<ManagementGroupBy>(() => {
+    if (typeof window === "undefined") return "none";
+    try {
+      return (localStorage.getItem("gestor_management_group_by") as ManagementGroupBy) || "none";
+    } catch {
+      return "none";
+    }
+  });
+
+  const handleManagementGroupByChange = (groupByOpt: ManagementGroupBy) => {
+    setManagementGroupBy(groupByOpt);
+    try {
+      localStorage.setItem("gestor_management_group_by", groupByOpt);
+    } catch {}
+  };
+
+  // Estados de ordenação, filtros e agrupamento para Projetos
+  const [projectSort, setProjectSort] = useState<ProjectSortOption>(() => {
+    if (typeof window === "undefined") return "none";
+    try {
+      return (localStorage.getItem("gestor_project_sort") as ProjectSortOption) || "none";
+    } catch {
+      return "none";
+    }
+  });
+
+  const handleProjectSortChange = (sort: ProjectSortOption) => {
+    setProjectSort(sort);
+    try {
+      localStorage.setItem("gestor_project_sort", sort);
+    } catch {}
+  };
+
+  const [projectFilters, setProjectFilters] = useState<ProjectFilters>(() => {
+    if (typeof window === "undefined") return DEFAULT_PROJECT_FILTERS;
+    try {
+      const saved = localStorage.getItem("gestor_project_filters");
+      return saved ? JSON.parse(saved) : DEFAULT_PROJECT_FILTERS;
+    } catch {
+      return DEFAULT_PROJECT_FILTERS;
+    }
+  });
+
+  const handleProjectFiltersChange = (newFilters: ProjectFilters) => {
+    setProjectFilters(newFilters);
+    if (newFilters.status !== projectStatus) {
+      setProjectStatus(newFilters.status);
+    }
+    try {
+      localStorage.setItem("gestor_project_filters", JSON.stringify(newFilters));
+    } catch {}
+  };
+
+  const [projectGroupBy, setProjectGroupBy] = useState<ProjectGroupBy>(() => {
+    if (typeof window === "undefined") return "none";
+    try {
+      return (localStorage.getItem("gestor_project_group_by") as ProjectGroupBy) || "none";
+    } catch {
+      return "none";
+    }
+  });
+
+  const handleProjectGroupByChange = (groupByOpt: ProjectGroupBy) => {
+    setProjectGroupBy(groupByOpt);
+    try {
+      localStorage.setItem("gestor_project_group_by", groupByOpt);
+    } catch {}
+  };
+
+  // Estado de ordenação para Tarefas
+  const [taskSort, setTaskSort] = useState<TaskSortOption>(() => {
+    if (typeof window === "undefined") return "none";
+    try {
+      return (localStorage.getItem("gestor_task_sort") as TaskSortOption) || "none";
+    } catch {
+      return "none";
+    }
+  });
+
+  const handleTaskSortChange = (sort: TaskSortOption) => {
+    setTaskSort(sort);
+    try {
+      localStorage.setItem("gestor_task_sort", sort);
+    } catch {}
+  };
+
+  const handleResetManagementSettings = () => {
+    setManagementSort("none");
+    setManagementFilters(DEFAULT_MANAGEMENT_FILTERS);
+    setManagementVisibility("all");
+    setManagementGroupBy("none");
+    setListSearch("");
+    try {
+      localStorage.removeItem("gestor_management_sort");
+      localStorage.removeItem("gestor_management_filters");
+      localStorage.removeItem("gestor_management_group_by");
+    } catch {}
+  };
+
+  const handleResetProjectSettings = () => {
+    setProjectSort("none");
+    setProjectFilters(DEFAULT_PROJECT_FILTERS);
+    setProjectStatus("all");
+    setProjectGroupBy("none");
+    setListSearch("");
+    try {
+      localStorage.removeItem("gestor_project_sort");
+      localStorage.removeItem("gestor_project_filters");
+      localStorage.removeItem("gestor_project_group_by");
     } catch {}
   };
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -818,7 +981,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
   // Filtered tasks computation respeitando a Hierarquia: Gestão -> Projeto -> Filtros
   const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
+    const filtered = tasks.filter((task) => {
       if (onlyMyTasks && (!currentUser?.id || !(task.assigneeIds ?? (task.assigneeId ? [task.assigneeId] : [])).includes(currentUser.id))) return false;
       // 1. Filtro por Projeto Ativo (só filtra quando os projetos já carregaram ou quando a tarefa já possui projectId correspondente)
       if (selectedProjectId && effectiveProjects.length > 0) {
@@ -942,7 +1105,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
       return true;
     });
-  }, [tasks, filters, selectedProjectId, selectedManagementId, effectiveProjects, showClosedTasks, currentTime, onlyMyTasks, currentUser]);
+
+    return taskSort !== "none" ? sortTasks(filtered, taskSort) : filtered;
+  }, [tasks, filters, selectedProjectId, selectedManagementId, effectiveProjects, showClosedTasks, currentTime, onlyMyTasks, currentUser, taskSort]);
 
   function generateTaskId(): string {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -2060,6 +2225,22 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onListDisplayModeChange={selectedManagementId ? handleProjectViewModeChange : setManagementViewMode}
           cardColumns={cardColumns}
           onCardColumnsChange={handleCardColumnsChange}
+          managementSort={managementSort}
+          onManagementSortChange={handleManagementSortChange}
+          managementFilters={managementFilters}
+          onManagementFiltersChange={handleManagementFiltersChange}
+          managementGroupBy={managementGroupBy}
+          onManagementGroupByChange={handleManagementGroupByChange}
+          projectSort={projectSort}
+          onProjectSortChange={handleProjectSortChange}
+          projectFilters={projectFilters}
+          onProjectFiltersChange={handleProjectFiltersChange}
+          projectGroupBy={projectGroupBy}
+          onProjectGroupByChange={handleProjectGroupByChange}
+          taskSort={taskSort}
+          onTaskSortChange={handleTaskSortChange}
+          onResetManagementSettings={handleResetManagementSettings}
+          onResetProjectSettings={handleResetProjectSettings}
           listFilter={selectedManagementId ? projectStatus : managementVisibility}
           onListFilterChange={selectedManagementId ? setProjectStatus : setManagementVisibility}
           onOpenNewProject={() => setIsNewProjectOpen(true)}
@@ -2128,6 +2309,16 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               visibilityFilter={managementVisibility}
               onVisibilityFilterChange={setManagementVisibility}
               viewMode={managementViewMode}
+              onViewModeChange={setManagementViewMode}
+              cardColumns={cardColumns}
+              onCardColumnsChange={handleCardColumnsChange}
+              sortOption={managementSort}
+              onSortOptionChange={handleManagementSortChange}
+              filters={managementFilters}
+              onFiltersChange={handleManagementFiltersChange}
+              groupBy={managementGroupBy}
+              onGroupByChange={handleManagementGroupByChange}
+              onResetSettings={handleResetManagementSettings}
               managements={visibleManagements}
               onSelectManagement={(id) => handleSelectManagement(id)}
               canWrite={canWriteProjects}
@@ -2159,6 +2350,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               onViewModeChange={handleProjectViewModeChange}
               cardColumns={cardColumns}
               onCardColumnsChange={handleCardColumnsChange}
+              sortOption={projectSort}
+              onSortOptionChange={handleProjectSortChange}
+              filters={projectFilters}
+              onFiltersChange={handleProjectFiltersChange}
+              groupBy={projectGroupBy}
+              onGroupByChange={handleProjectGroupByChange}
+              onResetSettings={handleResetProjectSettings}
               management={currentManagement}
               projects={visibleProjects}
               tasks={tasks}
