@@ -230,8 +230,8 @@ export function CardInsertSeparator({
       className={cn(
         "absolute top-0 bottom-0 z-30 flex items-center justify-center cursor-pointer group/sep select-none pointer-events-auto",
         side === "right"
-          ? "left-[calc(100%+8px)] -translate-x-1/2 w-6"
-          : "-left-2 -translate-x-1/2 w-6"
+          ? "left-[calc(100%+6px)] -translate-x-1/2 w-6"
+          : "-left-1.5 -translate-x-1/2 w-6"
       )}
       onMouseEnter={onHoverStart}
       onMouseLeave={onHoverEnd}
@@ -248,6 +248,50 @@ export function CardInsertSeparator({
       {/* Botãozinho + translúcido em frosted glass, elegante e perfeitamente centralizado */}
       <div className="absolute top-1/2 -translate-y-1/2 size-6 rounded-full bg-card/85 backdrop-blur-md border border-border/80 text-foreground/75 shadow-sm flex items-center justify-center transition-all duration-300 group-hover/sep:scale-110 group-hover/sep:bg-card group-hover/sep:text-primary group-hover/sep:border-primary/60 group-hover/sep:shadow-md opacity-0 group-hover/card:opacity-50 group-hover/sep:opacity-100">
         <Plus className="size-3.5 stroke-[2.2] transition-transform duration-300 group-hover/sep:rotate-90" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Separador horizontal para inserção de tarefas dentro das colunas do Kanban.
+ * Aparece discretamente ao passar o mouse entre cards (ou antes do primeiro / após o último),
+ * com linha degradê e botãozinho circular com +.
+ */
+export function TaskCardInsertSeparator({
+  onHoverStart,
+  onHoverEnd,
+  onClick,
+  title = "Adicionar tarefa",
+  className,
+}: {
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+  onClick: () => void;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative h-3.5 -my-1.5 flex items-center justify-center cursor-pointer group/task-sep z-10 select-none py-1",
+        className
+      )}
+      onMouseEnter={onHoverStart}
+      onMouseLeave={onHoverEnd}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      title={title}
+      aria-label={title}
+    >
+      {/* Linha horizontal translúcida em degradê suave */}
+      <div className="w-[88%] h-[1.5px] rounded-full bg-gradient-to-r from-transparent via-primary/30 to-transparent group-hover/task-sep:via-primary/70 transition-all duration-300 opacity-0 group-hover/task-sep:opacity-100 pointer-events-none" />
+
+      {/* Botãozinho + translúcido em frosted glass, elegante e perfeitamente centralizado */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-5 rounded-full bg-card/90 backdrop-blur-md border border-border/80 text-foreground/75 shadow-xs flex items-center justify-center transition-all duration-300 group-hover/task-sep:scale-110 group-hover/task-sep:bg-card group-hover/task-sep:text-primary group-hover/task-sep:border-primary/60 group-hover/task-sep:shadow-md opacity-0 group-hover/task-sep:opacity-100">
+        <Plus className="size-3 stroke-[2.2] transition-transform duration-300 group-hover/task-sep:rotate-90" />
       </div>
     </div>
   );
@@ -338,7 +382,7 @@ export function KanbanGhostCard({
 
   // Define as classes dimensionais e estruturais de acordo com a variante
   const variantStyles = {
-    task: "min-h-[76px] p-3 w-full",
+    task: "min-h-[82px] py-3.5 px-3 w-full",
     entity: "min-h-[190px] h-full p-6 w-full",
     column: "w-[240px] h-[calc(100vh-210px)] max-h-[420px] p-4",
   }[variant];
@@ -396,31 +440,31 @@ export function KanbanGhostCard({
       <div className="flex flex-col items-center justify-center gap-1.5 text-muted-foreground group-hover:text-foreground transition-colors duration-200">
         <div
           className={cn(
-            "flex items-center justify-center rounded-lg bg-background/80 border border-border/70",
-            "text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary",
-            "transition-all duration-200 group-hover:scale-110 shadow-2xs",
-            variant === "task" ? "w-6 h-6 rounded-md" : "w-9 h-9 rounded-xl"
+            "flex items-center justify-center transition-all duration-200 group-hover:scale-110 shadow-2xs",
+            variant === "task"
+              ? "w-7 h-7 rounded-lg bg-background text-foreground border border-border/40 group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary"
+              : "w-9 h-9 rounded-xl bg-background/80 border border-border/70 text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground group-hover:border-primary"
           )}
         >
           <Plus
             className={cn(
               "stroke-[2.5] transition-transform duration-200 group-hover:rotate-90",
-              variant === "task" ? "w-3.5 h-3.5" : "w-4.5 h-4.5"
+              variant === "task" ? "w-4 h-4" : "w-4.5 h-4.5"
             )}
           />
         </div>
 
         <span
           className={cn(
-            "font-semibold tracking-wide transition-colors duration-200",
-            variant === "task" ? "text-xs" : "text-xs font-bold"
+            "tracking-wide transition-colors duration-200",
+            variant === "task" ? "text-xs font-bold text-foreground" : "text-xs font-bold"
           )}
         >
           {label}
         </span>
 
         {sublabel && (
-          <span className="text-[10px] text-muted-foreground/70 transition-colors group-hover:text-muted-foreground">
+          <span className="text-[11px] text-muted-foreground/80 transition-colors group-hover:text-muted-foreground">
             {sublabel}
           </span>
         )}

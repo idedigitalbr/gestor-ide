@@ -18,8 +18,22 @@ import {
   type TaskStatus,
   type ViewMode,
   type TaskGroupBy,
+  type CustomProjectView,
+  type CustomViewOpenMode,
+  getDefaultProjectViews,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
+import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
+import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { CrmLoginView } from "@/components/crm-login-view";
 import {
   getCachedManagements,
@@ -355,12 +369,208 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
   });
 
+  // Estados para Visualizações Personalizadas por Projeto
+  const [customViews, setCustomViews] = useState<CustomProjectView[]>([]);
+  const [activeCustomViewId, setActiveCustomViewId] = useState<string | null>(null);
+  const [isCustomViewModalOpen, setIsCustomViewModalOpen] = useState(false);
+  const [editingCustomView, setEditingCustomView] = useState<CustomProjectView | null>(null);
+  const [viewToDelete, setViewToDelete] = useState<CustomProjectView | null>(null);
+
   const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setActiveCustomViewId(null);
     setViewMode(mode);
     try {
       localStorage.setItem("gestor_task_view_mode", mode);
     } catch {}
   }, []);
+
+  // Carregamento reativo e isolado das visualizações do projeto ativo
+  useEffect(() => {
+    // Reseta a view ativa ao trocar de projeto (sincronização com estado externo)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveCustomViewId(null);
+    if (!selectedProjectId) {
+      setCustomViews([]);
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(`gestor_custom_views_${selectedProjectId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCustomViews(parsed);
+        } else {
+          setCustomViews(getDefaultProjectViews(selectedProjectId));
+        }
+      } else {
+        setCustomViews(getDefaultProjectViews(selectedProjectId));
+      }
+    } catch {
+      setCustomViews(getDefaultProjectViews(selectedProjectId));
+    }
+
+    let active = true;
+    void ideCrmClient
+      .listProjectCustomViews(selectedProjectId)
+      .then(({ views }) => {
+        if (!active) return;
+        if (views && views.length > 0) {
+          setCustomViews(views);
+          try {
+            localStorage.setItem(
+              `gestor_custom_views_${selectedProjectId}`,
+              JSON.stringify(views)
+            );
+          } catch {}
+        }
+      })
+      .catch(() => {
+        void fetch(`/api/projects/${encodeURIComponent(selectedProjectId)}/views`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (!active) return;
+            if (data?.views && Array.isArray(data.views)) {
+              setCustomViews(data.views);
+              try {
+                localStorage.setItem(
+                  `gestor_custom_views_${selectedProjectId}`,
+                  JSON.stringify(data.views)
+                );
+              } catch {}
+            }
+          })
+          .catch(() => {});
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedProjectId]);
+
+  const activeCustomView = useMemo(() => {
+    if (!activeCustomViewId || !selectedProjectId) return null;
+    return customViews.find((v) => v.id === activeCustomViewId) || null;
+  }, [activeCustomViewId, selectedProjectId, customViews]);
+
+  const handleSaveCustomView = useCallback(
+    async (viewData: {
+      id?: string;
+      name: string;
+      icon: string;
+      url: string;
+      openMode: CustomViewOpenMode;
+    }) => {
+      if (!selectedProjectId) return;
+      let nextList: CustomProjectView[];
+
+      if (viewData.id) {
+        nextList = customViews.map((v) =>
+          v.id === viewData.id
+            ? {
+                ...v,
+                name: viewData.name,
+                icon: viewData.icon,
+                url: viewData.url,
+                openMode: viewData.openMode,
+                updatedAt: new Date().toISOString(),
+              }
+            : v
+        );
+      } else {
+        const newView: CustomProjectView = {
+          id: `view_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          projectId: selectedProjectId,
+          name: viewData.name,
+          icon: viewData.icon,
+          url: viewData.url,
+          openMode: viewData.openMode,
+          order: customViews.length,
+          type: "custom",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        nextList = [...customViews, newView];
+      }
+
+      setCustomViews(nextList);
+      try {
+        localStorage.setItem(
+          `gestor_custom_views_${selectedProjectId}`,
+          JSON.stringify(nextList)
+        );
+      } catch {}
+
+      try {
+        await ideCrmClient.saveProjectCustomViews(selectedProjectId, nextList);
+      } catch {}
+
+      void fetch(
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/views`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ views: nextList }),
+        }
+      ).catch(() => {});
+    },
+    [selectedProjectId, customViews]
+  );
+
+  const handleDeleteCustomView = useCallback(
+    async (viewId: string) => {
+      if (!selectedProjectId) return;
+      const nextList = customViews.filter((v) => v.id !== viewId);
+      setCustomViews(nextList);
+      try {
+        localStorage.setItem(
+          `gestor_custom_views_${selectedProjectId}`,
+          JSON.stringify(nextList)
+        );
+      } catch {}
+      if (activeCustomViewId === viewId) {
+        setActiveCustomViewId(null);
+      }
+      setViewToDelete(null);
+
+      try {
+        await ideCrmClient.deleteProjectCustomView(selectedProjectId, viewId);
+      } catch {}
+
+      void fetch(
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/views?viewId=${encodeURIComponent(viewId)}`,
+        { method: "DELETE" }
+      ).catch(() => {});
+    },
+    [selectedProjectId, customViews, activeCustomViewId]
+  );
+
+  const handleReorderCustomViews = useCallback(
+    async (newViews: CustomProjectView[]) => {
+      if (!selectedProjectId) return;
+      setCustomViews(newViews);
+      try {
+        localStorage.setItem(
+          `gestor_custom_views_${selectedProjectId}`,
+          JSON.stringify(newViews)
+        );
+      } catch {}
+
+      try {
+        await ideCrmClient.saveProjectCustomViews(selectedProjectId, newViews);
+      } catch {}
+
+      void fetch(
+        `/api/projects/${encodeURIComponent(selectedProjectId)}/views`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ views: newViews }),
+        }
+      ).catch(() => {});
+    },
+    [selectedProjectId]
+  );
 
   // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
   const [subtaskMode, setSubtaskMode] = useState<SubtaskDisplayMode>("collapsed");
@@ -2414,6 +2624,22 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                     <ProjectViewToolbar
                       viewMode={viewMode}
                       onViewModeChange={handleViewModeChange}
+                      customViews={customViews}
+                      activeCustomViewId={activeCustomViewId}
+                      onSelectCustomView={(v) => setActiveCustomViewId(v ? v.id : null)}
+                      onOpenCreateCustomView={() => {
+                        setEditingCustomView(null);
+                        setIsCustomViewModalOpen(true);
+                      }}
+                      onEditCustomView={(v) => {
+                        setEditingCustomView(v);
+                        setIsCustomViewModalOpen(true);
+                      }}
+                      onDeleteCustomView={(v) => {
+                        setViewToDelete(v);
+                      }}
+                      onReorderCustomViews={handleReorderCustomViews}
+                      canWrite={canWriteProjects}
                       totalTasks={filteredTasks.length}
                       tasks={tasks}
                       taskSort={taskSort}
@@ -2435,7 +2661,17 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                 />
               )}
 
-              {isSyncingTasks ? (
+              {activeCustomView ? (
+                <EmbeddedCustomView
+                  view={activeCustomView}
+                  canWrite={canWriteProjects}
+                  onEditView={(v) => {
+                    setEditingCustomView(v);
+                    setIsCustomViewModalOpen(true);
+                  }}
+                  onClose={() => setActiveCustomViewId(null)}
+                />
+              ) : isSyncingTasks ? (
                 viewMode === "kanban" ? (
                   <TaskKanbanSkeleton />
                 ) : (
@@ -2594,6 +2830,57 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         onSuccessConnect={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
         onDisconnect={handleDisconnectCrm}
       />
+
+      {/* Modal de Criação / Edição de Visualizações Personalizadas */}
+      <CustomViewModal
+        open={isCustomViewModalOpen}
+        onOpenChange={(open) => {
+          setIsCustomViewModalOpen(open);
+          if (!open) setEditingCustomView(null);
+        }}
+        view={editingCustomView}
+        projectId={selectedProjectId || ""}
+        onSave={handleSaveCustomView}
+      />
+
+      {/* Modal de Confirmação para Excluir Visualização Personalizada */}
+      {viewToDelete && (
+        <Dialog
+          open={Boolean(viewToDelete)}
+          onOpenChange={(open) => !open && setViewToDelete(null)}
+        >
+          <DialogContent className="sm:max-w-[400px] p-5">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-semibold">
+                Excluir visualização
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-1.5">
+                Tem certeza de que deseja remover a visualização{" "}
+                <strong className="text-foreground">{viewToDelete.name}</strong>{" "}
+                deste projeto? Esta ação não pode ser desfeita.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0 mt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewToDelete(null)}
+                className="cursor-pointer text-xs"
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDeleteCustomView(viewToDelete.id)}
+                className="cursor-pointer text-xs"
+              >
+                Excluir
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

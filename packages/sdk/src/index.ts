@@ -16,7 +16,12 @@ import type {
   CrmProjectMember,
   CrmProjectTask,
   CrmUserProfile,
+  CustomProjectView,
+  CustomViewOpenMode,
+  CustomViewType,
+  FrameEmbedCheckResult,
 } from "@gestor-ide/core";
+import { getDefaultProjectViews, sanitizeExternalUrl } from "@gestor-ide/core";
 import { getStoredCrmToken, setStoredCrmToken } from "@gestor-ide/auth";
 import { crmCache, IdeCrmCache } from "./cache";
 
@@ -315,6 +320,138 @@ export class IdeCrmClient {
   }
   async getSettings(): Promise<{ settings: Record<string, unknown> }> { return this.request("/settings"); }
   async saveSettings(settings: Record<string, unknown>): Promise<void> { await this.request("/settings", { method: "POST", body: JSON.stringify({ settings }) }); }
+
+  // --------------------------------------------------------------------------
+  // Módulo: Visualizações Personalizadas por Projeto
+  // --------------------------------------------------------------------------
+
+  async listProjectCustomViews(projectId: string): Promise<{ views: CustomProjectView[] }> {
+    if (!projectId) return { views: [] };
+    try {
+      const { settings } = await this.getSettings();
+      const allProjectViews =
+        (settings?.projectCustomViews as Record<string, CustomProjectView[]> | undefined) ||
+        (settings?.projectViews as Record<string, CustomProjectView[]> | undefined) ||
+        {};
+      const stored = allProjectViews[projectId];
+      if (Array.isArray(stored) && stored.length > 0) {
+        const defaults = getDefaultProjectViews(projectId);
+        const existingIds = new Set(stored.map((v) => v.id));
+        const merged = [...stored];
+        for (const def of defaults) {
+          if (!existingIds.has(def.id)) {
+            merged.push(def);
+          }
+        }
+        merged.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        return { views: merged };
+      }
+    } catch {
+      // Fallback gracioso
+    }
+    return { views: getDefaultProjectViews(projectId) };
+  }
+
+  async saveProjectCustomViews(
+    projectId: string,
+    views: CustomProjectView[]
+  ): Promise<{ views: CustomProjectView[] }> {
+    if (!projectId) throw new Error("projectId é obrigatório");
+    const sanitizedViews = views.map((v, idx) => ({
+      ...v,
+      projectId,
+      order: typeof v.order === "number" ? v.order : idx,
+      url: v.url ? sanitizeExternalUrl(v.url) : "",
+      updatedAt: new Date().toISOString(),
+    }));
+
+    try {
+      const { settings } = await this.getSettings();
+      const currentMap =
+        (settings?.projectCustomViews as Record<string, CustomProjectView[]> | undefined) || {};
+      const updatedMap = {
+        ...currentMap,
+        [projectId]: sanitizedViews,
+      };
+      await this.saveSettings({
+        ...settings,
+        projectCustomViews: updatedMap,
+      });
+      void this.cache.invalidatePrefix(`crm_/projects`);
+    } catch (err) {
+      console.warn("Aviso ao persistir visualizações no CRM Settings:", err);
+    }
+    return { views: sanitizedViews };
+  }
+
+  async createProjectCustomView(
+    projectId: string,
+    input: {
+      name: string;
+      icon: string;
+      url: string;
+      openMode?: CustomViewOpenMode;
+      type?: CustomViewType;
+    }
+  ): Promise<{ view: CustomProjectView }> {
+    const { views } = await this.listProjectCustomViews(projectId);
+    const newView: CustomProjectView = {
+      id: `view_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      projectId,
+      name: input.name.trim(),
+      icon: input.icon || "Globe",
+      url: sanitizeExternalUrl(input.url),
+      openMode: input.openMode || "auto",
+      order: views.length,
+      type: input.type || "custom",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const nextViews = [...views, newView];
+    await this.saveProjectCustomViews(projectId, nextViews);
+    return { view: newView };
+  }
+
+  async updateProjectCustomView(
+    projectId: string,
+    viewId: string,
+    updates: Partial<Omit<CustomProjectView, "id" | "projectId">>
+  ): Promise<{ view: CustomProjectView }> {
+    const { views } = await this.listProjectCustomViews(projectId);
+    let targetView: CustomProjectView | null = null;
+    const nextViews = views.map((v) => {
+      if (v.id === viewId) {
+        const next: CustomProjectView = {
+          ...v,
+          ...updates,
+          url: updates.url !== undefined ? sanitizeExternalUrl(updates.url) : v.url,
+          name: updates.name !== undefined ? updates.name.trim() : v.name,
+          updatedAt: new Date().toISOString(),
+        };
+        targetView = next;
+        return next;
+      }
+      return v;
+    });
+
+    if (!targetView) {
+      throw new Error(`Visualização ${viewId} não encontrada no projeto ${projectId}`);
+    }
+
+    await this.saveProjectCustomViews(projectId, nextViews);
+    return { view: targetView };
+  }
+
+  async deleteProjectCustomView(projectId: string, viewId: string): Promise<{ ok: boolean }> {
+    const { views } = await this.listProjectCustomViews(projectId);
+    const target = views.find((v) => v.id === viewId);
+    if (target?.type === "predefined") {
+      throw new Error("Visualizações predefinidas não podem ser excluídas.");
+    }
+    const filtered = views.filter((v) => v.id !== viewId);
+    await this.saveProjectCustomViews(projectId, filtered);
+    return { ok: true };
+  }
 
   // --------------------------------------------------------------------------
   // Módulo: Projetos & Tarefas

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskStatus } from "@/types/task";
 import { KanbanCard } from "./kanban-card";
 import { StatusIcon, getStatusDefinition } from "../task-status-icon";
 import { Plus, ChevronsLeftRight, EyeOff, ChevronsRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KanbanGhostCard, useKanbanEdgeHover } from "@/components/kanban-ghost-card";
+import { KanbanGhostCard } from "@/components/kanban-ghost-card";
 
 interface KanbanColumnProps {
   status: TaskStatus;
@@ -24,11 +24,158 @@ interface KanbanColumnProps {
   onDropTask: (taskId: string, targetStatus: TaskStatus) => void;
   onDragStart: (e: React.DragEvent, taskId: string) => void;
   onDragEnd?: (e: React.DragEvent) => void;
-  isFirstColumn?: boolean;
-  isLastColumn?: boolean;
   isDragging?: boolean;
-  forceShowGhost?: boolean;
-  ghostDirection?: "left" | "right";
+}
+
+// ─── Hook: dwell de 2s para expansão do skeleton dentro da coluna ────────────
+function useInColumnDwell({ dwellTimeMs = 2000, autoCloseMs = 4000 } = {}) {
+  const [expandedAt, setExpandedAt] = useState<number | null>(null); // índice 0 = antes do 1º card
+  const [hoveringAt, setHoveringAt] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const dwellRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseStartRef = useRef<number>(0);
+  const autoCloseRemainingRef = useRef<number>(autoCloseMs);
+
+  const clearTimers = useCallback(() => {
+    if (dwellRef.current) { clearTimeout(dwellRef.current); dwellRef.current = null; }
+    if (autoCloseRef.current) { clearTimeout(autoCloseRef.current); autoCloseRef.current = null; }
+  }, []);
+
+  const startAutoClose = useCallback((duration: number) => {
+    if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
+    autoCloseStartRef.current = Date.now();
+    autoCloseRemainingRef.current = duration;
+    setIsPaused(false);
+    autoCloseRef.current = setTimeout(() => {
+      setExpandedAt(null);
+      setHoveringAt(null);
+      setIsPaused(false);
+    }, duration);
+  }, []);
+
+  // Hover num separador: inicia contagem de 2s
+  const onSepEnter = useCallback((index: number) => {
+    if (expandedAt !== null) return; // já há um skeleton aberto
+    setHoveringAt(index);
+    if (dwellRef.current) clearTimeout(dwellRef.current);
+    dwellRef.current = setTimeout(() => {
+      setExpandedAt(index);
+      startAutoClose(autoCloseMs);
+    }, dwellTimeMs);
+  }, [expandedAt, dwellTimeMs, autoCloseMs, startAutoClose]);
+
+  // Saiu do separador antes dos 2s: cancela
+  const onSepLeave = useCallback(() => {
+    setHoveringAt(null);
+    if (dwellRef.current) { clearTimeout(dwellRef.current); dwellRef.current = null; }
+  }, []);
+
+  // Clique direto no botão +: abre imediatamente
+  const openAt = useCallback((index: number) => {
+    clearTimers();
+    setExpandedAt(index);
+    startAutoClose(autoCloseMs);
+  }, [clearTimers, startAutoClose, autoCloseMs]);
+
+  // Mouse entrou no skeleton: pausa auto-close
+  const onGhostEnter = useCallback(() => {
+    if (autoCloseRef.current) {
+      clearTimeout(autoCloseRef.current);
+      autoCloseRef.current = null;
+      const elapsed = Date.now() - autoCloseStartRef.current;
+      autoCloseRemainingRef.current = Math.max(800, autoCloseRemainingRef.current - elapsed);
+      setIsPaused(true);
+    }
+  }, []);
+
+  // Mouse saiu do skeleton: retoma auto-close
+  const onGhostLeave = useCallback(() => {
+    if (expandedAt !== null) {
+      startAutoClose(autoCloseRemainingRef.current);
+    }
+  }, [expandedAt, startAutoClose]);
+
+  // Fecha o skeleton
+  const close = useCallback(() => {
+    clearTimers();
+    setExpandedAt(null);
+    setHoveringAt(null);
+    setIsPaused(false);
+  }, [clearTimers]);
+
+  useEffect(() => () => clearTimers(), [clearTimers]);
+
+  return {
+    expandedAt,
+    hoveringAt,
+    isPaused,
+    autoCloseMs,
+    onSepEnter,
+    onSepLeave,
+    openAt,
+    onGhostEnter,
+    onGhostLeave,
+    close,
+  };
+}
+
+// ─── Separador Horizontal (inserção entre cards) ─────────────────────────────
+function TaskSeparator({
+  index,
+  isHovering,
+  onEnter,
+  onLeave,
+  onClickPlus,
+  disabled,
+}: {
+  index: number;
+  isHovering: boolean;
+  onEnter: (i: number) => void;
+  onLeave: () => void;
+  onClickPlus: (i: number) => void;
+  disabled?: boolean;
+}) {
+  if (disabled) return null;
+  return (
+    <div
+      className="relative h-4 -my-1 flex items-center justify-center group/sep z-10 select-none"
+      onMouseEnter={() => onEnter(index)}
+      onMouseLeave={onLeave}
+      title="Adicionar tarefa aqui"
+      aria-label="Adicionar tarefa aqui"
+    >
+      {/* Linha horizontal degradê */}
+      <div
+        className={cn(
+          "w-[88%] h-[1.5px] rounded-full bg-gradient-to-r from-transparent via-primary/50 to-transparent transition-all duration-300 pointer-events-none",
+          isHovering ? "opacity-100" : "opacity-0 group-hover/sep:opacity-70"
+        )}
+      />
+      {/* Botãozinho + */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClickPlus(index);
+        }}
+        className={cn(
+          "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+          "size-5 rounded-full bg-card/90 backdrop-blur-md border border-border/80",
+          "text-foreground/70 shadow-xs flex items-center justify-center",
+          "transition-all duration-300",
+          isHovering
+            ? "opacity-100 scale-100 text-primary border-primary/60 bg-card"
+            : "opacity-0 group-hover/sep:opacity-80 group-hover/sep:scale-100",
+          "hover:scale-110 hover:text-primary hover:border-primary/60 hover:bg-card hover:shadow-md"
+        )}
+        aria-label="Adicionar tarefa nesta posição"
+      >
+        <Plus className="size-3 stroke-[2.2] transition-transform duration-300 group-hover/sep:rotate-90" />
+      </button>
+    </div>
+  );
 }
 
 export function KanbanColumn({
@@ -46,45 +193,11 @@ export function KanbanColumn({
   onDropTask,
   onDragStart,
   onDragEnd,
-  isFirstColumn = false,
-  isLastColumn = false,
   isDragging = false,
-  forceShowGhost = false,
-  ghostDirection,
 }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const columnRef = useRef<HTMLDivElement>(null);
 
-  const {
-    isGhostVisible,
-    slideDirection,
-    showGhost,
-    hideGhost,
-    keepGhost,
-  } = useKanbanEdgeHover({ leaveDelay: 220 });
-
-  const effectiveSlideDirection =
-    ghostDirection ||
-    slideDirection ||
-    (isFirstColumn ? "left" : "right");
-
-  const isGhostActive = (isGhostVisible || forceShowGhost) && !isDragging;
-
-  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
-    if (isDragging || isCollapsed) return;
-    if (!columnRef.current) return;
-
-    const rect = columnRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    // Se estiver na primeira coluna e próximo à borda esquerda (até 36px)
-    if (isFirstColumn && x <= 36) {
-      showGhost("left");
-    } else if (isLastColumn && rect.width - x <= 36) {
-      // Se estiver na última coluna e próximo à borda direita (até 36px)
-      showGhost("right");
-    }
-  }
+  const dwell = useInColumnDwell({ dwellTimeMs: 2000, autoCloseMs: 4000 });
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -107,7 +220,12 @@ export function KanbanColumn({
     }
   }
 
-  // Collapsed Vertical Rail (faithful to It's a Plan observed reference)
+  // Fechar skeleton se começar drag
+  useEffect(() => {
+    if (isDragging) dwell.close();
+  }, [isDragging, dwell.close]);
+
+  // ─── Collapsed Rail ───────────────────────────────────────────────────────
   if (isCollapsed) {
     return (
       <div
@@ -162,7 +280,6 @@ export function KanbanColumn({
           </div>
         </div>
 
-        {/* Vertical text label */}
         <div className="flex-1 flex items-center justify-center py-4">
           <span className="[writing-mode:vertical-lr] rotate-180 text-xs font-medium text-muted-foreground group-hover:text-foreground tracking-wide whitespace-nowrap">
             {getStatusDefinition(status).label} · {tasks.length}
@@ -174,47 +291,27 @@ export function KanbanColumn({
     );
   }
 
-  // Expanded Standard Column
+  // ─── Expanded Column ──────────────────────────────────────────────────────
+  const statusLabel = getStatusDefinition(status).label;
+  const separatorDisabled = isDragging;
+
   return (
     <div
-      ref={columnRef}
       data-column-status={status}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={hideGhost}
       className={cn(
         "relative flex flex-col flex-1 min-w-[240px] max-w-[300px] rounded-xl p-2 transition-all duration-150 select-none bg-muted/30 border border-border/80",
         isDragOver && "border-ring/50 bg-muted/60"
       )}
     >
-      {/* Trigger invisível de hover na lateral externa da primeira coluna */}
-      {isFirstColumn && (
-        <div
-          className="absolute -left-3 top-0 bottom-0 w-7 z-20 cursor-pointer"
-          onMouseEnter={() => showGhost("left")}
-          onMouseLeave={hideGhost}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Trigger invisível de hover na lateral externa da última coluna */}
-      {isLastColumn && (
-        <div
-          className="absolute -right-3 top-0 bottom-0 w-7 z-20 cursor-pointer"
-          onMouseEnter={() => showGhost("right")}
-          onMouseLeave={hideGhost}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Column Header */}
-      <div className="flex items-center justify-between pb-2 mb-2 border-b border-border/60">
+      {/* ── Column Header ── */}
+      <div className="flex items-center justify-between pb-2 mb-1 border-b border-border/60">
         <div className="flex items-center gap-2">
           <StatusIcon status={status} />
           <h3 className="font-medium text-xs text-foreground tracking-tight">
-            {getStatusDefinition(status).label}
+            {statusLabel}
           </h3>
           <span className="text-xs font-mono text-muted-foreground">
             {tasks.length}
@@ -246,70 +343,111 @@ export function KanbanColumn({
             type="button"
             onClick={() => onQuickAdd(status)}
             className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            title={`Adicionar tarefa em ${status}`}
-            aria-label={`Adicionar tarefa em ${status}`}
+            title={`Adicionar tarefa em ${statusLabel}`}
+            aria-label={`Adicionar tarefa em ${statusLabel}`}
           >
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* Cards list */}
-      <div className="flex flex-col gap-2 overflow-y-auto flex-1 pr-0.5">
-        {/* Card Fantasma (Skeleton / Placeholder) suave com transição e microinteração */}
-        <div
-          onMouseEnter={keepGhost}
-          onMouseLeave={hideGhost}
-          className={cn(
-            "overflow-hidden transition-all duration-300 ease-out",
-            isGhostActive
-              ? "max-h-24 opacity-100 mb-1 translate-x-0"
-              : cn(
-                  "max-h-0 opacity-0 mb-0 pointer-events-none",
-                  effectiveSlideDirection === "left" ? "-translate-x-5" : "translate-x-5"
-                )
-          )}
-        >
-          <KanbanGhostCard
-            label="Novo"
-            sublabel={`em ${getStatusDefinition(status).label}`}
-            onClick={() => onQuickAdd(status)}
-            slideDirection={effectiveSlideDirection}
-            variant="task"
-            isVisible={isGhostActive}
-          />
-        </div>
+      {/* ── Cards list ── */}
+      <div className="flex flex-col overflow-y-auto flex-1 pr-0.5 pt-0.5">
 
-        {tasks.map((task) => (
-          <KanbanCard
-            key={task.id}
-            task={task}
-            members={members}
-            onChangeAssignee={onChangeAssignee}
-            onUpdateTask={onUpdateTask}
-            onDeleteTask={onDeleteTask}
-            onOpenDetails={onOpenDetails}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-          />
-        ))}
+        {/* Separador ANTES do primeiro card (índice 0) */}
+        <TaskSeparator
+          index={0}
+          isHovering={dwell.hoveringAt === 0}
+          onEnter={dwell.onSepEnter}
+          onLeave={dwell.onSepLeave}
+          onClickPlus={dwell.openAt}
+          disabled={separatorDisabled}
+        />
 
-        {/* Placeholder no final da lista da coluna */}
-        {tasks.length > 0 && !isDragging && (
+        {/* Skeleton antes do primeiro card */}
+        {dwell.expandedAt === 0 && (
           <div
-            onClick={() => onQuickAdd(status)}
-            className="w-full py-1.5 px-3 rounded-lg border border-dashed border-border/30 hover:border-border/60 hover:bg-muted/40 transition-all duration-150 flex items-center justify-center gap-1.5 cursor-pointer text-muted-foreground/60 hover:text-foreground text-xs font-medium opacity-50 hover:opacity-100 select-none mt-1"
+            className="mb-1.5 animate-in fade-in slide-in-from-top-2 duration-200"
+            onMouseEnter={dwell.onGhostEnter}
+            onMouseLeave={dwell.onGhostLeave}
           >
-            <Plus className="w-3.5 h-3.5 stroke-[2]" />
-            <span>Novo</span>
+            <KanbanGhostCard
+              label="Novo"
+              sublabel={`em ${statusLabel}`}
+              onClick={() => { dwell.close(); onQuickAdd(status); }}
+              variant="task"
+              isVisible
+              autoCloseMs={dwell.autoCloseMs}
+              isPaused={dwell.isPaused}
+              onMouseEnter={dwell.onGhostEnter}
+              onMouseLeave={dwell.onGhostLeave}
+            />
           </div>
         )}
 
-        {tasks.length === 0 && !isGhostActive && (
-          <div className="py-8 text-center text-[11px] text-muted-foreground">
-            Nenhuma tarefa
+        {/* Se coluna vazia e sem skeleton, exibe empty-state clicável */}
+        {tasks.length === 0 && dwell.expandedAt === null && (
+          <div
+            className="flex-1 flex flex-col items-center justify-center gap-2 py-10 cursor-pointer group/empty"
+            onClick={() => dwell.openAt(0)}
+          >
+            <div className="size-8 rounded-xl bg-muted/60 border border-dashed border-border/50 flex items-center justify-center transition-all duration-200 group-hover/empty:border-primary/60 group-hover/empty:bg-primary/5">
+              <Plus className="size-4 text-muted-foreground/50 group-hover/empty:text-primary transition-colors" />
+            </div>
+            <span className="text-[11px] text-muted-foreground/60 group-hover/empty:text-muted-foreground transition-colors">
+              Nenhuma tarefa
+            </span>
           </div>
         )}
+
+        {/* Cards com separadores entre eles */}
+        {tasks.map((task, idx) => (
+          <React.Fragment key={task.id}>
+            <div data-flip-id={task.id} className="mb-1.5">
+              <KanbanCard
+                task={task}
+                members={members}
+                onChangeAssignee={onChangeAssignee}
+                onUpdateTask={onUpdateTask}
+                onDeleteTask={onDeleteTask}
+                onOpenDetails={onOpenDetails}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+              />
+            </div>
+
+            {/* Separador DEPOIS de cada card (índice idx + 1) */}
+            <TaskSeparator
+              index={idx + 1}
+              isHovering={dwell.hoveringAt === idx + 1}
+              onEnter={dwell.onSepEnter}
+              onLeave={dwell.onSepLeave}
+              onClickPlus={dwell.openAt}
+              disabled={separatorDisabled}
+            />
+
+            {/* Skeleton depois deste card */}
+            {dwell.expandedAt === idx + 1 && (
+              <div
+                className="mb-1.5 animate-in fade-in slide-in-from-top-2 duration-200"
+                onMouseEnter={dwell.onGhostEnter}
+                onMouseLeave={dwell.onGhostLeave}
+              >
+                <KanbanGhostCard
+                  label="Novo"
+                  sublabel={`em ${statusLabel}`}
+                  onClick={() => { dwell.close(); onQuickAdd(status); }}
+                  variant="task"
+                  isVisible
+                  autoCloseMs={dwell.autoCloseMs}
+                  isPaused={dwell.isPaused}
+                  onMouseEnter={dwell.onGhostEnter}
+                  onMouseLeave={dwell.onGhostLeave}
+                />
+              </div>
+            )}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );

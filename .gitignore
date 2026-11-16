@@ -16,3 +16,9 @@ coverage/
 .env*
 !.env.example
 *.pem
+
+# Dados locais de runtime (SQLite gerado pela aplicação)
+/data/
+
+# Imagens de referência locais na raiz (screenshots de trabalho)
+/*.png

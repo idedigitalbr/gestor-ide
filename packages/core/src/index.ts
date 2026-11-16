@@ -638,3 +638,102 @@ export function computeProjectTasksSummary(
   };
 }
 
+// ============================================================================
+// VISUALIZAÇÕES PERSONALIZADAS POR PROJETO
+// ============================================================================
+
+export type CustomViewOpenMode = "auto" | "new_tab" | "embed";
+export type CustomViewType = "predefined" | "custom";
+
+export interface CustomProjectView {
+  id: string;
+  projectId: string;
+  name: string;
+  icon: string;
+  url: string;
+  openMode: CustomViewOpenMode;
+  order: number;
+  type: CustomViewType;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface FrameEmbedCheckResult {
+  canEmbed: boolean;
+  status: "compatible" | "blocked" | "unknown";
+  reason: string;
+  suggestedMode: CustomViewOpenMode;
+  details?: {
+    xFrameOptions?: string | null;
+    cspFrameAncestors?: string | null;
+    httpStatus?: number;
+  };
+}
+
+export const PREDEFINED_VIEW_IDS = {
+  GDRIVE: "predefined_gdrive",
+  CHATGPT: "predefined_chatgpt",
+} as const;
+
+export function getDefaultProjectViews(projectId: string): CustomProjectView[] {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: `${PREDEFINED_VIEW_IDS.GDRIVE}_${projectId}`,
+      projectId,
+      name: "Arquivos & Documentos",
+      icon: "Folder",
+      url: "",
+      openMode: "new_tab",
+      order: 0,
+      type: "predefined",
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: `${PREDEFINED_VIEW_IDS.CHATGPT}_${projectId}`,
+      projectId,
+      name: "IA",
+      icon: "Sparkles",
+      url: "",
+      openMode: "new_tab",
+      order: 1,
+      type: "predefined",
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+}
+
+export function isSafeHttpsUrl(input: string): boolean {
+  if (!input || typeof input !== "string") return false;
+  const trimmed = input.trim();
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function sanitizeExternalUrl(input: string): string {
+  if (!input || typeof input !== "string") return "";
+  let trimmed = input.trim();
+  if (/^javascript:/i.test(trimmed) || /^data:/i.test(trimmed) || /^vbscript:/i.test(trimmed) || /^file:/i.test(trimmed)) {
+    return "";
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+

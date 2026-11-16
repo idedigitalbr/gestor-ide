@@ -104,7 +104,15 @@ export const ALL_CANONICAL_STATUSES: CanonicalTaskStatus[] = [
 
 export function getStatusDefinition(status?: string | null): StatusDefinition {
   const norm = normalizeTaskStatus(status);
-  return STATUS_DEFINITIONS[norm] ?? STATUS_DEFINITIONS.PENDENTE;
+  const def = STATUS_DEFINITIONS[norm] ?? STATUS_DEFINITIONS.PENDENTE;
+  if (status && !STATUS_DEFINITIONS[status as CanonicalTaskStatus]) {
+    return {
+      ...def,
+      id: norm,
+      label: status,
+    };
+  }
+  return def;
 }
 
 interface StatusIconProps {

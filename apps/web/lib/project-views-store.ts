@@ -21,15 +21,30 @@ interface DbProjectViewRow {
   updated_at: string;
 }
 
-let dbInstance: any = null;
-let fallbackMemoryStore: Map<string, CustomProjectView[]> = new Map();
+// Interface mínima do banco SQLite usada pelo store (evita dependência de tipos do Bun)
+interface SqliteStatement {
+  all(...params: unknown[]): unknown[];
+  run(...params: unknown[]): unknown;
+}
+
+interface SqliteDatabase {
+  query(sql: string): SqliteStatement;
+  run(sql: string): unknown;
+  prepare(sql: string): SqliteStatement;
+  transaction(fn: () => void): () => void;
+}
+
+let dbInstance: SqliteDatabase | null = null;
+const fallbackMemoryStore: Map<string, CustomProjectView[]> = new Map();
 
 function getDb() {
   if (dbInstance) return dbInstance;
 
   try {
     // Tenta carregar bun:sqlite nativo
-    // @ts-ignore
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore -- módulo nativo disponível apenas no runtime Bun
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Database } = require("bun:sqlite");
     const dataDir = join(process.cwd(), "data");
     if (!existsSync(dataDir)) {
