@@ -1,2 +1,5 @@
-import { SettingsPage } from "@/components/crm-pages";
-export default SettingsPage;
+import { SettingsView } from "@/components/settings-view";
+
+export default function SettingsPage() {
+  return <SettingsView />;
+}
