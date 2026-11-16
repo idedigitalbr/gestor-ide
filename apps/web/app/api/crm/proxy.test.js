@@ -48,3 +48,22 @@ test("retorna 502 quando o CRM não está acessível", async () => {
   const response = await POST(request, { params: Promise.resolve({ path: ["projects", "tasks"] }) });
   expect(response.status).toBe(502);
 });
+
+test("injeta token padrão e cabeçalho accept para rota mcp se ausente", async () => {
+  process.env.IDE_CRM_BASE_URL = "https://crm.example.test";
+  let forwarded;
+  globalThis.fetch = async (url, options) => {
+    forwarded = { url, ...options };
+    return Response.json({ jsonrpc: "2.0", result: { tools: [] } });
+  };
+  const request = new Request("http://localhost/api/crm/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
+  });
+  const response = await POST(request, { params: Promise.resolve({ path: ["mcp"] }) });
+  expect(forwarded.url).toBe("https://crm.example.test/api/mcp");
+  expect(forwarded.headers.get("authorization")).toContain("Bearer sp_mcp_");
+  expect(forwarded.headers.get("accept")).toBe("application/json, text/event-stream");
+  expect(response.status).toBe(200);
+});
