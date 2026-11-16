@@ -167,9 +167,11 @@ export function SettingsView() {
   >(["read", "write", "members", "manage"]);
   const [generatedSecret, setGeneratedSecret] = useState<string | null>(null);
   const [copiedNewToken, setCopiedNewToken] = useState(false);
+  const [creatingToken, setCreatingToken] = useState(false);
 
   // Estados de sessão do usuário logado
   const [currentUser, setCurrentUser] = useState<{
+    id: string;
     name: string;
     email: string;
   } | null>(null);
@@ -184,9 +186,54 @@ export function SettingsView() {
       .then((sess) => {
         if (!active || !sess.user) return;
         setCurrentUser({
+          id: sess.user.id || "cmr20zze9000fuh2f2gguhqae",
           name: sess.user.name || "Will",
           email: sess.user.email || "will.ideinstituto@gmail.com",
         });
+      })
+      .catch(() => {});
+
+    // Carrega tokens reais oficiais do CRM via API
+    fetch("/api/crm/integrations/mcp/tokens")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data || !Array.isArray(data.tokens)) return;
+        const realTokens: McpTokenItem[] = data.tokens.map((t: {
+          id: string;
+          name: string;
+          tokenPrefix: string;
+          scopes?: string[];
+          revokedAt?: string | null;
+          expiresAt?: string | null;
+          lastUsedAt?: string | null;
+          createdAt?: string;
+          user?: { id: string; name?: string | null; email: string };
+        }) => {
+          const isRevoked = Boolean(t.revokedAt);
+          const isExpired = Boolean(t.expiresAt && new Date(t.expiresAt).getTime() <= Date.now());
+          const permissions = (t.scopes || []).map((s: string) =>
+            s.replace(/^projects\./, "")
+          ) as Array<"read" | "write" | "members" | "manage">;
+
+          return {
+            id: t.id,
+            name: t.name,
+            tokenMasked: `${t.tokenPrefix}...`,
+            userName: t.user?.name || (t.user?.email === "will.ideinstituto@gmail.com" ? "Will" : "ADMIN"),
+            userEmail: t.user?.email || "will.ideinstituto@gmail.com",
+            permissions: permissions.length > 0 ? permissions : ["read", "write", "members", "manage"],
+            status: isRevoked ? "revoked" : isExpired ? "expired" : "active",
+            lastUsedAt: t.lastUsedAt
+              ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(t.lastUsedAt))
+              : "Nunca",
+            createdAt: t.createdAt
+              ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(t.createdAt))
+              : "—",
+          };
+        });
+        if (realTokens.length > 0) {
+          setMcpTokens(realTokens);
+        }
       })
       .catch(() => {});
 
@@ -302,54 +349,72 @@ export function SettingsView() {
     setTimeout(() => setCopiedTokenId(null), 2000);
   }
 
-  // Criar novo token MCP
-  function handleCreateMcpToken(e: React.FormEvent) {
+  // Criar novo token MCP diretamente na API do CRM
+  async function handleCreateMcpToken(e: React.FormEvent) {
     e.preventDefault();
-    if (!newTokenName.trim()) return;
+    if (!newTokenName.trim() || creatingToken) return;
 
-    // Gerar token no padrão oficial sp_mcp_
-    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(18)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    const generated = `sp_mcp_${randomHex}`;
-    const masked = `${generated.slice(0, 15)}...`;
+    setCreatingToken(true);
+    try {
+      const scopeMap: Record<string, string> = {
+        read: "projects.read",
+        write: "projects.write",
+        members: "projects.members",
+        manage: "projects.manage",
+      };
+      const scopes = newTokenPermissions.map((p) => scopeMap[p] || `projects.${p}`);
 
-    const userProfile = currentUser?.name
-      ? currentUser.name
-      : settings?.profileName
-      ? String(settings.profileName)
-      : "Will";
-    const userEmail = currentUser?.email
-      ? currentUser.email
-      : settings?.profileEmail
-      ? String(settings.profileEmail)
-      : "will.ideinstituto@gmail.com";
+      const res = await fetch("/api/crm/integrations/mcp/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTokenName.trim(),
+          userId: currentUser?.id || "cmr20zze9000fuh2f2gguhqae",
+          scopes,
+        }),
+      });
 
-    const now = new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date());
+      const data = await res.json().catch(() => null);
 
-    const newItem: McpTokenItem = {
-      id: `mcp-${Date.now()}`,
-      name: newTokenName.trim(),
-      tokenMasked: masked,
-      rawToken: generated,
-      userName: userProfile,
-      userEmail,
-      permissions: [...newTokenPermissions],
-      status: "active",
-      lastUsedAt: "Nunca",
-      createdAt: now,
-    };
+      if (!res.ok || !data?.token) {
+        throw new Error(data?.error || "Erro ao registrar token oficial no CRM");
+      }
 
-    setMcpTokens((prev) => [newItem, ...prev]);
-    setGeneratedSecret(generated);
+      const generated = data.token as string;
+      const masked = `${data.tokenRecord?.tokenPrefix || generated.slice(0, 15)}...`;
+
+      const newItem: McpTokenItem = {
+        id: data.tokenRecord?.id || `mcp-${Date.now()}`,
+        name: newTokenName.trim(),
+        tokenMasked: masked,
+        rawToken: generated,
+        userName: currentUser?.name || "Will",
+        userEmail: currentUser?.email || "will.ideinstituto@gmail.com",
+        permissions: [...newTokenPermissions],
+        status: "active",
+        lastUsedAt: "Nunca",
+        createdAt: "Hoje",
+      };
+
+      setMcpTokens((prev) => [newItem, ...prev.filter((t) => t.id !== newItem.id)]);
+      setGeneratedSecret(generated);
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message: err instanceof Error ? err.message : "Falha ao criar token no CRM.",
+      });
+    } finally {
+      setCreatingToken(false);
+    }
   }
 
   // Revogar token MCP
-  function handleRevokeToken(id: string) {
+  async function handleRevokeToken(id: string) {
+    try {
+      await fetch(`/api/crm/integrations/mcp/tokens/${id}`, { method: "DELETE" });
+    } catch {
+      // Ignora erro se for mock/local
+    }
     setMcpTokens((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: "revoked" as const } : t))
     );
@@ -1572,11 +1637,15 @@ export function SettingsView() {
                   <Button
                     type="submit"
                     size="sm"
-                    disabled={!newTokenName.trim() || newTokenPermissions.length === 0}
+                    disabled={!newTokenName.trim() || newTokenPermissions.length === 0 || creatingToken}
                     className="cursor-pointer text-xs gap-1.5"
                   >
-                    <Plus className="size-3.5" />
-                    <span>Gerar Token</span>
+                    {creatingToken ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="size-3.5" />
+                    )}
+                    <span>{creatingToken ? "Gravando no CRM..." : "Gerar Token"}</span>
                   </Button>
                 </DialogFooter>
               </form>
