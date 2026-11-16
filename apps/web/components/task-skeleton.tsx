@@ -97,7 +97,7 @@ export function TaskTableSkeleton() {
 export function TaskKanbanSkeleton() {
   return (
     <div className="flex items-start gap-3 h-full overflow-x-auto pb-4 select-none animate-pulse">
-      {["A Fazer", "Em Andamento", "Em Revisão", "Concluído"].map((col, idx) => (
+      {["Pendente", "Fazendo agora", "Feedback", "Bloqueado", "Concluído"].map((col, idx) => (
         <div
           key={col}
           className="w-72 shrink-0 rounded-lg bg-card/40 border border-border flex flex-col max-h-full overflow-hidden"

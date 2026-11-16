@@ -306,7 +306,7 @@ export function KanbanColumn({
         )}
 
         {tasks.length === 0 && !isGhostActive && (
-          <div className="py-8 text-center text-[11px] text-text-icon/80">
+          <div className="py-8 text-center text-[11px] text-muted-foreground">
             Nenhuma tarefa
           </div>
         )}

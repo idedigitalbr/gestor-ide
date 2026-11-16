@@ -76,7 +76,8 @@ import { TaskAdditionalView } from "@/components/task-additional-view";
 import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
 import { CrmConnectionDialog } from "@/components/crm-connection-dialog";
-import { TaskTableSkeleton } from "@/components/task-skeleton";
+import { TaskTableSkeleton, TaskKanbanSkeleton } from "@/components/task-skeleton";
+import { ProjectViewToolbar } from "@/components/project-view-toolbar";
 import { cn } from "@/lib/utils";
 import { useCalendarDialog } from "@/components/calendar-dialog-context";
 
@@ -343,7 +344,23 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return [];
   });
 
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      const saved = localStorage.getItem("gestor_task_view_mode");
+      return saved === "kanban" || saved === "table" || saved === "calendar" || saved === "gantt" || saved === "workload"
+        ? (saved as ViewMode)
+        : "table";
+    } catch {
+      return "table";
+    }
+  });
+
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("gestor_task_view_mode", mode);
+    } catch {}
+  }, []);
 
   // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
   const [subtaskMode, setSubtaskMode] = useState<SubtaskDisplayMode>("collapsed");
@@ -900,7 +917,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
   function handleSelectProject(projectId: string | null) {
     setListSearch("");
-    setViewMode("table");
     setSelectedProjectId(projectId);
     try {
       if (projectId) {
@@ -2215,7 +2231,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           onSelectManagement={(id) => { handleSelectManagement(id); if (isSecondaryPage) router.push("/"); }}
           onSelectProject={(id) => { handleSelectProject(id); if (isSecondaryPage) router.push("/"); }}
           viewMode={viewMode}
-          onViewModeChange={setViewMode}
+          onViewModeChange={handleViewModeChange}
           filters={filters}
           onFilterChange={(next) => { setFilters(next); if (isSecondaryPage) router.push("/"); }}
           onOpenNewTaskModal={() => handleOpenNewTask("PENDENTE")}
@@ -2397,9 +2413,24 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                 />
               )}
 
+              {/* Barra de Ferramentas / Seletor de Visão do Projeto */}
+              <ProjectViewToolbar
+                viewMode={viewMode}
+                onViewModeChange={handleViewModeChange}
+                totalTasks={filteredTasks.length}
+                isFiltered={isFiltered}
+                onClearFilters={handleClearFilters}
+                canCreate={canWriteProjects}
+                onOpenNewTask={() => handleOpenNewTask("PENDENTE")}
+              />
+
               {isSyncingTasks ? (
-                <TaskTableSkeleton />
-              ) : filteredTasks.length === 0 && (viewMode !== "table" || isFiltered) ? (
+                viewMode === "kanban" ? (
+                  <TaskKanbanSkeleton />
+                ) : (
+                  <TaskTableSkeleton />
+                )
+              ) : filteredTasks.length === 0 && isFiltered ? (
                 <EmptyState
                   onAddTask={() => handleOpenNewTask("PENDENTE")}
                   isFiltered={isFiltered}
