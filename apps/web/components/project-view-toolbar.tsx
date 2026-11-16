@@ -118,11 +118,11 @@ export function ProjectViewToolbar({
       {/* ========================================================================= */}
       {/* LADO ESQUERDO: Abas de Visualização (Tabela, Kanban, Calendário, Gantt)   */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1 flex-wrap">
         <div
           role="tablist"
           aria-label="Modo de visualização das tarefas"
-          className="flex items-center rounded-lg border border-border/70 p-0.5 bg-muted/40 shadow-2xs"
+          className="flex items-center gap-1"
         >
           {/* 1. Tabela */}
           <button
@@ -131,10 +131,10 @@ export function ProjectViewToolbar({
             aria-selected={viewMode === "table"}
             onClick={() => onViewModeChange("table")}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               viewMode === "table"
-                ? "bg-background text-foreground shadow-2xs font-semibold ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
             )}
             title="Visualização em Tabela"
           >
@@ -154,10 +154,10 @@ export function ProjectViewToolbar({
             aria-selected={viewMode === "kanban"}
             onClick={() => onViewModeChange("kanban")}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               viewMode === "kanban"
-                ? "bg-background text-foreground shadow-2xs font-semibold ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
             )}
             title="Visualização em Quadro Kanban"
           >
@@ -177,10 +177,10 @@ export function ProjectViewToolbar({
             aria-selected={viewMode === "calendar"}
             onClick={() => onViewModeChange("calendar")}
             className={cn(
-              "hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               viewMode === "calendar"
-                ? "bg-background text-foreground shadow-2xs font-semibold ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
             )}
             title="Visualização em Calendário"
           >
@@ -195,10 +195,10 @@ export function ProjectViewToolbar({
             aria-selected={viewMode === "gantt"}
             onClick={() => onViewModeChange("gantt")}
             className={cn(
-              "hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               viewMode === "gantt"
-                ? "bg-background text-foreground shadow-2xs font-semibold ring-1 ring-border/50"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
             )}
             title="Visualização em Gantt"
           >
@@ -296,8 +296,8 @@ export function ProjectViewToolbar({
           </div>
         )}
 
-        {/* Pílula com os 6 ícones */}
-        <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-2xs">
+        {/* Pílula com os 6 ícones - Exatamente igual ao Anexo 2 */}
+        <div className="flex items-center gap-2 sm:gap-2.5 rounded-xl border border-border/70 bg-card/60 px-2.5 py-1 shadow-2xs">
           {/* 1. FILTRO (ListFilter) */}
           <TaskFilterMenu
             filters={

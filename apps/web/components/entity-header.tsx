@@ -593,226 +593,125 @@ export function EntityHeader({
                   </span>
                 )}
               </div>
+
+              {/* Linha 3: Metadados limpos (Criado em | Entrega) - Exatamente igual ao Anexo 2 */}
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground pt-0.5 select-none">
+                <span className="flex items-center gap-1 shrink-0">
+                  <Calendar className="size-3 text-muted-foreground/70" />
+                  <span>
+                    {type === "management" ? "Criada" : "Criado"} em {formattedCreatedDate}
+                  </span>
+                </span>
+                {showDueDate && (
+                  canWrite ? (
+                    <Popover open={isDuePopoverOpen} onOpenChange={handleOpenDuePopover}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="group/due flex items-center gap-1 shrink-0 cursor-pointer hover:text-foreground transition-colors"
+                          title="Clique para alterar a data de entrega"
+                        >
+                          <Clock className="size-3 text-muted-foreground/70" />
+                          <span>Entrega: {formattedDueDate}</span>
+                          <span className="opacity-0 group-hover/due:opacity-100 transition-opacity duration-150 text-muted-foreground/70 group-hover/due:text-foreground">
+                            <Pencil className="size-2.5" />
+                          </span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="w-64 p-3 space-y-2.5">
+                        <p className="text-xs font-semibold text-foreground">Prazo de entrega</p>
+                        <Input
+                          type="date"
+                          value={dueDateInput}
+                          onChange={(e) => setDueDateInput(e.target.value)}
+                          className="text-xs h-8"
+                        />
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleUpdateDueDate(null)}
+                            className="text-xs h-7 px-2"
+                          >
+                            Sem prazo
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void handleUpdateDueDate(dueDateInput || null)}
+                            className="text-xs h-7 px-3 font-medium"
+                          >
+                            Salvar
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  ) : (
+                    <span className="flex items-center gap-1 shrink-0">
+                      <Clock className="size-3 text-muted-foreground/70" />
+                      <span>Entrega: {formattedDueDate}</span>
+                    </span>
+                  )
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Lado Direito: KPIs no topo + Metadados alinhados na linha de baixo */}
-          <div className="flex flex-col items-start xl:items-end justify-between gap-2.5 shrink-0 pt-2.5 xl:pt-0 border-t xl:border-t-0 border-border/50">
-            {/* Linha Superior: 3 KPIs + Avatares + Membros + Botão Chevron Up */}
-            <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-              {/* 3 KPIs Compactos em Linha Horizontal */}
-              <div className="flex items-center gap-3 sm:gap-4">
-                {kpis.map((kpi) => (
+          {/* Lado Direito: APENAS 1 LINHA LIMPA com KPIs + Membros + Chevron + Menu (Igual Anexo 2) */}
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0 pt-2 xl:pt-0">
+            {/* 3 KPIs Compactos */}
+            <div className="flex items-center gap-3 sm:gap-4">
+              {kpis.map((kpi) => (
+                <div
+                  key={kpi.key}
+                  className="flex items-center gap-2"
+                  title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
+                >
                   <div
-                    key={kpi.key}
-                    className="flex items-center gap-2"
-                    title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
+                    className={cn(
+                      "size-8 rounded-lg flex items-center justify-center shrink-0",
+                      kpi.iconBgColor || "bg-secondary text-foreground"
+                    )}
                   >
-                    <div
-                      className={cn(
-                        "size-8 rounded-lg flex items-center justify-center shrink-0",
-                        kpi.iconBgColor || "bg-secondary text-foreground"
+                    {kpi.icon}
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">{kpi.label}</p>
+                    <div className="flex items-baseline gap-1.5">
+                      <p className="text-sm font-bold text-foreground leading-tight">{kpi.value}</p>
+                      {kpi.subValue && (
+                        <span className="text-[10px] text-muted-foreground font-normal leading-tight">
+                          {kpi.subValue}
+                        </span>
                       )}
-                    >
-                      {kpi.icon}
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground leading-tight">{kpi.label}</p>
-                      <div className="flex items-baseline gap-1.5">
-                        <p className="text-sm font-bold text-foreground leading-tight">{kpi.value}</p>
-                        {kpi.subValue && (
-                          <span className="text-[10px] text-muted-foreground font-normal leading-tight">
-                            {kpi.subValue}
-                          </span>
-                        )}
-                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Divisor */}
-              <div className="h-6 w-px bg-border/60 shrink-0 hidden sm:block" />
-
-              {/* Integrantes com Tooltip e Animação no Hover */}
-              {renderMemberAvatarsSection(false)}
-
-              {/* Toggle Chevron Up para Recolher */}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={toggleHeaderExpanded}
-                className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
-                title="Recolher cabeçalho"
-                aria-label="Recolher cabeçalho"
-              >
-                <ChevronUp className="size-4" />
-              </Button>
-
-              {/* Botão de Mais Opções (...) */}
-              {renderMoreMenu()}
+                </div>
+              ))}
             </div>
 
-            {/* Linha Inferior: Metadados (Criado em | Entrega | Status | Visibilidade) */}
-            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-muted-foreground pt-0.5">
-              {/* Criado em / Criada em */}
-              <span className="flex items-center gap-1.5 shrink-0 select-none">
-                <Calendar className="size-3 text-muted-foreground/70" />
-                <span>
-                  {type === "management" ? "Criada" : "Criado"} em {formattedCreatedDate}
-                </span>
-              </span>
+            {/* Divisor */}
+            <div className="h-6 w-px bg-border/60 shrink-0 hidden sm:block" />
 
-              {/* Prazo de Entrega (se aplicável) com Popover Rápido e Lápis no Hover */}
-              {showDueDate && (
-                canWrite ? (
-                  <Popover open={isDuePopoverOpen} onOpenChange={handleOpenDuePopover}>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="group/due flex items-center gap-1.5 shrink-0 cursor-pointer hover:text-foreground transition-colors"
-                        title="Clique para alterar a data de entrega"
-                      >
-                        <Clock className="size-3 text-muted-foreground/70" />
-                        <span>Entrega: {formattedDueDate}</span>
-                        <span className="opacity-0 group-hover/due:opacity-100 transition-opacity duration-150 text-muted-foreground/70 group-hover/due:text-foreground">
-                          <Pencil className="size-2.5" />
-                        </span>
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-64 p-3 space-y-2.5">
-                      <p className="text-xs font-semibold text-foreground">Prazo de entrega</p>
-                      <Input
-                        type="date"
-                        value={dueDateInput}
-                        onChange={(e) => setDueDateInput(e.target.value)}
-                        className="text-xs h-8"
-                      />
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handleUpdateDueDate(null)}
-                          className="text-xs h-7 px-2"
-                        >
-                          Sem prazo
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void handleUpdateDueDate(dueDateInput || null)}
-                          className="text-xs h-7 px-3 font-medium"
-                        >
-                          Salvar
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <span className="flex items-center gap-1.5 shrink-0">
-                    <Clock className="size-3 text-muted-foreground/70" />
-                    <span>Entrega: {formattedDueDate}</span>
-                  </span>
-                )
-              )}
+            {/* Integrantes com Tooltip e Animação no Hover */}
+            {renderMemberAvatarsSection(false)}
 
-              {/* Status com Menu Dropdown e Lápis no Hover */}
-              {canWrite ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="group/status flex items-center gap-1.5 shrink-0 cursor-pointer hover:text-foreground transition-colors"
-                      title={`Clique para alterar o status`}
-                    >
-                      <CircleDot className="size-3 text-muted-foreground/70" />
-                      <span>Status: {currentStatusLabel}</span>
-                      <span className="opacity-0 group-hover/status:opacity-100 transition-opacity duration-150 text-muted-foreground/70 group-hover/status:text-foreground">
-                        <Pencil className="size-2.5" />
-                      </span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground">
-                      Status
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {effectiveStatusOptions.map((st) => {
-                      const isSelected =
-                        (status || "active").toLowerCase() === st.value.toLowerCase() ||
-                        (status || "active").toLowerCase() === st.label.toLowerCase();
-                      return (
-                        <DropdownMenuItem
-                          key={st.value}
-                          onClick={() => void handleSelectStatus(st.value)}
-                          className={cn(
-                            "text-xs cursor-pointer",
-                            isSelected && "font-bold text-primary"
-                          )}
-                        >
-                          {st.label}
-                          {isSelected && <Check className="size-3 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <span className="flex items-center gap-1.5 shrink-0">
-                  <CircleDot className="size-3 text-muted-foreground/70" />
-                  <span>Status: {currentStatusLabel}</span>
-                </span>
-              )}
+            {/* Toggle Chevron Up para Recolher */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleHeaderExpanded}
+              className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
+              title="Recolher cabeçalho"
+              aria-label="Recolher cabeçalho"
+            >
+              <ChevronUp className="size-4" />
+            </Button>
 
-              {/* Visibilidade com Menu Dropdown e Lápis no Hover */}
-              {canWrite ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="group/vis flex items-center gap-1.5 shrink-0 cursor-pointer hover:text-foreground transition-colors"
-                      title={`Clique para alterar a visibilidade`}
-                    >
-                      <Shield className="size-3 text-muted-foreground/70" />
-                      <span>Visibilidade: {currentVisibilityLabel}</span>
-                      <span className="opacity-0 group-hover/vis:opacity-100 transition-opacity duration-150 text-muted-foreground/70 group-hover/vis:text-foreground">
-                        <Pencil className="size-2.5" />
-                      </span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground">
-                      Visibilidade
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {effectiveVisibilityOptions.map((opt) => {
-                      const currentVis = (visibility || (type === "management" ? "company" : "team")).toLowerCase();
-                      const isSelected = currentVis === opt.value.toLowerCase();
-                      return (
-                        <DropdownMenuItem
-                          key={opt.value}
-                          onClick={() => void handleSelectVisibility(opt.value)}
-                          className={cn(
-                            "text-xs cursor-pointer",
-                            isSelected && "font-bold text-primary"
-                          )}
-                        >
-                          {opt.label}
-                          {isSelected && <Check className="size-3 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <span className="flex items-center gap-1.5 shrink-0">
-                  <Shield className="size-3 text-muted-foreground/70" />
-                  <span>Visibilidade: {currentVisibilityLabel}</span>
-                </span>
-              )}
-            </div>
+            {/* Botão de Mais Opções (...) */}
+            {renderMoreMenu()}
           </div>
         </div>
 

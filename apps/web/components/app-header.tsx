@@ -424,23 +424,6 @@ export function AppHeader({
           {/* Divisor vertical "|" - exibido sempre antes dos botões de ação do header */}
           <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />
 
-          {!isProjectPage && isInsideProject && onOpenProjectMembers && (
-            <HeaderTooltip label={`Membros do projeto (${projectMembersCount})`}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onOpenProjectMembers}
-                className="h-8 px-2 gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                aria-label={`Membros do projeto (${projectMembersCount})`}
-              >
-                <Users className="w-4 h-4" />
-                {projectMembersCount > 0 && (
-                  <span className="text-[11px] font-mono">{projectMembersCount}</span>
-                )}
-              </Button>
-            </HeaderTooltip>
-          )}
 
           {/* Configurações da Visualização (Engrenagem) - Popover Unificado para Gestões, Projetos e Tarefas */}
           {isProjectPage ? (
