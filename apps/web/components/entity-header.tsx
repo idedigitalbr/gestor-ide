@@ -522,14 +522,14 @@ export function EntityHeader({
 
           {/* Barra de Ferramentas e Abas embutida (Permanece acessível mesmo retraído) */}
           {bottomBar && (
-            <div className="pt-2 border-t border-border/50">
+            <div className="w-full pt-1">
               {bottomBar}
             </div>
           )}
         </div>
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
-        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xl flex flex-col gap-3 transition-all mb-3.5">
+        <div className="rounded-2xl border border-border/80 bg-card p-2.5 sm:px-4 sm:py-2.5 lg:px-5 lg:py-2.5 shadow-xl flex flex-col gap-1.5 transition-all mb-3.5">
           <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4">
             {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
@@ -717,7 +717,7 @@ export function EntityHeader({
 
           {/* Barra de Ferramentas e Abas embutida */}
           {bottomBar && (
-            <div className="pt-2.5 border-t border-border/60">
+            <div className="w-full pt-0.5">
               {bottomBar}
             </div>
           )}

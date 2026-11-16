@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import type { ViewMode } from "@gestor-ide/core";
+import type { ViewMode, CustomProjectView } from "@gestor-ide/core";
+import { renderCustomViewIcon } from "@/components/custom-views/icon-picker";
 import type { Task, TaskFilter } from "@/types/task";
 import type { SubtaskDisplayMode } from "@/components/app-header";
 import {
@@ -29,6 +30,13 @@ import {
   Sparkles,
   Layers,
   CheckCircle2,
+  Plus,
+  Folder,
+  Pencil,
+  Trash2,
+  ExternalLink,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -50,6 +58,14 @@ import { cn } from "@/lib/utils";
 export interface ProjectViewToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  customViews?: CustomProjectView[];
+  activeCustomViewId?: string | null;
+  onSelectCustomView?: (view: CustomProjectView | null) => void;
+  onOpenCreateCustomView?: () => void;
+  onEditCustomView?: (view: CustomProjectView) => void;
+  onDeleteCustomView?: (view: CustomProjectView) => void;
+  onReorderCustomViews?: (views: CustomProjectView[]) => void;
+  canWrite?: boolean;
   totalTasks: number;
   tasks?: Task[];
   taskSort?: TaskSortOption;
@@ -85,6 +101,14 @@ const VIEW_OPTIONS: Array<{
 export function ProjectViewToolbar({
   viewMode,
   onViewModeChange,
+  customViews = [],
+  activeCustomViewId = null,
+  onSelectCustomView,
+  onOpenCreateCustomView,
+  onEditCustomView,
+  onDeleteCustomView,
+  onReorderCustomViews,
+  canWrite = true,
   totalTasks,
   tasks = [],
   taskSort = "none",
@@ -105,171 +129,515 @@ export function ProjectViewToolbar({
 }: ProjectViewToolbarProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(Boolean(searchQuery));
   const [isAiPopoverOpen, setIsAiPopoverOpen] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const isSortActive = taskSort && taskSort !== "none";
+
+  // Identificar as visualizações predefinidas e personalizadas
+  const predefinedGdrive = customViews.find(
+    (v) => v.id.includes("gdrive") || v.name === "Arquivos & Documentos"
+  );
+  const predefinedChatGpt = customViews.find(
+    (v) => v.id.includes("chatgpt") || v.name === "IA"
+  );
+  const customOnlyViews = customViews.filter(
+    (v) =>
+      v.type === "custom" &&
+      !v.id.includes("gdrive") &&
+      !v.id.includes("chatgpt")
+  );
+
+  function handleSelectNative(mode: ViewMode) {
+    onSelectCustomView?.(null);
+    onViewModeChange(mode);
+  }
+
+  function handlePredefinedClick(
+    v?: CustomProjectView,
+    fallbackName = "Arquivos & Documentos"
+  ) {
+    if (!v || !v.url) {
+      if (v && onEditCustomView) {
+        onEditCustomView(v);
+      } else if (onOpenCreateCustomView) {
+        onOpenCreateCustomView();
+      }
+      return;
+    }
+
+    if (v.openMode === "new_tab" || v.openMode === "auto") {
+      window.open(v.url, "_blank", "noopener,noreferrer");
+    } else if (v.openMode === "embed") {
+      onSelectCustomView?.(v);
+    }
+  }
+
+  function handleCustomViewClick(v: CustomProjectView) {
+    if (v.openMode === "new_tab") {
+      window.open(v.url, "_blank", "noopener,noreferrer");
+    } else if (v.openMode === "embed") {
+      onSelectCustomView?.(v);
+    } else {
+      // Automático: se selecionado, aciona a visualização embutida
+      onSelectCustomView?.(v);
+    }
+  }
+
+  function handleDragStart(e: React.DragEvent, index: number) {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDrop(e: React.DragEvent, dropIndex: number) {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) return;
+
+    const list = [...customOnlyViews];
+    const [moved] = list.splice(draggedIndex, 1);
+    list.splice(dropIndex, 0, moved);
+
+    const nextFullList = [
+      ...(predefinedGdrive ? [predefinedGdrive] : []),
+      ...(predefinedChatGpt ? [predefinedChatGpt] : []),
+      ...list,
+    ].map((item, idx) => ({ ...item, order: idx }));
+
+    setDraggedIndex(null);
+    onReorderCustomViews?.(nextFullList);
+  }
+
+  function handleMoveView(fromIndex: number, toIndex: number) {
+    if (toIndex < 0 || toIndex >= customOnlyViews.length) return;
+    const list = [...customOnlyViews];
+    const [moved] = list.splice(fromIndex, 1);
+    list.splice(toIndex, 0, moved);
+
+    const nextFullList = [
+      ...(predefinedGdrive ? [predefinedGdrive] : []),
+      ...(predefinedChatGpt ? [predefinedChatGpt] : []),
+      ...list,
+    ].map((item, idx) => ({ ...item, order: idx }));
+
+    onReorderCustomViews?.(nextFullList);
+  }
+
+  const isNativeActive = (mode: ViewMode) =>
+    activeCustomViewId === null && viewMode === mode;
 
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2.5 select-none w-full",
+        "relative flex items-center justify-between w-full select-none pt-0.5",
         className
       )}
     >
       {/* ========================================================================= */}
-      {/* LADO ESQUERDO: Abas de Visualização (Tabela, Kanban, Calendário, Gantt)   */}
+      {/* 1. LINHA HORIZONTAL ESQUERDA (Conecta a lateral esquerda às abas centrais) */}
       {/* ========================================================================= */}
-      <div className="flex items-center gap-1 flex-wrap">
-        <div
-          role="tablist"
-          aria-label="Modo de visualização das tarefas"
-          className="flex items-center gap-1"
+      <div className="flex-1 h-px bg-border/40 min-w-2 sm:min-w-4" />
+
+      {/* ========================================================================= */}
+      {/* 2. PÍLULA CENTRAL: Abas de Visualização (Nativas + Predefinidas + Custom + +) */}
+      {/* ========================================================================= */}
+      <div
+        role="tablist"
+        aria-label="Modo de visualização das tarefas"
+        className="mx-1 sm:mx-3 flex items-center rounded-xl border border-border/70 bg-card/60 p-0.5 shadow-2xs backdrop-blur-xs shrink-0 max-w-[calc(100vw-120px)] sm:max-w-[70vw] overflow-x-auto no-scrollbar scroll-smooth"
+      >
+        {/* 1. Tabela */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isNativeActive("table")}
+          onClick={() => handleSelectNative("table")}
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            isNativeActive("table")
+              ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+          )}
+          title="Visualização em Tabela"
         >
-          {/* 1. Tabela */}
+          <Table className="size-3.5" />
+          <span>Tabela</span>
+          {isNativeActive("table") && totalTasks > 0 && (
+            <span className="text-[10px] font-mono opacity-80 ml-0.5">
+              ({totalTasks})
+            </span>
+          )}
+        </button>
+
+        {/* 2. Kanban */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isNativeActive("kanban")}
+          onClick={() => handleSelectNative("kanban")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            isNativeActive("kanban")
+              ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+          )}
+          title="Visualização em Quadro Kanban"
+        >
+          <Kanban className="size-3.5" />
+          <span>Kanban</span>
+          {isNativeActive("kanban") && totalTasks > 0 && (
+            <span className="text-[10px] font-mono opacity-80 ml-0.5">
+              ({totalTasks})
+            </span>
+          )}
+        </button>
+
+        {/* 3. Calendário */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isNativeActive("calendar")}
+          onClick={() => handleSelectNative("calendar")}
+          className={cn(
+            "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            isNativeActive("calendar")
+              ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+          )}
+          title="Visualização em Calendário"
+        >
+          <Calendar className="size-3.5" />
+          <span>Calendário</span>
+        </button>
+
+        {/* 4. Gantt */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isNativeActive("gantt")}
+          onClick={() => handleSelectNative("gantt")}
+          className={cn(
+            "hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            isNativeActive("gantt")
+              ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+          )}
+          title="Visualização em Gantt"
+        >
+          <GanttChart className="size-3.5" />
+          <span>Gantt</span>
+        </button>
+
+        {/* 5. Arquivos & Documentos (Predefinida - Hover revela (GDrive)) */}
+        <div className="relative flex items-center group/gdrive shrink-0">
           <button
             type="button"
             role="tab"
-            aria-selected={viewMode === "table"}
-            onClick={() => onViewModeChange("table")}
+            aria-selected={activeCustomViewId === predefinedGdrive?.id}
+            onClick={() => handlePredefinedClick(predefinedGdrive, "Arquivos & Documentos")}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              viewMode === "table"
-                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              activeCustomViewId === predefinedGdrive?.id
+                ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
             )}
-            title="Visualização em Tabela"
+            title={
+              predefinedGdrive?.url
+                ? `Google Drive (${predefinedGdrive.url})`
+                : "Vincular pasta do Google Drive"
+            }
           >
-            <Table className="size-3.5" />
-            <span>Tabela</span>
-            {viewMode === "table" && totalTasks > 0 && (
-              <span className="text-[10px] font-mono opacity-80 ml-0.5">
-                ({totalTasks})
+            <Folder className="size-3.5 text-blue-400 shrink-0" />
+            <span className="flex items-center">
+              <span>Arquivos & Documentos</span>
+              <span className="max-w-0 opacity-0 overflow-hidden group-hover/gdrive:max-w-[70px] group-hover/gdrive:opacity-80 transition-all duration-200 text-[10px] text-muted-foreground ml-0.5 font-normal">
+                (GDrive)
               </span>
-            )}
+            </span>
           </button>
-
-          {/* 2. Kanban */}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === "kanban"}
-            onClick={() => onViewModeChange("kanban")}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              viewMode === "kanban"
-                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
-            )}
-            title="Visualização em Quadro Kanban"
-          >
-            <Kanban className="size-3.5" />
-            <span>Kanban</span>
-            {viewMode === "kanban" && totalTasks > 0 && (
-              <span className="text-[10px] font-mono opacity-80 ml-0.5">
-                ({totalTasks})
-              </span>
-            )}
-          </button>
-
-          {/* 3. Calendário */}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === "calendar"}
-            onClick={() => onViewModeChange("calendar")}
-            className={cn(
-              "hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              viewMode === "calendar"
-                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
-            )}
-            title="Visualização em Calendário"
-          >
-            <Calendar className="size-3.5" />
-            <span>Calendário</span>
-          </button>
-
-          {/* 4. Gantt */}
-          <button
-            type="button"
-            role="tab"
-            aria-selected={viewMode === "gantt"}
-            onClick={() => onViewModeChange("gantt")}
-            className={cn(
-              "hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              viewMode === "gantt"
-                ? "bg-card border border-border/80 text-foreground shadow-2xs font-semibold"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
-            )}
-            title="Visualização em Gantt"
-          >
-            <GanttChart className="size-3.5" />
-            <span>Gantt</span>
-          </button>
-
-          {/* Dropdown "Mais" para telas compactas */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "flex md:hidden items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/40 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  (viewMode === "calendar" ||
-                    viewMode === "gantt" ||
-                    viewMode === "workload") &&
-                    "text-foreground font-semibold"
-                )}
-                title="Mais visualizações"
-              >
-                <span>Mais</span>
-                <ChevronDown className="size-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44 text-xs">
-              {VIEW_OPTIONS.filter((opt) => opt.desktopOnly).map((opt) => {
-                const IconComponent = opt.icon;
-                const isSelected = viewMode === opt.id;
-                return (
+          {canWrite && predefinedGdrive && onEditCustomView && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="opacity-0 group-hover/gdrive:opacity-100 p-0.5 text-muted-foreground hover:text-foreground rounded transition-opacity cursor-pointer ml-[-4px]"
+                  title="Configurar Google Drive"
+                  aria-label="Opções Google Drive"
+                >
+                  <ChevronDown className="size-2.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48 text-xs">
+                {predefinedGdrive.url && (
                   <DropdownMenuItem
-                    key={opt.id}
-                    onClick={() => onViewModeChange(opt.id)}
-                    className={cn(
-                      "flex items-center justify-between cursor-pointer",
-                      isSelected && "font-semibold text-primary"
-                    )}
+                    onClick={() =>
+                      window.open(predefinedGdrive.url, "_blank", "noopener,noreferrer")
+                    }
+                    className="cursor-pointer gap-2"
                   >
-                    <span className="flex items-center gap-2">
-                      <IconComponent className="size-3.5 text-muted-foreground" />
-                      <span>{opt.label}</span>
-                    </span>
-                    {isSelected && <Check className="size-3.5 text-primary" />}
+                    <ExternalLink className="size-3.5" />
+                    <span>Abrir em nova guia</span>
                   </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                )}
+                <DropdownMenuItem
+                  onClick={() => onEditCustomView(predefinedGdrive)}
+                  className="cursor-pointer gap-2"
+                >
+                  <Pencil className="size-3.5" />
+                  <span>Configurar link do Google Drive</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
-        {/* Chip discreto de filtro ativo para limpar */}
+        {/* 6. IA (Predefinida - Hover revela (ChatGPT)) */}
+        <div className="relative flex items-center group/chatgpt shrink-0">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeCustomViewId === predefinedChatGpt?.id}
+            onClick={() => handlePredefinedClick(predefinedChatGpt, "IA")}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              activeCustomViewId === predefinedChatGpt?.id
+                ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+            )}
+            title={
+              predefinedChatGpt?.url
+                ? `Projeto ChatGPT (${predefinedChatGpt.url})`
+                : "Vincular projeto do ChatGPT"
+            }
+          >
+            <Sparkles className="size-3.5 text-purple-400 shrink-0" />
+            <span className="flex items-center">
+              <span>IA</span>
+              <span className="max-w-0 opacity-0 overflow-hidden group-hover/chatgpt:max-w-[80px] group-hover/chatgpt:opacity-80 transition-all duration-200 text-[10px] text-muted-foreground ml-0.5 font-normal">
+                (ChatGPT)
+              </span>
+            </span>
+          </button>
+          {canWrite && predefinedChatGpt && onEditCustomView && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="opacity-0 group-hover/chatgpt:opacity-100 p-0.5 text-muted-foreground hover:text-foreground rounded transition-opacity cursor-pointer ml-[-4px]"
+                  title="Configurar ChatGPT"
+                  aria-label="Opções ChatGPT"
+                >
+                  <ChevronDown className="size-2.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48 text-xs">
+                {predefinedChatGpt.url && (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      window.open(predefinedChatGpt.url, "_blank", "noopener,noreferrer")
+                    }
+                    className="cursor-pointer gap-2"
+                  >
+                    <ExternalLink className="size-3.5" />
+                    <span>Abrir em nova guia</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={() => onEditCustomView(predefinedChatGpt)}
+                  className="cursor-pointer gap-2"
+                >
+                  <Pencil className="size-3.5" />
+                  <span>Configurar link do ChatGPT</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* 7. Visualizações Personalizadas (Custom Views) Criadas */}
+        {customOnlyViews.map((v, idx) => (
+          <div
+            key={v.id}
+            draggable={canWrite}
+            onDragStart={(e) => handleDragStart(e, idx)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, idx)}
+            className={cn(
+              "relative flex items-center group/customview shrink-0 rounded-lg transition-all",
+              draggedIndex === idx && "opacity-40 border border-dashed border-primary"
+            )}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeCustomViewId === v.id}
+              onClick={() => handleCustomViewClick(v)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                activeCustomViewId === v.id
+                  ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+              )}
+              title={v.name}
+            >
+              {renderCustomViewIcon(v.icon, "size-3.5 shrink-0")}
+              <span>{v.name}</span>
+            </button>
+
+            {/* Menu de contexto da visualização personalizada */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="opacity-0 group-hover/customview:opacity-100 p-0.5 text-muted-foreground hover:text-foreground rounded transition-opacity cursor-pointer ml-[-4px]"
+                  title="Gerenciar visualização"
+                  aria-label={`Opções de ${v.name}`}
+                >
+                  <ChevronDown className="size-2.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48 text-xs">
+                <DropdownMenuItem
+                  onClick={() =>
+                    window.open(v.url, "_blank", "noopener,noreferrer")
+                  }
+                  className="cursor-pointer gap-2"
+                >
+                  <ExternalLink className="size-3.5" />
+                  <span>Abrir em nova guia</span>
+                </DropdownMenuItem>
+
+                {canWrite && onEditCustomView && (
+                  <DropdownMenuItem
+                    onClick={() => onEditCustomView(v)}
+                    className="cursor-pointer gap-2"
+                  >
+                    <Pencil className="size-3.5" />
+                    <span>Editar visualização</span>
+                  </DropdownMenuItem>
+                )}
+
+                {canWrite && idx > 0 && (
+                  <DropdownMenuItem
+                    onClick={() => handleMoveView(idx, idx - 1)}
+                    className="cursor-pointer gap-2"
+                  >
+                    <ArrowLeft className="size-3.5" />
+                    <span>Mover para esquerda</span>
+                  </DropdownMenuItem>
+                )}
+
+                {canWrite && idx < customOnlyViews.length - 1 && (
+                  <DropdownMenuItem
+                    onClick={() => handleMoveView(idx, idx + 1)}
+                    className="cursor-pointer gap-2"
+                  >
+                    <ArrowRight className="size-3.5" />
+                    <span>Mover para direita</span>
+                  </DropdownMenuItem>
+                )}
+
+                {canWrite && onDeleteCustomView && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => onDeleteCustomView(v)}
+                      className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                      <span>Excluir visualização</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+
+        {/* 8. Botão + : permite adicionar visualizações personalizadas */}
+        {canWrite && onOpenCreateCustomView && (
+          <button
+            type="button"
+            onClick={onOpenCreateCustomView}
+            className="flex items-center justify-center size-6 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer ml-0.5 shrink-0"
+            title="Adicionar visualização personalizada (+)"
+            aria-label="Adicionar visualização"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        )}
+
+        {/* Dropdown "Mais" para telas compactas */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "flex md:hidden items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/40 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                (viewMode === "calendar" ||
+                  viewMode === "gantt" ||
+                  viewMode === "workload") &&
+                  activeCustomViewId === null &&
+                  "text-foreground font-semibold"
+              )}
+              title="Mais visualizações nativas"
+            >
+              <span>Mais</span>
+              <ChevronDown className="size-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-44 text-xs">
+            {VIEW_OPTIONS.filter((opt) => opt.desktopOnly).map((opt) => {
+              const IconComponent = opt.icon;
+              const isSelected = isNativeActive(opt.id);
+              return (
+                <DropdownMenuItem
+                  key={opt.id}
+                  onClick={() => handleSelectNative(opt.id)}
+                  className={cn(
+                    "flex items-center justify-between cursor-pointer",
+                    isSelected && "font-semibold text-primary"
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <IconComponent className="size-3.5 text-muted-foreground" />
+                    <span>{opt.label}</span>
+                  </span>
+                  {isSelected && <Check className="size-3.5 text-primary" />}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. LINHA HORIZONTAL DIREITA (Conecta as abas centrais aos botões da direita) */}
+      {/* ========================================================================= */}
+      <div className="flex-1 h-px bg-border/40 min-w-4" />
+
+      {/* ========================================================================= */}
+      {/* 4. LADO DIREITO: Busca Expansível + Pílula com os 6 Botões de Ícones     */}
+      {/* ========================================================================= */}
+      <div className="ml-2 sm:ml-3 flex items-center gap-1.5 shrink-0">
+        {/* Chip discreto se filtro estiver ativo */}
         {isFiltered && onClearFilters && (
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/60 border border-border text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent/60 border border-border text-[10px] text-muted-foreground">
             <span>Filtrado</span>
             <button
               type="button"
               onClick={onClearFilters}
-              className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline cursor-pointer ml-0.5"
+              className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline cursor-pointer"
               title="Limpar todos os filtros"
             >
               <X className="size-2.5" />
-              <span>Limpar</span>
             </button>
           </div>
         )}
-      </div>
 
-      {/* ========================================================================= */}
-      {/* LADO DIREITO: Pílula com os 6 Botões de Ícones (Filtro, Ordenar, Zap, IA) */}
-      {/* ========================================================================= */}
-      <div className="flex items-center gap-1">
         {/* Campo de Busca Rápida (Expansível ao clicar no ícone de lupa) */}
         {isSearchOpen && onSearchChange && (
           <div className="flex items-center gap-1 bg-background border border-border/80 rounded-lg px-2 h-7 shadow-2xs animate-in fade-in zoom-in-95 duration-100">
@@ -280,7 +648,7 @@ export function ProjectViewToolbar({
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Buscar no projeto..."
               autoFocus
-              className="w-28 sm:w-40 text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+              className="w-28 sm:w-36 text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
             />
             <button
               type="button"
@@ -297,7 +665,7 @@ export function ProjectViewToolbar({
         )}
 
         {/* Pílula com os 6 ícones - Exatamente igual ao Anexo 2 */}
-        <div className="flex items-center gap-2 sm:gap-2.5 rounded-xl border border-border/70 bg-card/60 px-2.5 py-1 shadow-2xs">
+        <div className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-border/70 bg-card/60 px-2 py-0.5 shadow-2xs">
           {/* 1. FILTRO (ListFilter) */}
           <TaskFilterMenu
             filters={
