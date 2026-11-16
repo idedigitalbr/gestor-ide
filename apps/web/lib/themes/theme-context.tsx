@@ -24,24 +24,37 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     catch { /* Navegador bloqueou armazenamento: manter opção em memória. */ }
   }, []);
 
-  // 1. Modos de aparência estritamente binários: "dark" ou "light" (sem auto/sistema)
-  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>("dark");
+  // 1. Modos de aparência: "system", "dark" ou "light" (padrão = "system", segue o Windows)
+  const [appearanceMode, setAppearanceModeState] = useState<AppearanceMode>("system");
+  const [systemMode, setSystemMode] = useState<"dark" | "light">("dark");
 
   // 2. IDs de temas ativos por modo (padrão Dark = all-black, padrão Light = clean-white)
   const [darkThemeId, setDarkThemeId] = useState<string>("all-black");
   const [lightThemeId, setLightThemeId] = useState<string>("clean-white");
 
+  // Escutar preferência do Windows / navegador em tempo real
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSystemMode(mql.matches ? "dark" : "light");
+
+    const handler = (e: MediaQueryListEvent) => {
+      setSystemMode(e.matches ? "dark" : "light");
+    };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
   // Hidrata preferências salvas no cliente sem causar divergência no SSR
   useEffect(() => {
     try {
       const storedChrome = localStorage.getItem(STORAGE_KEYS.COLORED_CHROME);
-      // As preferências locais só ficam disponíveis após a hidratação no cliente.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedChrome === "true") setColoredChromeState(true);
 
       const storedMode = localStorage.getItem(STORAGE_KEYS.MODE);
-      if (storedMode === "light" || storedMode === "dark") {
-        setAppearanceModeState(storedMode);
+      if (storedMode === "light" || storedMode === "dark" || storedMode === "system") {
+        setAppearanceModeState(storedMode as AppearanceMode);
       }
 
       const storedDark = localStorage.getItem(STORAGE_KEYS.DARK_THEME);
@@ -52,8 +65,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  // 3. Modo resolvido direto (sempre "dark" ou "light")
-  const resolvedMode: "dark" | "light" = appearanceMode;
+  // 3. Modo resolvido (sempre "dark" ou "light"): se appearanceMode for "system", segue o Windows nativo!
+  const resolvedMode: "dark" | "light" = appearanceMode === "system" ? systemMode : appearanceMode;
 
   // 4. Lista dos 24 temas pré-configurados exatamente
   const presetThemes = useMemo(() => [...DARK_THEMES, ...LIGHT_THEMES], []);

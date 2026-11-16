@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   Cpu,
+  Download,
   ExternalLink,
   Globe,
   KeyRound,
@@ -17,6 +18,8 @@ import {
   Lock,
   Mail,
   MessageSquare,
+  Monitor,
+  Moon,
   Palette,
   Plus,
   RefreshCw,
@@ -25,6 +28,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Smartphone,
+  Sun,
   Terminal,
   Trash2,
   Upload,
@@ -32,6 +36,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ideCrmClient } from "@gestor-ide/sdk";
+import { useTheme } from "@/lib/themes/theme-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -175,6 +180,66 @@ export function SettingsView() {
     name: string;
     email: string;
   } | null>(null);
+
+  // Tema e Detecção do Sistema
+  const { appearanceMode, resolvedMode, setAppearanceMode } = useTheme();
+
+  // Estados de Configuração Desktop
+  const [isDesktopApp, setIsDesktopApp] = useState(false);
+  const [autostart, setAutostart] = useState(true);
+  const [closeToTray, setCloseToTray] = useState(true);
+  const [nativeNotifications, setNativeNotifications] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasTauri = "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
+    setIsDesktopApp(hasTauri);
+
+    const storedAutostart = localStorage.getItem("ide_desktop_autostart");
+    if (storedAutostart !== null) setAutostart(storedAutostart === "true");
+
+    const storedCloseToTray = localStorage.getItem("ide_desktop_close_to_tray");
+    if (storedCloseToTray !== null) setCloseToTray(storedCloseToTray === "true");
+
+    if (hasTauri && (window as unknown as { __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__) {
+      (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__
+        .invoke("get_desktop_settings")
+        .then((data: unknown) => {
+          if (data && typeof data === "object") {
+            const d = data as { autostart?: boolean; closeToTray?: boolean };
+            if (typeof d.autostart === "boolean") setAutostart(d.autostart);
+            if (typeof d.closeToTray === "boolean") setCloseToTray(d.closeToTray);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const handleToggleAutostart = (enabled: boolean) => {
+    setAutostart(enabled);
+    localStorage.setItem("ide_desktop_autostart", String(enabled));
+    if (isDesktopApp && typeof window !== "undefined") {
+      const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__;
+      if (internals) {
+        internals
+          .invoke("set_desktop_settings", { autostart: enabled, close_to_tray: closeToTray })
+          .catch(() => {});
+      }
+    }
+  };
+
+  const handleToggleCloseToTray = (enabled: boolean) => {
+    setCloseToTray(enabled);
+    localStorage.setItem("ide_desktop_close_to_tray", String(enabled));
+    if (isDesktopApp && typeof window !== "undefined") {
+      const internals = (window as unknown as { __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__;
+      if (internals) {
+        internals
+          .invoke("set_desktop_settings", { autostart, close_to_tray: enabled })
+          .catch(() => {});
+      }
+    }
+  };
 
   // Carregar configurações do CRM e sessão do usuário
   useEffect(() => {
@@ -547,7 +612,7 @@ export function SettingsView() {
         {!loading && settings && (
           <Tabs defaultValue="mcp" className="w-full space-y-6">
             {/* Barra de Abas Estilizada */}
-            <TabsList className="grid w-full grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:grid-cols-5 h-auto">
+            <TabsList className="grid w-full grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:grid-cols-6 h-auto">
               <TabsTrigger
                 value="profile"
                 className="gap-2 py-2 text-xs font-medium cursor-pointer"
@@ -569,6 +634,13 @@ export function SettingsView() {
                     {activeTokensCount}
                   </Badge>
                 )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="desktop"
+                className="gap-2 py-2 text-xs font-medium cursor-pointer"
+              >
+                <Monitor className="size-3.5 shrink-0" />
+                <span>Desktop & Tema</span>
               </TabsTrigger>
               <TabsTrigger
                 value="notifications"
@@ -1542,6 +1614,224 @@ export function SettingsView() {
                     </p>
                   </div>
                 </div>
+              </section>
+            </TabsContent>
+
+            {/* ================================================================= */}
+            {/* ABA 6: APLICATIVO DESKTOP & TEMA DO WINDOWS                      */}
+            {/* ================================================================= */}
+            <TabsContent value="desktop" className="space-y-6">
+              {/* Card 1: Aparência e Tema do Sistema */}
+              <section className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+                <div className="flex items-start justify-between border-b border-border pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Palette className="size-4" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Aparência & Tema do Sistema
+                      </h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      O IDE Gestor detecta automaticamente se o seu Windows está no modo Claro ou Escuro e adapta toda a interface em tempo real.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-[11px] font-normal border-primary/30 text-primary bg-primary/5">
+                    Ativo: {resolvedMode === "dark" ? "Escuro" : "Claro"}
+                  </Badge>
+                </div>
+
+                {/* Seleção do Modo com 3 Opções */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {/* Opção Sistema */}
+                  <button
+                    type="button"
+                    onClick={() => setAppearanceMode("system")}
+                    className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                      appearanceMode === "system"
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "border-border bg-background/50 hover:border-primary/40 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Monitor className="size-4" />
+                      </div>
+                      {appearanceMode === "system" && (
+                        <Check className="size-4 text-primary" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">
+                        Automático (Sistema)
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Segue o tema do seu Windows ou navegador em tempo real.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Opção Dark */}
+                  <button
+                    type="button"
+                    onClick={() => setAppearanceMode("dark")}
+                    className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                      appearanceMode === "dark"
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "border-border bg-background/50 hover:border-primary/40 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Moon className="size-4" />
+                      </div>
+                      {appearanceMode === "dark" && (
+                        <Check className="size-4 text-primary" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">
+                        Escuro (Dark Mode)
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Fundo escuro profissional com alto contraste e foco total.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Opção Light */}
+                  <button
+                    type="button"
+                    onClick={() => setAppearanceMode("light")}
+                    className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                      appearanceMode === "light"
+                        ? "border-primary bg-primary/5 shadow-sm"
+                        : "border-border bg-background/50 hover:border-primary/40 hover:bg-muted/30"
+                    }`}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Sun className="size-4" />
+                      </div>
+                      {appearanceMode === "light" && (
+                        <Check className="size-4 text-primary" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">
+                        Claro (Light Mode)
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Fundo claro limpo e iluminado para ambientes diurnos.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </section>
+
+              {/* Card 2: Preferências do Aplicativo Desktop */}
+              <section className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+                <div className="flex items-start justify-between border-b border-border pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Monitor className="size-4" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Comportamento do Aplicativo Desktop
+                      </h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Controle como o executável oficial do IDE Gestor se comporta no seu Windows (padrão Discord e Spotify).
+                    </p>
+                  </div>
+                  {isDesktopApp ? (
+                    <Badge variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                      Desktop Nativo Ativo
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[11px] text-muted-foreground">
+                      Acesso Web
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Switch 1: Iniciar com Windows */}
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-background/60 border border-border/60">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-medium text-foreground">
+                        Iniciar automaticamente com o Windows
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Abre o IDE Gestor em segundo plano ao ligar o computador para sincronização instantânea.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={autostart}
+                      onCheckedChange={handleToggleAutostart}
+                      className="cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Switch 2: Minimizar ao Fechar */}
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-background/60 border border-border/60">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-medium text-foreground">
+                        Minimizar para a bandeja ao fechar (X)
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Ao clicar no botão de fechar, mantém o aplicativo rodando silenciosamente na bandeja (ao lado do relógio).
+                      </p>
+                    </div>
+                    <Switch
+                      checked={closeToTray}
+                      onCheckedChange={handleToggleCloseToTray}
+                      className="cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Switch 3: Notificações Nativas */}
+                  <div className="flex items-center justify-between gap-4 p-3 rounded-xl bg-background/60 border border-border/60">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-medium text-foreground">
+                        Notificações Push no Windows
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Exibe balões nativos no Centro de Ações do Windows quando tarefas forem atribuídas ou comentadas.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={nativeNotifications}
+                      onCheckedChange={setNativeNotifications}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Banner de download do App caso esteja no navegador */}
+                {!isDesktopApp && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20 mt-4">
+                    <div className="space-y-0.5 text-center sm:text-left">
+                      <div className="text-xs font-semibold text-primary">
+                        Baixe o Aplicativo Oficial para Windows
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Instalação em 1 clique, atalhos de teclado globais, modo bandeja e consumo de apenas ~45MB de RAM.
+                      </p>
+                    </div>
+                    <a
+                      href="https://github.com/idedigitalbr/gestor-ide/releases/download/v0.1.6/instalador-ide-gestor-v0.1.6-oneclick.exe"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors shrink-0"
+                    >
+                      <Download className="size-3.5" />
+                      <span>Baixar OneClick v0.1.6</span>
+                    </a>
+                  </div>
+                )}
               </section>
             </TabsContent>
           </Tabs>
