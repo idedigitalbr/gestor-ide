@@ -73,9 +73,44 @@ jobs:
             Versão de alta performance construída com Tauri v2.
             
             ### Arquivos disponíveis:
-            - **Windows**: `.exe` (instalador) e `.msi`
+            - **Windows**: `instalador-ide-gestor-${{ inputs.version || github.ref_name }}-oneclick.exe` (Instalação 1-clique com progresso visual e auto-start)
+            - **Windows**: `instalador-ide-gestor-${{ inputs.version || github.ref_name }}-x64.exe` (Instalador tradicional completo)
             - **macOS**: `.dmg` (Universal para Intel e Apple Silicon M1/M2/M3/M4)
             - **Linux**: `.deb` e `.AppImage`
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Package Windows Installers (OneClick & Traditional)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $TAG = "${{ inputs.version || github.ref_name }}"
+          Write-Host "Localizando instalador NSIS gerado pelo Tauri..."
+          $nsisSetup = Get-ChildItem -Path "apps/desktop/src-tauri/target/release/bundle/nsis/*.exe" | Select-Object -First 1
+          if (-not $nsisSetup) {
+            Write-Error "Instalador NSIS não encontrado!"
+            exit 1
+          }
+          Write-Host "Encontrado: $($nsisSetup.FullName)"
+
+          # 1. Copiar instalador tradicional nomeado
+          $tradName = "instalador-ide-gestor-$TAG-x64.exe"
+          Copy-Item $nsisSetup.FullName -Destination $tradName
+          Write-Host "Criado: $tradName"
+
+          # 2. Preparar payload para o OneClick
+          Copy-Item $nsisSetup.FullName -Destination "apps/desktop/oneclick/setup_payload.exe"
+
+          # 3. Compilar instalador OneClick com janela visual de progresso
+          cargo build --release --manifest-path "apps/desktop/oneclick/Cargo.toml"
+          $oneclickExe = Get-ChildItem -Path "apps/desktop/oneclick/target/release/*.exe" -Exclude "*.pdb" | Select-Object -First 1
+          $oneclickName = "instalador-ide-gestor-$TAG-oneclick.exe"
+          Copy-Item $oneclickExe.FullName -Destination $oneclickName
+          Write-Host "Criado: $oneclickName"
+
+          # 4. Fazer upload de ambos para o Release no GitHub
+          gh release upload "$TAG" "$tradName" "$oneclickName" --clobber
+          Write-Host "Upload concluído para o release $TAG!"
