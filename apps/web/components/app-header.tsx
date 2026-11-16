@@ -25,7 +25,6 @@ import {
   Download,
   Filter,
   Home,
-  Kanban,
   LayoutDashboard,
   Layers,
   LogOut,
@@ -35,7 +34,6 @@ import {
   Search,
   Settings,
   SlidersHorizontal,
-  Table,
   UserRound,
   Users,
   X,
@@ -422,42 +420,6 @@ export function AppHeader({
               className="h-8 w-full sm:w-48 md:w-56 pl-8 pr-2.5 text-xs bg-muted/40 border-border/70 rounded-lg text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
-
-          {/* Seletor rápido de modo de visualização (Tabela / Kanban) quando dentro do projeto */}
-          {isInsideProject && !isProjectPage && onViewModeChange && (
-            <div className="hidden sm:flex items-center rounded-lg border border-border/60 p-0.5 bg-muted/40">
-              <HeaderTooltip label="Visualização em Tabela">
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange("table")}
-                  className={cn(
-                    "p-1.5 rounded transition-colors cursor-pointer",
-                    viewMode === "table"
-                      ? "bg-background text-foreground shadow-2xs font-bold"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  aria-label="Visualização em Tabela"
-                >
-                  <Table className="w-3.5 h-3.5" />
-                </button>
-              </HeaderTooltip>
-              <HeaderTooltip label="Visualização em Quadro Kanban">
-                <button
-                  type="button"
-                  onClick={() => onViewModeChange("kanban")}
-                  className={cn(
-                    "p-1.5 rounded transition-colors cursor-pointer",
-                    viewMode === "kanban"
-                      ? "bg-background text-foreground shadow-2xs font-bold"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  aria-label="Visualização em Quadro Kanban"
-                >
-                  <Kanban className="w-3.5 h-3.5" />
-                </button>
-              </HeaderTooltip>
-            </div>
-          )}
 
           {/* Divisor vertical "|" - exibido sempre antes dos botões de ação do header */}
           <div className="w-[1px] h-4 bg-border/60 mx-1" aria-hidden="true" />

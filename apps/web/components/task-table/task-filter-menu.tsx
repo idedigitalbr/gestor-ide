@@ -8,6 +8,7 @@ import {
   CircleDot,
   Filter,
   Flag,
+  ListFilter,
   Package,
   RotateCcw,
   Tag,
@@ -160,17 +161,17 @@ export function TaskFilterMenu({
         title="Filtrar tarefas"
         className={cn(
           iconOnly
-            ? "flex items-center justify-center h-8 w-8 rounded-lg transition-colors cursor-pointer relative text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            ? "flex items-center justify-center size-7 rounded-md transition-colors cursor-pointer relative text-muted-foreground hover:text-foreground hover:bg-muted/60"
             : "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold shadow-2xs transition-all cursor-pointer",
           hasActiveFilters &&
             (iconOnly
-              ? "text-primary bg-primary/10 ring-1 ring-primary/40"
+              ? "text-primary bg-primary/10 ring-1 ring-primary/40 font-semibold"
               : "border-primary/60 bg-primary/15 text-primary hover:bg-primary/20")
         )}
       >
-        <Filter
+        <ListFilter
           className={cn(
-            iconOnly ? "w-4 h-4" : "w-3.5 h-3.5",
+            iconOnly ? "size-3.5" : "size-3.5",
             hasActiveFilters ? "text-primary" : "text-muted-foreground"
           )}
         />
@@ -184,7 +185,7 @@ export function TaskFilterMenu({
           <ChevronDown className="h-3 w-3 text-muted-foreground transition-transform" />
         )}
         {iconOnly && hasActiveFilters && (
-          <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" />
+          <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" />
         )}
       </button>
       </PopoverTrigger>

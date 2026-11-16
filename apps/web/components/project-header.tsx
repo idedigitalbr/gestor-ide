@@ -26,6 +26,7 @@ export interface ProjectHeaderProps {
     visibility?: string;
   }) => Promise<void> | void;
   onRefresh?: () => void;
+  bottomBar?: React.ReactNode;
   className?: string;
 }
 
@@ -39,6 +40,7 @@ export function ProjectHeader({
   onBack,
   onUpdateProject,
   onRefresh,
+  bottomBar,
   className,
 }: ProjectHeaderProps) {
   // Contagem de tarefas e cálculo do escopo completo do projeto
@@ -170,6 +172,7 @@ export function ProjectHeader({
       canWrite={canWrite}
       onUpdate={onUpdateProject}
       onRefresh={onRefresh}
+      bottomBar={bottomBar}
       className={className}
     />
   );

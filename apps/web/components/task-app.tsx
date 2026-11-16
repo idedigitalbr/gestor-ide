@@ -2410,19 +2410,30 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                   }}
                   onUpdateProject={handleUpdateProject}
                   onRefresh={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+                  bottomBar={
+                    <ProjectViewToolbar
+                      viewMode={viewMode}
+                      onViewModeChange={handleViewModeChange}
+                      totalTasks={filteredTasks.length}
+                      tasks={tasks}
+                      taskSort={taskSort}
+                      onTaskSortChange={handleTaskSortChange}
+                      filters={filters}
+                      onFilterChange={(next) => setFilters(next)}
+                      isFiltered={isFiltered}
+                      onClearFilters={handleClearFilters}
+                      searchQuery={listSearch}
+                      onSearchChange={setListSearch}
+                      subtaskMode={subtaskMode}
+                      onSubtaskModeChange={setSubtaskMode}
+                      showClosedTasks={showClosedTasks}
+                      onToggleShowClosedTasks={setShowClosedTasks}
+                      onOpenFieldsModal={() => setIsFieldsModalOpen(true)}
+                      onRefreshSync={() => void syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+                    />
+                  }
                 />
               )}
-
-              {/* Barra de Ferramentas / Seletor de Visão do Projeto */}
-              <ProjectViewToolbar
-                viewMode={viewMode}
-                onViewModeChange={handleViewModeChange}
-                totalTasks={filteredTasks.length}
-                isFiltered={isFiltered}
-                onClearFilters={handleClearFilters}
-                canCreate={canWriteProjects}
-                onOpenNewTask={() => handleOpenNewTask("PENDENTE")}
-              />
 
               {isSyncingTasks ? (
                 viewMode === "kanban" ? (

@@ -1,35 +1,71 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import type { ViewMode } from "@gestor-ide/core";
+import type { Task, TaskFilter } from "@/types/task";
+import type { SubtaskDisplayMode } from "@/components/app-header";
+import {
+  TASK_SORT_LABELS,
+  type TaskSortOption,
+} from "@/lib/organization-options";
 import {
   Table,
   Kanban,
   Calendar,
-  SlidersHorizontal,
+  GanttChart,
   Users,
-  Plus,
-  X,
   ChevronDown,
   Check,
+  ArrowUpDown,
+  Zap,
+  Wand2,
+  Search,
+  SlidersHorizontal,
+  X,
+  Columns3,
+  RotateCcw,
+  Clock,
+  Download,
+  Sparkles,
+  Layers,
+  CheckCircle2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { TaskFilterMenu } from "@/components/task-table/task-filter-menu";
 import { cn } from "@/lib/utils";
 
 export interface ProjectViewToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   totalTasks: number;
+  tasks?: Task[];
+  taskSort?: TaskSortOption;
+  onTaskSortChange?: (sort: TaskSortOption) => void;
+  filters?: TaskFilter;
+  onFilterChange?: (filters: TaskFilter) => void;
   isFiltered?: boolean;
   onClearFilters?: () => void;
-  canCreate?: boolean;
-  onOpenNewTask?: () => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  subtaskMode?: SubtaskDisplayMode;
+  onSubtaskModeChange?: (mode: SubtaskDisplayMode) => void;
+  showClosedTasks?: boolean;
+  onToggleShowClosedTasks?: (show: boolean) => void;
+  onOpenFieldsModal?: () => void;
+  onRefreshSync?: () => void;
   className?: string;
 }
 
@@ -42,7 +78,7 @@ const VIEW_OPTIONS: Array<{
   { id: "table", label: "Tabela", icon: Table },
   { id: "kanban", label: "Kanban", icon: Kanban },
   { id: "calendar", label: "Calendário", icon: Calendar, desktopOnly: true },
-  { id: "gantt", label: "Gantt", icon: SlidersHorizontal, desktopOnly: true },
+  { id: "gantt", label: "Gantt", icon: GanttChart, desktopOnly: true },
   { id: "workload", label: "Carga de Trabalho", icon: Users, desktopOnly: true },
 ];
 
@@ -50,27 +86,45 @@ export function ProjectViewToolbar({
   viewMode,
   onViewModeChange,
   totalTasks,
+  tasks = [],
+  taskSort = "none",
+  onTaskSortChange,
+  filters,
+  onFilterChange,
   isFiltered = false,
   onClearFilters,
-  canCreate = true,
-  onOpenNewTask,
+  searchQuery = "",
+  onSearchChange,
+  subtaskMode = "collapsed",
+  onSubtaskModeChange,
+  showClosedTasks = true,
+  onToggleShowClosedTasks,
+  onOpenFieldsModal,
+  onRefreshSync,
   className,
 }: ProjectViewToolbarProps) {
+  const [isSearchOpen, setIsSearchOpen] = useState(Boolean(searchQuery));
+  const [isAiPopoverOpen, setIsAiPopoverOpen] = useState(false);
+
+  const isSortActive = taskSort && taskSort !== "none";
+
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center justify-between gap-2 px-1 py-1 select-none",
+        "flex flex-wrap items-center justify-between gap-2.5 select-none w-full",
         className
       )}
     >
-      {/* Lado Esquerdo: Abas de Visualização */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      {/* ========================================================================= */}
+      {/* LADO ESQUERDO: Abas de Visualização (Tabela, Kanban, Calendário, Gantt)   */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-2 flex-wrap">
         <div
           role="tablist"
           aria-label="Modo de visualização das tarefas"
           className="flex items-center rounded-lg border border-border/70 p-0.5 bg-muted/40 shadow-2xs"
         >
-          {/* Tabela */}
+          {/* 1. Tabela */}
           <button
             type="button"
             role="tab"
@@ -87,13 +141,13 @@ export function ProjectViewToolbar({
             <Table className="size-3.5" />
             <span>Tabela</span>
             {viewMode === "table" && totalTasks > 0 && (
-              <span className="text-[10px] font-mono opacity-70 ml-0.5">
+              <span className="text-[10px] font-mono opacity-80 ml-0.5">
                 ({totalTasks})
               </span>
             )}
           </button>
 
-          {/* Kanban */}
+          {/* 2. Kanban */}
           <button
             type="button"
             role="tab"
@@ -110,13 +164,13 @@ export function ProjectViewToolbar({
             <Kanban className="size-3.5" />
             <span>Kanban</span>
             {viewMode === "kanban" && totalTasks > 0 && (
-              <span className="text-[10px] font-mono opacity-70 ml-0.5">
+              <span className="text-[10px] font-mono opacity-80 ml-0.5">
                 ({totalTasks})
               </span>
             )}
           </button>
 
-          {/* Calendário (em telas médias/grandes) */}
+          {/* 3. Calendário */}
           <button
             type="button"
             role="tab"
@@ -134,7 +188,7 @@ export function ProjectViewToolbar({
             <span>Calendário</span>
           </button>
 
-          {/* Gantt (em telas grandes) */}
+          {/* 4. Gantt */}
           <button
             type="button"
             role="tab"
@@ -148,11 +202,11 @@ export function ProjectViewToolbar({
             )}
             title="Visualização em Gantt"
           >
-            <SlidersHorizontal className="size-3.5" />
+            <GanttChart className="size-3.5" />
             <span>Gantt</span>
           </button>
 
-          {/* Dropdown "Mais" para Calendário, Gantt e Carga no mobile/telas compactas */}
+          {/* Dropdown "Mais" para telas compactas */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -195,38 +249,313 @@ export function ProjectViewToolbar({
           </DropdownMenu>
         </div>
 
-        {/* Badge de Filtro Ativo com botão Limpar */}
+        {/* Chip discreto de filtro ativo para limpar */}
         {isFiltered && onClearFilters && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-accent/60 border border-border text-xs text-muted-foreground">
-            <span>Filtros ativos</span>
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/60 border border-border text-[11px] text-muted-foreground">
+            <span>Filtrado</span>
             <button
               type="button"
               onClick={onClearFilters}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer ml-1"
+              className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline cursor-pointer ml-0.5"
               title="Limpar todos os filtros"
             >
-              <X className="size-3" />
+              <X className="size-2.5" />
               <span>Limpar</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Lado Direito: Ação Rápida de Adicionar Tarefa */}
-      {canCreate && onOpenNewTask && (
-        <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onOpenNewTask}
-            className="h-8 px-3 gap-1.5 text-xs font-semibold cursor-pointer shadow-xs"
-            title="Criar nova tarefa no projeto"
-          >
-            <Plus className="size-3.5 stroke-[2.5]" />
-            <span>Nova Tarefa</span>
-          </Button>
+      {/* ========================================================================= */}
+      {/* LADO DIREITO: Pílula com os 6 Botões de Ícones (Filtro, Ordenar, Zap, IA) */}
+      {/* ========================================================================= */}
+      <div className="flex items-center gap-1">
+        {/* Campo de Busca Rápida (Expansível ao clicar no ícone de lupa) */}
+        {isSearchOpen && onSearchChange && (
+          <div className="flex items-center gap-1 bg-background border border-border/80 rounded-lg px-2 h-7 shadow-2xs animate-in fade-in zoom-in-95 duration-100">
+            <Search className="size-3 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Buscar no projeto..."
+              autoFocus
+              className="w-28 sm:w-40 text-xs bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                onSearchChange("");
+                setIsSearchOpen(false);
+              }}
+              className="p-0.5 rounded text-muted-foreground hover:text-foreground cursor-pointer"
+              title="Fechar busca"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Pílula com os 6 ícones */}
+        <div className="flex items-center gap-0.5 rounded-lg border border-border/70 bg-muted/40 p-0.5 shadow-2xs">
+          {/* 1. FILTRO (ListFilter) */}
+          <TaskFilterMenu
+            filters={
+              filters || {
+                search: "",
+                status: "Todos",
+                priority: "Todas",
+              }
+            }
+            onFilterChange={onFilterChange || (() => {})}
+            tasks={tasks}
+            iconOnly
+            align="end"
+          />
+
+          {/* 2. ORDENAR (ArrowUpDown) */}
+          {onTaskSortChange && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center justify-center size-7 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 relative focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    isSortActive && "text-primary bg-primary/10 ring-1 ring-primary/40 font-semibold"
+                  )}
+                  title={`Ordenar tarefas (${TASK_SORT_LABELS[taskSort] || "Padrão"})`}
+                  aria-label="Ordenar tarefas"
+                >
+                  <ArrowUpDown className="size-3.5" />
+                  {isSortActive && (
+                    <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 text-xs">
+                <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                  Organizar tarefas por
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(Object.entries(TASK_SORT_LABELS) as [TaskSortOption, string][]).map(
+                  ([key, label]) => {
+                    const isSelected = taskSort === key;
+                    return (
+                      <DropdownMenuItem
+                        key={key}
+                        onClick={() => onTaskSortChange(key)}
+                        className={cn(
+                          "flex items-center justify-between text-xs cursor-pointer",
+                          isSelected && "font-semibold text-primary"
+                        )}
+                      >
+                        <span>{label}</span>
+                        {isSelected && <Check className="size-3.5 text-primary" />}
+                      </DropdownMenuItem>
+                    );
+                  }
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* 3. AÇÕES RÁPIDAS & AUTOMAÇÕES (Zap) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                title="Ações rápidas e automações"
+                aria-label="Ações rápidas e automações"
+              >
+                <Zap className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 text-xs">
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                Ações Rápidas & Automações
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {onRefreshSync && (
+                <DropdownMenuItem
+                  onClick={onRefreshSync}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <RotateCcw className="size-3.5 text-muted-foreground" />
+                  <span>Sincronizar com CRM</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() => {
+                  try {
+                    const dataStr =
+                      "data:text/json;charset=utf-8," +
+                      encodeURIComponent(JSON.stringify(tasks, null, 2));
+                    const downloadAnchor = document.createElement("a");
+                    downloadAnchor.setAttribute("href", dataStr);
+                    downloadAnchor.setAttribute("download", `tarefas-projeto.json`);
+                    document.body.appendChild(downloadAnchor);
+                    downloadAnchor.click();
+                    downloadAnchor.remove();
+                  } catch (e) {
+                    console.error("Erro ao exportar:", e);
+                  }
+                }}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Download className="size-3.5 text-muted-foreground" />
+                <span>Exportar tarefas (JSON)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onRefreshSync}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Clock className="size-3.5 text-muted-foreground" />
+                <span>Recalcular prazos e progresso</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* 4. PILOTO IA (Wand2) */}
+          <Popover open={isAiPopoverOpen} onOpenChange={setIsAiPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                title="Piloto IA (Assistente Inteligente)"
+                aria-label="Piloto IA"
+              >
+                <Wand2 className="size-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-3 shadow-2xl space-y-2.5">
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="size-3.5 text-primary" />
+                  <span className="text-xs font-bold text-foreground">Piloto IA do Projeto</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/15 text-primary font-mono font-semibold">
+                  Ativo
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Assistente inteligente para sugestões, análise de prazos e otimização de fluxo de trabalho no projeto.
+              </p>
+              <div className="space-y-1 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAiPopoverOpen(false)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer text-left"
+                >
+                  <span>Analisar gargalos do Kanban</span>
+                  <Sparkles className="size-3 text-muted-foreground" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAiPopoverOpen(false)}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-accent text-foreground transition-colors cursor-pointer text-left"
+                >
+                  <span>Sugerir próximas prioridades</span>
+                  <Sparkles className="size-3 text-muted-foreground" />
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* 5. BUSCA (Search) */}
+          {!isSearchOpen && (
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className={cn(
+                "flex items-center justify-center size-7 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                Boolean(searchQuery) && "text-primary bg-primary/10 ring-1 ring-primary/40 font-semibold"
+              )}
+              title="Buscar tarefas no projeto"
+              aria-label="Buscar tarefas"
+            >
+              <Search className="size-3.5" />
+            </button>
+          )}
+
+          {/* 6. CONFIGURAÇÕES DA VISUALIZAÇÃO & CAMPOS (SlidersHorizontal) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                title="Configurações da visualização e campos"
+                aria-label="Configurações da visualização"
+              >
+                <SlidersHorizontal className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 text-xs">
+              <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                Configurações da Visualização
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              {/* Campos da Tabela */}
+              {onOpenFieldsModal && (
+                <DropdownMenuItem
+                  onClick={onOpenFieldsModal}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Columns3 className="size-3.5 text-muted-foreground" />
+                  <span>Configurar campos visíveis</span>
+                </DropdownMenuItem>
+              )}
+
+              {/* Subtarefas */}
+              {onSubtaskModeChange && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground tracking-wider">
+                    Subtarefas
+                  </DropdownMenuLabel>
+                  {(
+                    [
+                      ["collapsed", "Colapsadas"],
+                      ["expanded", "Expandidas"],
+                      ["separate", "Separar"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <DropdownMenuItem
+                      key={mode}
+                      onClick={() => onSubtaskModeChange(mode)}
+                      className={cn(
+                        "flex items-center justify-between text-xs cursor-pointer",
+                        subtaskMode === mode && "font-semibold text-primary"
+                      )}
+                    >
+                      <span>{label}</span>
+                      {subtaskMode === mode && <Check className="size-3.5 text-primary" />}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+
+              {/* Tarefas Concluídas */}
+              {onToggleShowClosedTasks && (
+                <>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between px-2 py-1.5 text-xs text-foreground">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="size-3.5 text-muted-foreground" />
+                      <span>Tarefas concluídas</span>
+                    </div>
+                    <Switch
+                      checked={showClosedTasks}
+                      onCheckedChange={onToggleShowClosedTasks}
+                    />
+                  </div>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      )}
+      </div>
     </div>
   );
 }

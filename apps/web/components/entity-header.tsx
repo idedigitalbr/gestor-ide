@@ -112,6 +112,9 @@ export interface EntityHeaderProps {
   }) => Promise<void> | void;
   onRefresh?: () => void;
 
+  // Barra de ferramentas embutida (Tabs de visualização + Botões de ação)
+  bottomBar?: React.ReactNode;
+
   className?: string;
 }
 
@@ -193,6 +196,7 @@ export function EntityHeader({
   visibilityOptions,
   onUpdate,
   onRefresh,
+  bottomBar,
   className,
 }: EntityHeaderProps) {
   // Controle de expansão/recolhimento do cabeçalho com persistência em localStorage
@@ -455,70 +459,80 @@ export function EntityHeader({
       {/* ========================================================================= */}
       {!isHeaderExpanded ? (
         /* Cabeçalho Retraído Minimalista */
-        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xl flex items-center justify-between gap-3 transition-all mb-3.5">
-          {/* Esquerda: Iniciais + Badge + Nome */}
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <div
-              className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0 select-none"
-              style={{ backgroundColor: badgeColor }}
-            >
-              {initials}
+        <div className="rounded-2xl border border-border/80 bg-card p-2 sm:px-4 sm:py-2.5 shadow-xl flex flex-col gap-2 transition-all mb-3.5">
+          <div className="flex items-center justify-between gap-3">
+            {/* Esquerda: Iniciais + Badge + Nome */}
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div
+                className="size-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0 select-none"
+                style={{ backgroundColor: badgeColor }}
+              >
+                {initials}
+              </div>
+
+              <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground select-none">
+                {badgeText}
+              </span>
+              <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
+                {displayTitle}
+              </span>
             </div>
 
-            <span className="shrink-0 text-[9px] font-mono font-medium px-1.5 py-0.5 rounded border border-border bg-muted/60 text-muted-foreground select-none">
-              {badgeText}
-            </span>
-            <span className="text-xs sm:text-sm font-bold text-foreground truncate tracking-tight">
-              {displayTitle}
-            </span>
-          </div>
+            {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down + Mais Opções */}
+            <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+              {/* 3 KPIs Compactos */}
+              <div className="flex items-center gap-3 text-xs">
+                {kpis.map((kpi) => (
+                  <span
+                    key={kpi.key}
+                    className="flex items-center gap-1 text-muted-foreground"
+                    title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
+                  >
+                    <span className="shrink-0">{kpi.icon}</span>
+                    <span className="font-semibold text-foreground text-xs">{kpi.value}</span>
+                    {kpi.subValue && (
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        {kpi.subValue}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
 
-          {/* Direita: Mini KPIs + Avatar + Integrantes + Botão Chevron Down + Mais Opções */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-            {/* 3 KPIs Compactos */}
-            <div className="flex items-center gap-3 text-xs">
-              {kpis.map((kpi) => (
-                <span
-                  key={kpi.key}
-                  className="flex items-center gap-1 text-muted-foreground"
-                  title={kpi.tooltip || `${kpi.label}: ${kpi.value}${kpi.subValue ? ` ${kpi.subValue}` : ""}`}
-                >
-                  <span className="shrink-0">{kpi.icon}</span>
-                  <span className="font-semibold text-foreground text-xs">{kpi.value}</span>
-                  {kpi.subValue && (
-                    <span className="text-[10px] text-muted-foreground font-normal">
-                      {kpi.subValue}
-                    </span>
-                  )}
-                </span>
-              ))}
+              {/* Integrantes com Tooltip e Animação no Hover */}
+              {renderMemberAvatarsSection(true)}
+
+              {/* Toggle Chevron Down para Expandir */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={toggleHeaderExpanded}
+                className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
+                title="Expandir cabeçalho"
+                aria-label="Expandir cabeçalho"
+              >
+                <ChevronDown className="size-4" />
+              </Button>
+
+              {/* Botão de Mais Opções (...) */}
+              {renderMoreMenu()}
             </div>
-
-            {/* Integrantes com Tooltip e Animação no Hover */}
-            {renderMemberAvatarsSection(true)}
-
-            {/* Toggle Chevron Down para Expandir */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={toggleHeaderExpanded}
-              className="size-8 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 cursor-pointer shrink-0"
-              title="Expandir cabeçalho"
-              aria-label="Expandir cabeçalho"
-            >
-              <ChevronDown className="size-4" />
-            </Button>
-
-            {/* Botão de Mais Opções (...) */}
-            {renderMoreMenu()}
           </div>
+
+          {/* Barra de Ferramentas e Abas embutida (Permanece acessível mesmo retraído) */}
+          {bottomBar && (
+            <div className="pt-2 border-t border-border/50">
+              {bottomBar}
+            </div>
+          )}
         </div>
       ) : (
         /* Cabeçalho Expandido - Layout Fiel ao Design com Lápis no Hover */
-        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xl flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4 transition-all mb-3.5">
-          {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
-          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+        <div className="rounded-2xl border border-border/80 bg-card p-3 sm:px-4 sm:py-3 lg:px-5 lg:py-3.5 shadow-xl flex flex-col gap-3 transition-all mb-3.5">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 sm:gap-4">
+            {/* Lado Esquerdo: Avatar + [Badge] Título + Descrição */}
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
             {/* Badge Quadrado com Iniciais */}
             <div
               className="size-11 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold text-white shadow-xs shrink-0 select-none"
@@ -800,6 +814,14 @@ export function EntityHeader({
               )}
             </div>
           </div>
+        </div>
+
+          {/* Barra de Ferramentas e Abas embutida */}
+          {bottomBar && (
+            <div className="pt-2.5 border-t border-border/60">
+              {bottomBar}
+            </div>
+          )}
         </div>
       )}
 
