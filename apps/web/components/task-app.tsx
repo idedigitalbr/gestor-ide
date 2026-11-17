@@ -107,7 +107,7 @@ import { ProjectViewToolbar } from "@/components/project-view-toolbar";
 import { cn } from "@/lib/utils";
 import { useCalendarDialog } from "@/components/calendar-dialog-context";
 import { MobileFab } from "@/components/mobile-fab";
-import { MobileBottomNav, type MobileTab } from "@/components/mobile-bottom-nav";
+import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
 import { setGlobalFallbackBackHandler } from "@/lib/use-mobile-back-button";
 
@@ -602,8 +602,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [managementForMembersDialog, setManagementForMembersDialog] = useState<CrmProjectManagement | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const handleGlobalBackRef = useRef<() => boolean>(() => false);
   useEffect(() => {
-    setGlobalFallbackBackHandler(() => {
+    handleGlobalBackRef.current = () => {
       if (isMobileMenuOpen) {
         setIsMobileMenuOpen(false);
         return true;
@@ -645,24 +646,15 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         return true;
       }
       return false;
-    });
+    };
+  });
 
+  useEffect(() => {
+    setGlobalFallbackBackHandler(() => handleGlobalBackRef.current());
     return () => {
       setGlobalFallbackBackHandler(null);
     };
-  }, [
-    isMobileMenuOpen,
-    isProjectMembersOpen,
-    isNewProjectOpen,
-    isNewManagementOpen,
-    isFieldsModalOpen,
-    isCustomViewModalOpen,
-    isCrmModalOpen,
-    selectedProjectId,
-    selectedManagementId,
-    isSecondaryPage,
-    router,
-  ]);
+  }, []);
   const isModalDirtyRef = useRef(false);
   const isModalOpenRef = useRef(isModalOpen);
   useEffect(() => {
