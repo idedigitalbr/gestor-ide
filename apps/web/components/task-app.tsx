@@ -32,6 +32,8 @@ import {
   useProjects,
   useProjectMembers,
   queryKeys,
+  enqueueOutboxItem,
+  subscribeIdSwap,
 } from "@/lib/query";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
 import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
@@ -498,6 +500,23 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<CrmProject[]>(() => {
     return getCachedProjects() || [];
   });
+
+  // Sincronização e swap reativo de IDs temporários para IDs definitivos do CRM
+  useEffect(() => {
+    const unsub = subscribeIdSwap((tempId, realId, realTask) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === tempId
+            ? { ...t, id: realId }
+            : t
+        )
+      );
+      removeCachedTask(tempId);
+      const synced = mapCrmTaskToGestorTask(realTask, 0);
+      addCachedTask(synced);
+    });
+    return unsub;
+  }, []);
 
   const [projectMembers, setProjectMembers] = useState<{
     projectId: string;
@@ -1289,9 +1308,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(() => {
-          setTasks((prev) => prev.filter((t) => t.id !== tempId));
-          removeCachedTask(tempId);
-          setSyncError("A tarefa não foi salva no CRM. Tente novamente.");
+          // Modo Local-First: mantém a tarefa localmente e enfileira no Outbox para sincronização automática
+          void enqueueOutboxItem({
+            type: "CREATE_TASK",
+            tempTaskId: tempId,
+            payload: mapGestorTaskToCrmCreateInput(data, targetProjectId),
+          });
+          setSyncError("Modo offline: tarefa gravada no dispositivo e será sincronizada assim que a conexão retornar.");
         });
     }
   }
@@ -1340,13 +1363,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.task(updatedTask.id) });
         })
         .catch(() => {
-          if (previousTask && taskUpdateVersionsRef.current.get(updatedTask.id) === version) {
-            setTasks((current) =>
-              current.map((task) => (task.id === updatedTask.id ? previousTask : task))
-            );
-            updateCachedTask(previousTask);
-          }
-          setSyncError("A alteração não foi salva no CRM. Atualize os dados antes de tentar novamente.");
+          // Modo Local-First: mantém a alteração e enfileira no Outbox
+          void enqueueOutboxItem({
+            type: "UPDATE_TASK",
+            taskId: updatedTask.id,
+            payload: changedPayload,
+          });
+          setSyncError("Modo offline: alteração da tarefa gravada no dispositivo.");
         })
         .finally(releasePending);
     }
@@ -1378,8 +1401,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   }
 
   function handleDeleteTask(id: string) {
-    const deletedIndex = tasks.findIndex((t) => t.id === id);
-    const deletedTask = deletedIndex >= 0 ? tasks[deletedIndex] : undefined;
     setTasks((prev) => prev.filter((t) => t.id !== id));
     removeCachedTask(id);
     if (selectedTaskId === id) {
@@ -1396,16 +1417,12 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         })
         .catch(() => {
-          if (deletedTask) {
-            setTasks((prev) => {
-              if (prev.some((t) => t.id === deletedTask.id)) return prev;
-              const next = [...prev];
-              next.splice(Math.min(deletedIndex, next.length), 0, deletedTask);
-              return next;
-            });
-            addCachedTask(deletedTask);
-          }
-          setSyncError("Não foi possível excluir a tarefa no CRM. Tente novamente.");
+          // Modo Local-First: mantém excluído localmente e agenda exclusão no CRM
+          void enqueueOutboxItem({
+            type: "DELETE_TASK",
+            taskId: id,
+          });
+          removeLocalTaskPresentation(id);
         });
     }
   }
@@ -1582,7 +1599,14 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                 });
               }
             })
-            .catch(() => setSyncError("Não foi possível criar o item de checklist no CRM."));
+            .catch(() => {
+              void enqueueOutboxItem({
+                type: "CREATE_CHECKLIST",
+                taskId,
+                payload: { title: added.title },
+              });
+              setSyncError("Modo offline: item de checklist gravado no dispositivo.");
+            });
         }
       } else if (subtasks.length < prevItems.length) {
         const removed = prevItems.find(
@@ -1595,7 +1619,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.taskChecklist(taskId) });
               void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
             })
-            .catch(() => setSyncError("Não foi possível excluir o item de checklist no CRM."));
+            .catch(() => {
+              void enqueueOutboxItem({
+                type: "DELETE_CHECKLIST",
+                taskId,
+                payload: { itemId: removed.id },
+              });
+            });
         }
       } else {
         const toggled = subtasks.find((item) => {
@@ -1612,7 +1642,16 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.taskChecklist(taskId) });
               void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
             })
-            .catch(() => setSyncError("Não foi possível atualizar o item de checklist no CRM."));
+            .catch(() => {
+              void enqueueOutboxItem({
+                type: "UPDATE_CHECKLIST",
+                taskId,
+                payload: {
+                  itemId: toggled.id,
+                  updates: { completed: toggled.completed, title: toggled.title },
+                },
+              });
+            });
         }
       }
     }
@@ -1673,20 +1712,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           }
         })
         .catch(() => {
-          setTasks((prev) => {
-            const next = prev.map((t) =>
-              t.id === taskId
-                ? {
-                    ...t,
-                    comments: (t.comments ?? []).filter((c) => c.id !== comment.id),
-                  }
-                : t
-            );
-            const updatedTarget = next.find((t) => t.id === taskId);
-            if (updatedTarget) updateCachedTask(updatedTarget);
-            return next;
+          // Modo Local-First: mantém o comentário na tela e enfileira no Outbox
+          void enqueueOutboxItem({
+            type: "CREATE_COMMENT",
+            taskId,
+            payload: { content: comment.content },
           });
-          setSyncError("Não foi possível salvar o comentário no CRM.");
+          setSyncError("Modo offline: comentário gravado localmente no dispositivo.");
         });
     }
   }

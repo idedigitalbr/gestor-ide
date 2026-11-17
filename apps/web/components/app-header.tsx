@@ -58,6 +58,7 @@ import {
   extractProjectTags,
 } from "@/lib/organization-options";
 import { ThemeSelector } from "@/components/theme/theme-selector";
+import { SyncStatusIndicator } from "@/components/sync-status-indicator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -1687,6 +1688,7 @@ export function AppHeader({
           </div> : <Button size="sm" className="h-8 gap-1.5" disabled={!canWrite} title={canWrite ? undefined : "Sem permissão de escrita no IDE CRM"} onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
             <Button size="sm" className="h-8 gap-1.5" onClick={onOpenNewEvent} disabled={!canCreateCalendarEvent}><Plus className="w-3.5 h-3.5" /> Evento</Button>
           ) : null}
+          <SyncStatusIndicator className="hidden sm:inline-flex" />
           <HeaderNotifications
             connected={Boolean(currentUser)}
             currentUser={currentUser}

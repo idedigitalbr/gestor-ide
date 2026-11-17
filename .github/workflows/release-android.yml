@@ -1,0 +1,84 @@
+name: Release Android App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão do Release (ex: v0.1.7)'
+        required: false
+        default: 'v0.1.7'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Rust Toolchain for Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install Monorepo Dependencies
+        run: bun install
+
+      - name: Initialize Android Target in Tauri
+        shell: bash
+        run: |
+          cd apps/desktop
+          bun run tauri android init --ci --skip-targets-install
+
+      - name: Build Android APK
+        shell: bash
+        env:
+          NDK_HOME: ${{ env.ANDROID_NDK_ROOT || env.ANDROID_HOME }}/ndk/26.1.10909125
+        run: |
+          cd apps/desktop
+          # Build do APK em modo release para Android
+          bun run tauri android build --apk --target aarch64
+
+      - name: Publish APK to GitHub Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.version || github.ref_name }}"
+          echo "Buscando APK gerado para o release $TAG..."
+          
+          # Localizar arquivo .apk gerado pelo Gradle
+          APK_PATH=$(find apps/desktop/src-tauri/gen/android -name "*.apk" | head -n 1)
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::Nenhum arquivo .apk encontrado no diretório de build!"
+            exit 1
+          fi
+          
+          echo "APK encontrado em: $APK_PATH"
+          DEST_NAME="ide-gestor-${TAG}.apk"
+          cp "$APK_PATH" "$DEST_NAME"
+          
+          echo "Fazendo upload de $DEST_NAME para a Release $TAG no GitHub..."
+          gh release upload "$TAG" "$DEST_NAME" --clobber
+          echo "Upload do APK concluído com sucesso!"
