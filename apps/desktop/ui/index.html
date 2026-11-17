@@ -48,10 +48,12 @@
   <div class="spinner"></div>
   <h2 style="margin: 0 0 8px 0; font-size: 20px;">Carregando IDE Gestor...</h2>
   <p id="msg" style="color: #94a3b8; max-width: 420px; font-size: 14px; margin: 0;">Conectando ao servidor seguro...</p>
-  <button id="retry" class="btn" style="display:none;" onclick="location.href='https://gestor.suporteide.digital'">Tentar Novamente</button>
+  <button id="retry" class="btn" style="display:none;" onclick="location.href='https://gestor.suporteide.digital?app=true'">Tentar Novamente</button>
   <script>
     setTimeout(function() {
-      window.location.href = "https://gestor.suporteide.digital";
+      var isAndroid = /android/i.test(navigator.userAgent);
+      var platform = isAndroid ? "android" : "desktop";
+      window.location.href = "https://gestor.suporteide.digital?app=true&platform=" + platform;
     }, 50);
     setTimeout(function() {
       document.getElementById('msg').innerText = "Não foi possível conectar ao servidor. Verifique sua conexão com a internet.";

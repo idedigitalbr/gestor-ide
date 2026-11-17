@@ -83,6 +83,66 @@ const DEFAULT_PLATFORMS: Record<SupportedOS, PlatformInfo> = {
   },
 };
 
+function isNativeAppEnvironment(): boolean {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+
+  // 1. Injeção direta do runtime Tauri (Desktop ou Mobile)
+  if ("__TAURI_INTERNALS__" in window || "__TAURI__" in window) {
+    try {
+      localStorage.setItem("ide_is_native_app", "true");
+    } catch {}
+    return true;
+  }
+
+  // 2. Parâmetro de URL (?app=true ou ?platform=android)
+  try {
+    const search = window.location.search;
+    if (
+      search.includes("app=true") ||
+      search.includes("source=app") ||
+      search.includes("platform=android") ||
+      search.includes("platform=desktop")
+    ) {
+      localStorage.setItem("ide_is_native_app", "true");
+      return true;
+    }
+  } catch {}
+
+  // 3. Persistência em localStorage de detecção prévia
+  try {
+    if (localStorage.getItem("ide_is_native_app") === "true") {
+      return true;
+    }
+  } catch {}
+
+  // 4. Detecção de Android WebView nativo (o APK instalado)
+  // WebViews de apps Android contêm '; wv' ou 'Version/X.X Chrome' no User-Agent
+  const ua = (navigator.userAgent || "").toLowerCase();
+  const isAndroidWebView =
+    ua.includes("android") &&
+    (ua.includes("; wv") ||
+      ua.includes("; wv;") ||
+      ua.includes("version/") ||
+      /version\/[0-9.]+\s+chrome/.test(ua));
+
+  if (isAndroidWebView) {
+    try {
+      localStorage.setItem("ide_is_native_app", "true");
+    } catch {}
+    return true;
+  }
+
+  // 5. Identificadores customizados no User-Agent
+  if (ua.includes("tauri") || ua.includes("idegestor") || ua.includes("ide-gestor")) {
+    try {
+      localStorage.setItem("ide_is_native_app", "true");
+    } catch {}
+    return true;
+  }
+
+  return false;
+}
+
 function getClientOS(): SupportedOS {
   if (typeof window === "undefined" || typeof navigator === "undefined") return "windows";
   const ua = (navigator.userAgent || "").toLowerCase();
@@ -108,7 +168,8 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
     emptySubscribe,
     () =>
       typeof window !== "undefined" &&
-      sessionStorage.getItem("ide_hide_desktop_cta") === "true",
+      (sessionStorage.getItem("ide_hide_desktop_cta") === "true" ||
+        localStorage.getItem("ide_hide_desktop_cta_permanent") === "true"),
     () => false
   );
 
@@ -198,16 +259,17 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
     setStep("minimized");
     if (typeof window !== "undefined") {
       sessionStorage.setItem("ide_hide_desktop_cta", "true");
+      localStorage.setItem("ide_hide_desktop_cta_permanent", "true");
     }
   }
 
-  if (!isClient) return null;
+  const isNativeApp = useSyncExternalStore(
+    emptySubscribe,
+    isNativeAppEnvironment,
+    () => false
+  );
 
-  const isDesktop =
-    typeof window !== "undefined" &&
-    Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
-
-  if (isDesktop) return null;
+  if (!isClient || isNativeApp) return null;
 
   const currentStep: ConversationStep =
     isDismissedInStorage && step !== "callout" ? "minimized" : step;
