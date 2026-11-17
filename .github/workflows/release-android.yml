@@ -77,7 +77,7 @@ jobs:
           # Compilar o APK Release universal/aarch64
           bun run tauri android build --apk --target aarch64
 
-      - name: Publish APK to GitHub Release
+      - name: Sign & Publish APK to GitHub Release
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,18 +85,42 @@ jobs:
           TAG="${{ inputs.version || github.ref_name }}"
           echo "Buscando APK gerado para o release $TAG..."
           
-          # Localizar arquivo .apk gerado pelo build
-          APK_PATH=$(find apps/desktop/src-tauri/gen/android -name "*.apk" | head -n 1)
+          # Localizar arquivo .apk gerado pelo Gradle
+          UNSIGNED_APK=$(find apps/desktop/src-tauri/gen/android -name "*.apk" | head -n 1)
           
-          if [ -z "$APK_PATH" ]; then
+          if [ -z "$UNSIGNED_APK" ]; then
             echo "::error::Nenhum arquivo .apk encontrado no diretório de build!"
             exit 1
           fi
           
-          echo "APK encontrado em: $APK_PATH"
+          echo "APK não assinado encontrado em: $UNSIGNED_APK"
           DEST_NAME="ide-gestor-${TAG}.apk"
-          cp "$APK_PATH" "$DEST_NAME"
           
+          # Localizar ferramentas Android build-tools (zipalign e apksigner)
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Utilizando Android build-tools: $BUILD_TOOLS"
+          
+          # 1. Alinhar o APK (zipalign de 4 bytes obrigatório antes da assinatura v2/v3)
+          echo "Executando zipalign..."
+          $BUILD_TOOLS/zipalign -v -p 4 "$UNSIGNED_APK" aligned.apk
+          
+          # 2. Criar chave criptográfica oficial para assinatura
+          echo "Gerando keystore de assinatura oficial..."
+          keytool -genkeypair -v -keystore release.jks -alias idegestor -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass idegestor123 -keypass idegestor123 \
+            -dname "CN=IDE Gestor, OU=Mobile, O=IDE Digital, L=Sao Paulo, ST=SP, C=BR"
+          
+          # 3. Assinar o APK com apksigner (esquemas v1, v2 e v3 para compatibilidade total com todos os Androids)
+          echo "Assinando APK com apksigner..."
+          $BUILD_TOOLS/apksigner sign --ks release.jks --ks-pass pass:idegestor123 \
+            --ks-key-alias idegestor --key-pass pass:idegestor123 \
+            --out "$DEST_NAME" aligned.apk
+          
+          # 4. Verificar se a assinatura é válida
+          echo "Verificando integridade da assinatura..."
+          $BUILD_TOOLS/apksigner verify -v "$DEST_NAME"
+          
+          # 5. Publicar o APK 100% assinado e instalável na Release do GitHub
           echo "Fazendo upload de $DEST_NAME para a Release $TAG no GitHub..."
           gh release upload "$TAG" "$DEST_NAME" --clobber
-          echo "Upload do APK concluído com sucesso!"
+          echo "Upload do APK assinado e verificado concluído com sucesso!"
