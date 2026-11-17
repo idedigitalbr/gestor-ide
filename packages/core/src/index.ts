@@ -19,7 +19,7 @@ export type CanonicalTaskPriority = "Baixa" | "Normal" | "Alta" | "Urgente";
 
 export type TaskPriority = CanonicalTaskPriority | "Média";
 
-export type ViewMode = "table" | "kanban" | "calendar" | "gantt" | "workload";
+export type ViewMode = "table" | "kanban" | "calendar" | "gantt" | "workload" | "canvas";
 
 export interface Subtask {
   id: string;
@@ -547,10 +547,17 @@ export function mapGestorTaskToCrmCreateInput(
   task: Omit<Task, "id" | "createdAt" | "code">,
   projectId: string
 ) {
+  const assigneeIds =
+    task.assigneeIds && task.assigneeIds.length > 0
+      ? task.assigneeIds
+      : task.assigneeId
+      ? [task.assigneeId]
+      : [];
+
   return {
     projectId,
     ...(task.parentTaskId ? { parentTaskId: task.parentTaskId } : {}),
-    ...(task.assigneeId ? { assigneeIds: [task.assigneeId] } : {}),
+    ...(assigneeIds.length > 0 ? { assigneeIds } : {}),
     title: task.title.trim(),
     description: task.description?.trim() || null,
     status: mapGestorStatusToCrm(task.status),
@@ -735,5 +742,7 @@ export function sanitizeExternalUrl(input: string): string {
     return "";
   }
 }
+
+export * from "./canvas";
 
 

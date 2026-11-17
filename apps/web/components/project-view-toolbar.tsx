@@ -15,6 +15,7 @@ import {
   Calendar,
   GanttChart,
   Users,
+  Workflow,
   ChevronDown,
   Check,
   ArrowUpDown,
@@ -95,6 +96,7 @@ const VIEW_OPTIONS: Array<{
   { id: "calendar", label: "Calendário", icon: Calendar, desktopOnly: true },
   { id: "gantt", label: "Gantt", icon: GanttChart, desktopOnly: true },
   { id: "workload", label: "Carga de Trabalho", icon: Users, desktopOnly: true },
+  { id: "canvas", label: "Canvas", icon: Workflow },
 ];
 
 export function ProjectViewToolbar({
@@ -152,31 +154,12 @@ export function ProjectViewToolbar({
   }
 
   function handlePredefinedClick(v?: CustomProjectView) {
-    if (!v || !v.url) {
-      if (v && onEditCustomView) {
-        onEditCustomView(v);
-      } else if (onOpenCreateCustomView) {
-        onOpenCreateCustomView();
-      }
-      return;
-    }
-
-    if (v.openMode === "new_tab" || v.openMode === "auto") {
-      window.open(v.url, "_blank", "noopener,noreferrer");
-    } else if (v.openMode === "embed") {
-      onSelectCustomView?.(v);
-    }
+    if (!v) return;
+    onSelectCustomView?.(v);
   }
 
   function handleCustomViewClick(v: CustomProjectView) {
-    if (v.openMode === "new_tab") {
-      window.open(v.url, "_blank", "noopener,noreferrer");
-    } else if (v.openMode === "embed") {
-      onSelectCustomView?.(v);
-    } else {
-      // Automático: se selecionado, aciona a visualização embutida
-      onSelectCustomView?.(v);
-    }
+    onSelectCustomView?.(v);
   }
 
   function handleDragStart(e: React.DragEvent, index: number) {
@@ -252,14 +235,22 @@ export function ProjectViewToolbar({
           aria-selected={isNativeActive("table")}
           onClick={() => handleSelectNative("table")}
           className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "group/table flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             isNativeActive("table")
               ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
           )}
           title="Visualização em Tabela"
         >
-          <Table className="size-3.5" />
+          <Table
+            className={cn(
+              "size-3.5 shrink-0 transition-colors duration-200",
+              isNativeActive("table")
+                ? "text-foreground"
+                : "text-muted-foreground",
+              "group-hover/table:text-sky-500 dark:group-hover/table:text-sky-400"
+            )}
+          />
           <span>Tabela</span>
           {isNativeActive("table") && totalTasks > 0 && (
             <span className="text-[10px] font-mono opacity-80 ml-0.5">
@@ -275,14 +266,22 @@ export function ProjectViewToolbar({
           aria-selected={isNativeActive("kanban")}
           onClick={() => handleSelectNative("kanban")}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "group/kanban flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             isNativeActive("kanban")
               ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
           )}
           title="Visualização em Quadro Kanban"
         >
-          <Kanban className="size-3.5" />
+          <Kanban
+            className={cn(
+              "size-3.5 shrink-0 transition-colors duration-200",
+              isNativeActive("kanban")
+                ? "text-foreground"
+                : "text-muted-foreground",
+              "group-hover/kanban:text-amber-500 dark:group-hover/kanban:text-amber-400"
+            )}
+          />
           <span>Kanban</span>
           {isNativeActive("kanban") && totalTasks > 0 && (
             <span className="text-[10px] font-mono opacity-80 ml-0.5">
@@ -298,14 +297,22 @@ export function ProjectViewToolbar({
           aria-selected={isNativeActive("calendar")}
           onClick={() => handleSelectNative("calendar")}
           className={cn(
-            "hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "group/calendar hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             isNativeActive("calendar")
               ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
           )}
           title="Visualização em Calendário"
         >
-          <Calendar className="size-3.5" />
+          <Calendar
+            className={cn(
+              "size-3.5 shrink-0 transition-colors duration-200",
+              isNativeActive("calendar")
+                ? "text-foreground"
+                : "text-muted-foreground",
+              "group-hover/calendar:text-emerald-500 dark:group-hover/calendar:text-emerald-400"
+            )}
+          />
           <span>Calendário</span>
         </button>
 
@@ -316,14 +323,22 @@ export function ProjectViewToolbar({
           aria-selected={isNativeActive("gantt")}
           onClick={() => handleSelectNative("gantt")}
           className={cn(
-            "hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "group/gantt hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             isNativeActive("gantt")
               ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
           )}
           title="Visualização em Gantt"
         >
-          <GanttChart className="size-3.5" />
+          <GanttChart
+            className={cn(
+              "size-3.5 shrink-0 transition-colors duration-200",
+              isNativeActive("gantt")
+                ? "text-foreground"
+                : "text-muted-foreground",
+              "group-hover/gantt:text-orange-500 dark:group-hover/gantt:text-orange-400"
+            )}
+          />
           <span>Gantt</span>
         </button>
 
@@ -346,7 +361,15 @@ export function ProjectViewToolbar({
                 : "Vincular pasta do Google Drive"
             }
           >
-            <Folder className="size-3.5 text-blue-400 shrink-0" />
+            <Folder
+              className={cn(
+                "size-3.5 shrink-0 transition-colors duration-200",
+                activeCustomViewId === predefinedGdrive?.id
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+                "group-hover/gdrive:text-blue-500 dark:group-hover/gdrive:text-blue-400"
+              )}
+            />
             <span className="flex items-center">
               <span>Arquivos & Documentos</span>
               <span className="max-w-0 opacity-0 overflow-hidden group-hover/gdrive:max-w-[70px] group-hover/gdrive:opacity-80 transition-all duration-200 text-[10px] text-muted-foreground ml-0.5 font-normal">
@@ -409,7 +432,15 @@ export function ProjectViewToolbar({
                 : "Vincular projeto do ChatGPT"
             }
           >
-            <Sparkles className="size-3.5 text-purple-400 shrink-0" />
+            <Sparkles
+              className={cn(
+                "size-3.5 shrink-0 transition-colors duration-200",
+                activeCustomViewId === predefinedChatGpt?.id
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+                "group-hover/chatgpt:text-purple-500 dark:group-hover/chatgpt:text-purple-400"
+              )}
+            />
             <span className="flex items-center">
               <span>IA</span>
               <span className="max-w-0 opacity-0 overflow-hidden group-hover/chatgpt:max-w-[80px] group-hover/chatgpt:opacity-80 transition-all duration-200 text-[10px] text-muted-foreground ml-0.5 font-normal">
@@ -479,7 +510,16 @@ export function ProjectViewToolbar({
               )}
               title={v.name}
             >
-              {renderCustomViewIcon(v.icon, "size-3.5 shrink-0")}
+              {renderCustomViewIcon(
+                v.icon,
+                cn(
+                  "size-3.5 shrink-0 transition-colors duration-200",
+                  activeCustomViewId === v.id
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                  "group-hover/customview:text-primary"
+                )
+              )}
               <span>{v.name}</span>
             </button>
 
@@ -575,7 +615,8 @@ export function ProjectViewToolbar({
                 "flex md:hidden items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-background/40 transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 (viewMode === "calendar" ||
                   viewMode === "gantt" ||
-                  viewMode === "workload") &&
+                  viewMode === "workload" ||
+                  viewMode === "canvas") &&
                   activeCustomViewId === null &&
                   "text-foreground font-semibold"
               )}

@@ -27,6 +27,7 @@
     "@tanstack/query-async-storage-persister": "^5.108.0",
     "@tanstack/react-query": "^5.108.0",
     "@tanstack/react-query-persist-client": "^5.108.0",
+    "@xyflow/react": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "idb-keyval": "^6.3.0",

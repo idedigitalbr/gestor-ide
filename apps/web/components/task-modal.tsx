@@ -34,6 +34,7 @@ import {
 import { MemberAvatarContent } from "@/components/member-avatar-content";
 import { NotionDatePicker } from "@/components/ui/notion-date-picker";
 import { formatNotionDate } from "@/lib/notion-date";
+import { getCachedSession } from "@/lib/gestor-cache";
 import {
   Dialog,
   DialogContent,
@@ -352,9 +353,14 @@ const TaskModalContent = forwardRef<
   const [dueDate, setDueDate] = useState(task?.dueDate ?? "");
   const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const projectName = task?.projectName || "";
-  const [assignee, setAssignee] = useState(task?.assignee || "");
-  const [assigneeAvatar, setAssigneeAvatar] = useState(task?.assigneeAvatar || "");
-  const [assigneeId, setAssigneeId] = useState(task?.assigneeId ?? "");
+  const activeUser = currentUser || getCachedSession();
+  const defaultAssignee = task?.assignee ?? (!task ? (activeUser?.name || activeUser?.email || "") : "");
+  const defaultAssigneeAvatar = task?.assigneeAvatar ?? (!task ? (activeUser?.avatarUrl || "") : "");
+  const defaultAssigneeId = task?.assigneeId ?? (!task ? (activeUser?.id || "") : "");
+
+  const [assignee, setAssignee] = useState(defaultAssignee);
+  const [assigneeAvatar, setAssigneeAvatar] = useState(defaultAssigneeAvatar);
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId);
   const [isSavingAssignee, setIsSavingAssignee] = useState(false);
   const [tags, setTags] = useState<string[]>(
     task?.tags && task.tags.length > 0
@@ -495,6 +501,7 @@ const TaskModalContent = forwardRef<
       dueDate: dueDate || undefined,
       projectName: projectName || undefined,
       assigneeId: assigneeId || undefined,
+      assigneeIds: assigneeId ? [assigneeId] : undefined,
       assignee: assignee || undefined,
       assigneeAvatar: assigneeAvatar || undefined,
       tags,
@@ -615,9 +622,29 @@ const TaskModalContent = forwardRef<
     }
   }
 
+  const effectiveAssigneeMembers = useMemo(() => {
+    const list = [...members];
+    const user = currentUser || getCachedSession();
+    if (user?.id && !list.some((m) => m.userId === user.id || m.user?.id === user.id)) {
+      list.unshift({
+        id: `member-${user.id}`,
+        userId: user.id,
+        projectId: task?.projectId || "",
+        role: "manager",
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+        },
+      });
+    }
+    return list;
+  }, [members, currentUser, task?.projectId]);
+
   const assigneeMenuItems = (
     <>
-      {members.map((member) => (
+      {effectiveAssigneeMembers.map((member) => (
         <DropdownMenuItem key={member.userId} onSelect={() => void handleSelectAssignee(member)}>
           <span className="flex-1 truncate">{member.user.name || member.user.email}</span>
           {assigneeId === member.userId && <Check className="h-4 w-4" />}
@@ -1515,11 +1542,11 @@ const TaskModalContent = forwardRef<
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && members.length === 0)}
+                    disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && effectiveAssigneeMembers.length === 0)}
                     title={
                       Boolean(task) && !onChangeAssignee
                         ? "Membros do projeto indisponíveis"
-                        : members.length === 0
+                        : effectiveAssigneeMembers.length === 0
                           ? "Nenhum membro disponível neste projeto"
                           : "Alterar responsável"
                     }
@@ -1740,11 +1767,11 @@ const TaskModalContent = forwardRef<
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && members.length === 0)}
+                          disabled={isSavingAssignee || (Boolean(task) && !onChangeAssignee) || (!task && effectiveAssigneeMembers.length === 0)}
                           title={
                             Boolean(task) && !onChangeAssignee
                               ? "Membros do projeto indisponíveis"
-                              : members.length === 0
+                              : effectiveAssigneeMembers.length === 0
                                 ? "Nenhum membro disponível neste projeto"
                                 : "Alterar responsável"
                           }

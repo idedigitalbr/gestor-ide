@@ -65,7 +65,11 @@ export function CustomViewModal({
   onSave,
 }: CustomViewModalProps) {
   const isEditing = Boolean(view && view.id);
-  const isPredefined = view?.type === "predefined";
+  const isPredefined =
+    view?.type === "predefined" ||
+    Boolean(view?.id?.includes("predefined")) ||
+    Boolean(view?.id?.includes("gdrive")) ||
+    Boolean(view?.id?.includes("chatgpt"));
 
   const [name, setName] = useState(view?.name || "");
   const [icon, setIcon] = useState(view?.icon || "Globe");
@@ -146,8 +150,10 @@ export function CustomViewModal({
     e.preventDefault();
     setErrorMessage(null);
 
-    const trimmedName = name.trim();
-    if (!trimmedName) {
+    const finalName = isPredefined
+      ? (view?.name || name || "Visualização")
+      : name.trim();
+    if (!finalName) {
       setErrorMessage("Informe o nome da visualização.");
       return;
     }
@@ -164,8 +170,8 @@ export function CustomViewModal({
     try {
       await onSave({
         id: view?.id,
-        name: trimmedName,
-        icon,
+        name: finalName,
+        icon: isPredefined ? (view?.icon || icon) : icon,
         url: sanitizedUrl,
         openMode,
       });
@@ -206,7 +212,7 @@ export function CustomViewModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Presets rápidos ao criar */}
-          {!isEditing && (
+          {!isEditing && !isPredefined && (
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                 Exemplos rápidos
@@ -231,31 +237,34 @@ export function CustomViewModal({
             </div>
           )}
 
-          {/* Nome da visualização */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground">
-              Nome da visualização
-            </label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Figma, Documentação, Dashboard, Protótipo"
-              disabled={isPredefined}
-              required
-              className="text-xs h-8.5"
-            />
-          </div>
+          {/* Nome da visualização (apenas para views criadas pelo usuário) */}
+          {!isPredefined && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Nome da visualização
+              </label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: Figma, Documentação, Dashboard, Protótipo"
+                required
+                className="text-xs h-8.5"
+              />
+            </div>
+          )}
 
-          {/* Seletor de Ícone */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-              <span>Ícone</span>
-              <span className="text-[11px] text-muted-foreground font-normal">
-                Selecionado: {icon}
-              </span>
-            </label>
-            <IconPicker value={icon} onChange={setIcon} />
-          </div>
+          {/* Seletor de Ícone (apenas para views criadas pelo usuário) */}
+          {!isPredefined && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>Ícone</span>
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  Selecionado: {icon}
+                </span>
+              </label>
+              <IconPicker value={icon} onChange={setIcon} />
+            </div>
+          )}
 
           {/* URL */}
           <div className="space-y-1.5">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { CrmProjectManagement } from "@gestor-ide/core";
+import type { CrmProject, CrmProjectManagement, CrmUserProfile } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { stripManagementPrefix } from "@/lib/list-view-options";
+import { getCachedSession } from "@/lib/gestor-cache";
 
 function NewProjectDialogContent({
   onOpenChange,
@@ -29,12 +30,14 @@ function NewProjectDialogContent({
   selectedManagementId,
   connected,
   onCreated,
+  currentUser,
 }: {
   onOpenChange: (open: boolean) => void;
   managements: CrmProjectManagement[];
   selectedManagementId: string | null;
   connected: boolean;
-  onCreated: () => Promise<void>;
+  onCreated: (createdProject?: CrmProject) => Promise<void> | void;
+  currentUser?: CrmUserProfile | null;
 }) {
   const [managementId, setManagementId] = useState(selectedManagementId ?? "");
   const [name, setName] = useState("");
@@ -51,13 +54,33 @@ function NewProjectDialogContent({
     }
     setSaving(true);
     setError("");
+
+    const activeUser = currentUser || getCachedSession();
+
     try {
-      await ideCrmClient.createProject(managementId, {
+      const res = await ideCrmClient.createProject(managementId, {
         name: name.trim(),
         description: description.trim(),
+        ...(activeUser?.id ? { ownerUserId: activeUser.id, memberIds: [activeUser.id] } : {}),
       });
+
+      const createdProject = res?.project;
+
+      // Garante que o criador entra automaticamente como responsável (manager)
+      if (createdProject?.id && activeUser?.id) {
+        try {
+          await ideCrmClient.addProjectMember(createdProject.id, {
+            userId: activeUser.id,
+            email: activeUser.email,
+            role: "manager",
+          });
+        } catch (memberErr) {
+          console.warn("Aviso ao vincular criador como responsável do projeto:", memberErr);
+        }
+      }
+
       onOpenChange(false);
-      await onCreated();
+      await onCreated(createdProject);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível criar o projeto.");
     } finally {
@@ -76,7 +99,7 @@ function NewProjectDialogContent({
     >
       <DialogHeader>
         <DialogTitle>Novo projeto</DialogTitle>
-        <DialogDescription>Escolha a gestão e informe os dados do projeto.</DialogDescription>
+        <DialogDescription>Escolha a gestão e informe os dados do projeto. Você será automaticamente vinculado como responsável.</DialogDescription>
       </DialogHeader>
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
@@ -149,13 +172,15 @@ export function NewProjectDialog({
   selectedManagementId,
   connected,
   onCreated,
+  currentUser,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   managements: CrmProjectManagement[];
   selectedManagementId: string | null;
   connected: boolean;
-  onCreated: () => Promise<void>;
+  onCreated: (createdProject?: CrmProject) => Promise<void> | void;
+  currentUser?: CrmUserProfile | null;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,6 +192,7 @@ export function NewProjectDialog({
           selectedManagementId={selectedManagementId}
           connected={connected}
           onCreated={onCreated}
+          currentUser={currentUser}
         />
       )}
     </Dialog>

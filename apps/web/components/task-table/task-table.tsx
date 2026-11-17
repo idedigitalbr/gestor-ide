@@ -45,6 +45,7 @@ import {
   Package,
   Pencil,
   Plus,
+  Settings,
   Tag,
   Trash2,
   User,
@@ -108,6 +109,62 @@ function CollapsibleSection({
       )}
     >
       <div className="overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
+interface TableCornerActionsProps {
+  onOpenFieldsModal: () => void;
+}
+
+function TableCornerActions({ onOpenFieldsModal }: TableCornerActionsProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className="group/corner w-16 shrink-0 flex items-center justify-end border-l border-muted-foreground/40 pr-2 h-full select-none">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 transition-opacity duration-150",
+          isOpen
+            ? "opacity-100"
+            : "opacity-100 sm:opacity-0 sm:group-hover/corner:opacity-100 focus-within:opacity-100"
+        )}
+      >
+        {/* Botão + minimalista (tipo PlanW/Notion) */}
+        <button
+          type="button"
+          onClick={onOpenFieldsModal}
+          title="Adicionar coluna / Gerenciar campos"
+          aria-label="Adicionar coluna"
+          className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
+        >
+          <Plus className="h-3.5 w-3.5 stroke-[1.75]" />
+        </button>
+
+        {/* Menu de Opções (...) minimalista */}
+        <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Opções de colunas e tabela"
+              aria-label="Opções de colunas e tabela"
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors cursor-pointer"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-popover border-border text-popover-foreground p-1 z-50 shadow-xl">
+            <DropdownMenuItem onClick={onOpenFieldsModal} className="text-xs cursor-pointer hover:bg-accent">
+              <Settings className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+              <span>Gerenciar campos</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenFieldsModal} className="text-xs cursor-pointer hover:bg-accent">
+              <Plus className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
+              <span>Adicionar nova coluna</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
@@ -1445,7 +1502,7 @@ export function TaskTable({
               })}
 
             {/* Menu de Ações (...) */}
-            <div className="w-8 flex justify-end">
+            <div className="w-16 shrink-0 flex items-center justify-end pr-2 border-l border-muted-foreground/40">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -1533,7 +1590,7 @@ export function TaskTable({
             </div>
           );
         })}
-        <div className="w-8" />
+        <div className="w-16 shrink-0 border-l border-muted-foreground/40" />
       </div>
     );
   }
@@ -1719,18 +1776,8 @@ export function TaskTable({
               </div>
             ))}
 
-          {/* Botão "+" para Criar Coluna / Gerenciar Campos */}
-          <div className="w-8 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={handleOpenFieldsModal}
-              title="Adicionar coluna / Gerenciar campos"
-              aria-label="Adicionar coluna"
-              className="inline-flex h-5 w-5 items-center justify-center rounded bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-colors cursor-pointer"
-            >
-              <Plus className="h-3 w-3 stroke-[2.5]" />
-            </button>
-          </div>
+          {/* Canto superior direito da tabela: Botões "+" e "..." minimalistas exibidos no hover */}
+          <TableCornerActions onOpenFieldsModal={handleOpenFieldsModal} />
         </div>
       </div>
     );
@@ -1761,7 +1808,7 @@ export function TaskTable({
       maxDepth = Math.max(maxDepth, itemDepth);
     }
   }
-  const metadataWidth = columns.filter((column) => !hiddenColumnIds.has(column.id)).reduce((width, column) => width + columnWidth(column.id), 32);
+  const metadataWidth = columns.filter((column) => !hiddenColumnIds.has(column.id)).reduce((width, column) => width + columnWidth(column.id), 64);
 
   // ---------------------------------------------------------------------------
   // JSX Principal

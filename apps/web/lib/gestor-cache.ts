@@ -48,6 +48,24 @@ export function setLocalFreeGroups(projectId: string, names: string[]): void {
   safeSetItem(getLocalUiKey("groups", projectId), JSON.stringify(names));
 }
 
+export interface LocalTaskDependency {
+  id: string;
+  fromTaskId: string;
+  toTaskId: string;
+  type?: "FS";
+}
+
+export function getLocalTaskDependencies(projectId: string): LocalTaskDependency[] {
+  try {
+    const value = JSON.parse(safeGetItem(getLocalUiKey("deps", projectId)) ?? "[]");
+    return Array.isArray(value) ? value : [];
+  } catch { return []; }
+}
+
+export function setLocalTaskDependencies(projectId: string, deps: LocalTaskDependency[]): void {
+  safeSetItem(getLocalUiKey("deps", projectId), JSON.stringify(deps));
+}
+
 // In-Memory cache para velocidade de nanossegundos durante a sessão
 const memoryTasks = new Map<string, Task[]>();
 let memoryManagements: CrmProjectManagement[] | null = null;

@@ -40,7 +40,12 @@ export function useCreateProject() {
       input,
     }: {
       managementId: string;
-      input: { name: string; description?: string };
+      input: {
+        name: string;
+        description?: string;
+        ownerUserId?: string;
+        memberIds?: string[];
+      };
     }) => {
       return ideCrmClient.createProject(managementId, input);
     },

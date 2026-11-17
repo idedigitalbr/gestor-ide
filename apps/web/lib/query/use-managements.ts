@@ -35,7 +35,12 @@ export function useCreateManagement() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (input: { name: string; description?: string }) => {
+    mutationFn: async (input: {
+      name: string;
+      description?: string;
+      ownerUserId?: string;
+      memberIds?: string[];
+    }) => {
       return ideCrmClient.createManagement(input);
     },
     onSuccess: () => {

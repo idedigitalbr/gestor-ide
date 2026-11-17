@@ -20,6 +20,11 @@ import type {
   CustomViewOpenMode,
   CustomViewType,
   FrameEmbedCheckResult,
+  CanvasCreateInput,
+  CanvasUpdateInput,
+  CanvasDuplicateInput,
+  CanvasSummary,
+  CanvasDetail,
 } from "@gestor-ide/core";
 import { getDefaultProjectViews, sanitizeExternalUrl } from "@gestor-ide/core";
 import { getStoredCrmToken, setStoredCrmToken } from "@gestor-ide/auth";
@@ -563,7 +568,12 @@ export class IdeCrmClient {
     });
   }
 
-  async createManagement(input: { name: string; description?: string }): Promise<{ management: CrmProjectManagement }> {
+  async createManagement(input: {
+    name: string;
+    description?: string;
+    ownerUserId?: string;
+    memberIds?: string[];
+  }): Promise<{ management: CrmProjectManagement }> {
     return this.request("/projects/managements", {
       method: "POST",
       body: JSON.stringify(input),
@@ -595,7 +605,15 @@ export class IdeCrmClient {
     return this.request(`/projects/items${query}`);
   }
 
-  async createProject(managementId: string, input: { name: string; description?: string }): Promise<{ project: CrmProject }> {
+  async createProject(
+    managementId: string,
+    input: {
+      name: string;
+      description?: string;
+      ownerUserId?: string;
+      memberIds?: string[];
+    }
+  ): Promise<{ project: CrmProject }> {
     return this.request(`/projects/managements/${encodeURIComponent(managementId)}/projects`, {
       method: "POST",
       body: JSON.stringify(input),
@@ -772,14 +790,29 @@ export class IdeCrmClient {
     projectId: string,
     input: { userId?: string; email?: string; role?: string }
   ): Promise<{ ok?: boolean }> {
-    return this.request(
-      `/projects/members`,
-      {
-        method: "POST",
-        body: JSON.stringify({ projectId, ...input }),
-      },
-      true
-    );
+    try {
+      return await this.request(
+        `/projects/members`,
+        {
+          method: "POST",
+          body: JSON.stringify({ projectId, ...input }),
+        },
+        true
+      );
+    } catch (err) {
+      try {
+        return await this.request(
+          `/projects/${encodeURIComponent(projectId)}/members`,
+          {
+            method: "POST",
+            body: JSON.stringify(input),
+          },
+          true
+        );
+      } catch {
+        throw err;
+      }
+    }
   }
 
   async updateProjectMemberRole(
@@ -821,6 +854,89 @@ export class IdeCrmClient {
         }
       );
     });
+  }
+
+  // --------------------------------------------------------------------------
+  // Módulo: IDE Gestor Canvas v2
+  // --------------------------------------------------------------------------
+
+  async listProjectCanvases(projectId: string): Promise<{ canvases: CanvasSummary[] }> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/canvases`);
+  }
+
+  async getProjectCanvas(projectId: string, canvasId: string): Promise<CanvasDetail> {
+    return this.request(`/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`);
+  }
+
+  async createProjectCanvas(
+    projectId: string,
+    input: CanvasCreateInput
+  ): Promise<{ id: string; projectId: string; name: string; revision: number; updatedAt: string }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectId)}/canvases`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      true
+    );
+  }
+
+  async updateProjectCanvas(
+    projectId: string,
+    canvasId: string,
+    input: CanvasUpdateInput
+  ): Promise<{ id: string; revision: number; updatedAt: string }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }
+    );
+  }
+
+  async duplicateProjectCanvas(
+    projectId: string,
+    canvasId: string,
+    input?: CanvasDuplicateInput
+  ): Promise<{ id: string; projectId: string; name: string; revision: number; updatedAt: string }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}/duplicate`,
+      {
+        method: "POST",
+        body: JSON.stringify(input ?? {}),
+      },
+      true
+    );
+  }
+
+  async archiveProjectCanvas(projectId: string, canvasId: string): Promise<{ ok: boolean }> {
+    return this.request(
+      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
+      {
+        method: "DELETE",
+      }
+    );
+  }
+
+  async uploadCanvasAsset(
+    projectId: string,
+    file: File
+  ): Promise<{ assetId: string; url: string; fileName: string; size: number }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.request(
+      `/projects/${encodeURIComponent(projectId)}/canvas-assets`,
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+  }
+
+  getCanvasAssetUrl(projectId: string, assetId: string): string {
+    return `${this.baseUrl}/projects/${encodeURIComponent(projectId)}/canvas-assets/${encodeURIComponent(assetId)}`;
   }
 }
 

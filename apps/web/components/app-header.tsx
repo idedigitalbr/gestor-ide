@@ -29,6 +29,7 @@ import {
   Layers,
   LogOut,
   Palette,
+  PanelLeft,
   Plus,
   RotateCcw,
   Search,
@@ -228,6 +229,10 @@ interface AppHeaderProps {
   onTaskSortChange?: (sort: TaskSortOption) => void;
   onResetManagementSettings?: () => void;
   onResetProjectSettings?: () => void;
+  isSidebarEnabled?: boolean;
+  onSidebarEnabledChange?: (value: boolean) => void;
+  isSidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export function AppHeader({
@@ -240,6 +245,10 @@ export function AppHeader({
   selectableManagements,
   projects = [],
   selectableProjects,
+  isSidebarEnabled = false,
+  onSidebarEnabledChange,
+  isSidebarOpen = false,
+  onToggleSidebar,
   onlyMyManagements,
   onOnlyMyManagementsChange,
   onlyMyProjects,
@@ -379,19 +388,40 @@ export function AppHeader({
           </Button>
         </HeaderTooltip>
 
-        <HeaderWorkspaceSelector
-          key={currentUser?.id ?? "anonymous"}
-          managements={managements}
-          selectableManagements={selectableManagements}
-          selectedManagementId={selectedManagementId ?? null}
-          onSelectManagement={onSelectManagement}
-          projects={projects}
-          selectedProjectId={selectedProjectId ?? null}
-          onSelectProject={onSelectProject}
-          currentManagementName={currentManagementName}
-          currentProjectName={currentProjectName}
-          selectableProjects={selectableProjects}
-        />
+        {isSidebarEnabled && (
+          <HeaderTooltip label={isSidebarOpen ? "Recolher barra lateral (Ctrl+B)" : "Expandir barra lateral (Ctrl+B)"}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground cursor-pointer shrink-0 rounded-lg hover:bg-muted/60"
+              onClick={onToggleSidebar}
+              aria-label="Alternar barra lateral"
+            >
+              <PanelLeft className="w-4 h-4" />
+            </Button>
+          </HeaderTooltip>
+        )}
+
+        <div
+          className={cn(
+            "flex min-w-0 items-center transition-opacity duration-200",
+            isSidebarEnabled && (isSidebarOpen ? "opacity-35 hover:opacity-100" : "opacity-75 hover:opacity-100")
+          )}
+        >
+          <HeaderWorkspaceSelector
+            key={currentUser?.id ?? "anonymous"}
+            managements={managements}
+            selectableManagements={selectableManagements}
+            selectedManagementId={selectedManagementId ?? null}
+            onSelectManagement={onSelectManagement}
+            projects={projects}
+            selectedProjectId={selectedProjectId ?? null}
+            onSelectProject={onSelectProject}
+            currentManagementName={currentManagementName}
+            currentProjectName={currentProjectName}
+            selectableProjects={selectableProjects}
+          />
+        </div>
       </div>
 
       {/* ========================================================= */}
@@ -1847,6 +1877,20 @@ export function AppHeader({
                         id="only-my-task-notifications"
                         checked={onlyMyTaskNotifications}
                         onCheckedChange={onOnlyMyTaskNotificationsChange}
+                      />
+                    </div>
+
+                    <div className="h-px bg-border/60 my-1" />
+
+                    <div className="flex items-center justify-between gap-2.5">
+                      <label htmlFor="enable-sidebar" className="text-muted-foreground hover:text-foreground cursor-pointer text-[11px] leading-tight select-none flex items-center gap-1.5">
+                        <span>Ativar sidebar</span>
+                        <span className="text-[10px] text-muted-foreground/70 font-mono">(Ctrl+B)</span>
+                      </label>
+                      <Switch
+                        id="enable-sidebar"
+                        checked={isSidebarEnabled}
+                        onCheckedChange={onSidebarEnabledChange}
                       />
                     </div>
                   </div>

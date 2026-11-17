@@ -3,18 +3,14 @@
 import React, { useMemo, useState } from "react";
 import type { CrmProjectMember, Task } from "@gestor-ide/core";
 import { normalizeTaskStatus } from "@gestor-ide/core";
-import { AlertTriangle, Calendar as CalendarIcon, CheckCircle2, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { StatusIcon } from "@/components/task-status-icon";
-import { PriorityIcon } from "@/components/task-priority-icon";
 import { TaskSolidStatusBadge } from "@/components/task-table/task-solid-status-badge";
-import { TaskTimelineDateCell } from "@/components/task-table/task-timeline-date-cell";
 import { MemberAvatarContent } from "@/components/member-avatar-content";
+import { TaskGantt } from "@/components/task-gantt/task-gantt";
 import { cn } from "@/lib/utils";
-
-const DAY_MS = 86_400_000;
 
 function dateOf(value?: string) {
   if (!value || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
@@ -32,15 +28,6 @@ function isTaskOverdue(task: Task, todayKey: string): boolean {
   if (!task.dueDate) return false;
   if (normalizeTaskStatus(task.status) === "CONCLUÍDO") return false;
   return task.dueDate.slice(0, 10) < todayKey;
-}
-
-function getGanttBarClass(status: Task["status"], overdue: boolean): string {
-  const canonical = normalizeTaskStatus(status);
-  if (canonical === "CONCLUÍDO") return "bg-emerald-500/85 hover:bg-emerald-500";
-  if (overdue || canonical === "BLOQUEADO") return "bg-destructive/85 hover:bg-destructive";
-  if (canonical === "AGUARDANDO FEEDBACK") return "bg-amber-500/85 hover:bg-amber-500";
-  if (canonical === "FAZENDO AGORA") return "bg-primary/90 hover:bg-primary";
-  return "bg-secondary-foreground/50 hover:bg-secondary-foreground/70";
 }
 
 function TaskButton({
@@ -102,22 +89,27 @@ function TaskButton({
 export function TaskAdditionalView({
   mode,
   tasks,
+  allTasks,
+  projectId,
   members,
   onOpen,
   onUpdateTask,
   onChangeAssignee,
+  canWrite = true,
 }: {
   mode: "table" | "kanban" | "calendar" | "gantt" | "workload";
   tasks: Task[];
+  allTasks?: Task[];
+  projectId?: string | null;
   members: CrmProjectMember[];
   onOpen: (task: Task) => void;
   onUpdateTask?: (task: Task) => void;
   onChangeAssignee?: (taskId: string, member: CrmProjectMember | null) => Promise<boolean>;
+  canWrite?: boolean;
 }) {
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   );
-  const [showUndatedInGantt, setShowUndatedInGantt] = useState(true);
   const [dragOverAssigneeId, setDragOverAssigneeId] = useState<string | null>(null);
   const todayKey = keyOf(new Date());
   const undated = tasks.filter((task) => !dateOf(task.dueDate));
@@ -246,182 +238,17 @@ export function TaskAdditionalView({
   }
 
   if (mode === "gantt") {
-    const dated = tasks
-      .filter((task) => dateOf(task.startDate) || dateOf(task.dueDate))
-      .sort((a, b) => {
-        const aTime = (dateOf(a.startDate) ?? dateOf(a.dueDate))!.getTime();
-        const bTime = (dateOf(b.startDate) ?? dateOf(b.dueDate))!.getTime();
-        return aTime - bTime;
-      });
-    const undatedTasks = tasks.filter((task) => !dateOf(task.startDate) && !dateOf(task.dueDate));
-    const overdueCount = dated.filter((task) => isTaskOverdue(task, todayKey)).length;
-
-    const timestamps = dated.flatMap((task) =>
-      [dateOf(task.startDate)?.getTime(), dateOf(task.dueDate)?.getTime()].filter(
-        (n): n is number => n !== undefined
-      )
-    );
-    const hasTimestamps = timestamps.length > 0;
-    const min = hasTimestamps ? Math.min(...timestamps) : 0;
-    const max = hasTimestamps ? Math.max(...timestamps) : 0;
-    const span = hasTimestamps ? Math.max(1, Math.round((max - min) / DAY_MS) + 1) : 1;
-    const mid = min + Math.round((max - min) / 2);
-
-    const todayTime = dateOf(todayKey)?.getTime();
-    const todayPercent =
-      hasTimestamps && todayTime !== undefined && todayTime >= min && todayTime <= max
-        ? ((todayTime - min) / DAY_MS / span) * 100
-        : null;
-
     return (
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold">Gantt de tarefas</h2>
-            <p className="text-xs text-muted-foreground">
-              Período entre início e prazo, com edição rápida de status e datas.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="text-[11px] gap-1">
-              <CalendarIcon className="w-3 h-3" />
-              <span>{dated.length} agendadas</span>
-            </Badge>
-            {overdueCount > 0 && (
-              <Badge variant="destructive" className="text-[11px] gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                <span>{overdueCount} atrasadas</span>
-              </Badge>
-            )}
-            {undatedTasks.length > 0 && (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer pl-1">
-                <Switch
-                  checked={showUndatedInGantt}
-                  onCheckedChange={setShowUndatedInGantt}
-                />
-                <span>Mostrar sem datas ({undatedTasks.length})</span>
-              </label>
-            )}
-          </div>
-        </div>
-
-        {dated.length > 0 && hasTimestamps ? (
-          <div className="overflow-x-auto rounded-lg border border-border bg-card">
-            <div className="min-w-[820px]">
-              <div className="grid grid-cols-[230px_140px_150px_1fr] items-center gap-3 border-b border-border bg-muted/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <span>Tarefa</span>
-                <span>Status</span>
-                <span>Período</span>
-                <div className="flex justify-between font-mono font-normal normal-case">
-                  <span>{new Date(min).toLocaleDateString("pt-BR")}</span>
-                  <span>{new Date(mid).toLocaleDateString("pt-BR")}</span>
-                  <span>{new Date(max).toLocaleDateString("pt-BR")}</span>
-                </div>
-              </div>
-              {dated.map((task) => {
-                const a = dateOf(task.startDate)?.getTime() ?? dateOf(task.dueDate)!.getTime();
-                const b = dateOf(task.dueDate)?.getTime() ?? a;
-                const left = ((Math.min(a, b) - min) / DAY_MS / span) * 100;
-                const width = ((Math.abs(b - a) / DAY_MS + 1) / span) * 100;
-                const overdue = isTaskOverdue(task, todayKey);
-
-                return (
-                  <div
-                    key={task.id}
-                    className="grid grid-cols-[230px_140px_150px_1fr] items-center gap-3 border-b border-border px-3 py-2.5 last:border-0 hover:bg-muted/30 transition-colors"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpen(task)}
-                      className="flex items-center gap-1.5 min-w-0 text-left text-xs font-medium text-foreground hover:text-primary cursor-pointer"
-                    >
-                      <PriorityIcon priority={task.priority} className="shrink-0" />
-                      <span className="truncate">{task.title}</span>
-                    </button>
-
-                    <div>
-                      <TaskSolidStatusBadge
-                        status={task.status}
-                        size="sm"
-                        onChangeStatus={
-                          onUpdateTask
-                            ? (nextStatus) => onUpdateTask({ ...task, status: nextStatus })
-                            : undefined
-                        }
-                      />
-                    </div>
-
-                    <div>
-                      <TaskTimelineDateCell
-                        startDate={task.startDate}
-                        dueDate={task.dueDate}
-                        status={task.status}
-                        priority={task.priority}
-                        onUpdateDates={
-                          onUpdateTask
-                            ? ({ startDate, dueDate }) =>
-                                onUpdateTask({ ...task, startDate, dueDate })
-                            : () => {}
-                        }
-                      />
-                    </div>
-
-                    <div className="relative h-7 rounded bg-muted/70 overflow-hidden">
-                      {todayPercent !== null && (
-                        <div
-                          aria-hidden="true"
-                          className="absolute inset-y-0 w-0.5 bg-primary z-10 pointer-events-none"
-                          style={{ left: `${todayPercent}%` }}
-                          title="Hoje"
-                        />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => onOpen(task)}
-                        title={`${task.title}: ${new Date(a).toLocaleDateString("pt-BR")} – ${new Date(
-                          b
-                        ).toLocaleDateString("pt-BR")}`}
-                        aria-label={`Abrir ${task.title}`}
-                        className={cn(
-                          "absolute inset-y-1 min-w-2.5 rounded transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer flex items-center px-1.5 overflow-hidden",
-                          getGanttBarClass(task.status, overdue)
-                        )}
-                        style={{ left: `${left}%`, width: `${width}%` }}
-                      >
-                        <span className="truncate text-[10px] font-medium text-primary-foreground">
-                          {task.assignee ? `${task.assignee.split(" ")[0]} · ` : ""}
-                          {task.title}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-xs text-muted-foreground">
-            Nenhuma tarefa com data de início ou prazo definida neste filtro.
-          </div>
-        )}
-
-        {showUndatedInGantt && undatedTasks.length > 0 && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold">Sem datas ({undatedTasks.length})</h3>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {undatedTasks.map((task) => (
-                <TaskButton
-                  key={task.id}
-                  task={task}
-                  todayKey={todayKey}
-                  onOpen={onOpen}
-                  onUpdateTask={onUpdateTask}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
+      <TaskGantt
+        tasks={tasks}
+        allTasks={allTasks}
+        projectId={projectId}
+        members={members}
+        canWrite={canWrite}
+        onOpen={onOpen}
+        onUpdateTask={onUpdateTask}
+        onChangeAssignee={onChangeAssignee}
+      />
     );
   }
 

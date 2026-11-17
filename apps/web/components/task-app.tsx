@@ -64,6 +64,7 @@ import {
   setLocalTaskPresentation,
   removeLocalTaskPresentation,
 } from "@/lib/gestor-cache";
+import { Sidebar } from "@/components/sidebar";
 import { AppHeader, type SubtaskDisplayMode } from "@/components/app-header";
 import { ManagementsGridView } from "@/components/managements-grid-view";
 import { ManagementProjectsView } from "@/components/management-projects-view";
@@ -147,6 +148,18 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   });
   const [onlyMyTaskNotifications, setOnlyMyTaskNotifications] = useState(() => {
     try { return localStorage.getItem("gestor_only_my_task_notifications") !== "false"; } catch { return true; }
+  });
+  // Preferência: Ativar barra lateral (Sidebar retrátil). Padrão: false (desativada)
+  const [isSidebarEnabled, setIsSidebarEnabled] = useState(() => {
+    try { return localStorage.getItem("gestor_sidebar_enabled") === "true"; } catch { return false; }
+  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem("gestor_sidebar_open");
+      return saved !== null ? saved === "true" : true;
+    } catch {
+      return true;
+    }
   });
   const [membershipRetry, setMembershipRetry] = useState(0);
   const [projectMembership, setProjectMembership] = useState<{
@@ -509,16 +522,31 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   // Sincronização e swap reativo de IDs temporários para IDs definitivos do CRM
   useEffect(() => {
     const unsub = subscribeIdSwap((tempId, realId, realTask) => {
+      let finalSynced: Task | null = null;
       setTasks((prev) =>
-        prev.map((t) =>
-          t.id === tempId
-            ? { ...t, id: realId }
-            : t
-        )
+        prev.map((t) => {
+          if (t.id === tempId) {
+            const synced = mapCrmTaskToGestorTask(realTask, 0);
+            finalSynced = {
+              ...synced,
+              id: realId,
+              assigneeId: synced.assigneeId || t.assigneeId,
+              assignee: synced.assignee || t.assignee,
+              assigneeAvatar: synced.assigneeAvatar || t.assigneeAvatar,
+              assigneeIds: synced.assigneeIds && synced.assigneeIds.length > 0 ? synced.assigneeIds : t.assigneeIds,
+            };
+            return finalSynced;
+          }
+          return t;
+        })
       );
       removeCachedTask(tempId);
-      const synced = mapCrmTaskToGestorTask(realTask, 0);
-      addCachedTask(synced);
+      if (finalSynced) {
+        addCachedTask(finalSynced);
+      } else {
+        const synced = mapCrmTaskToGestorTask(realTask, 0);
+        addCachedTask(synced);
+      }
     });
     return unsub;
   }, []);
@@ -1066,6 +1094,47 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     setOnlyMyTaskNotifications(value);
     try { localStorage.setItem("gestor_only_my_task_notifications", String(value)); } catch {}
   }
+
+  function updateSidebarEnabled(value: boolean) {
+    setIsSidebarEnabled(value);
+    try { localStorage.setItem("gestor_sidebar_enabled", String(value)); } catch {}
+    if (value) {
+      setIsSidebarOpen(true);
+      try { localStorage.setItem("gestor_sidebar_open", "true"); } catch {}
+    }
+  }
+
+  function toggleSidebarOpen() {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("gestor_sidebar_open", String(next)); } catch {}
+      return next;
+    });
+  }
+
+  // Atalho de teclado: Ctrl+B ou Cmd+B para alternar a sidebar retrátil
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const isEditing = target && (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      );
+      if (isEditing) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        if (!isSidebarEnabled) {
+          updateSidebarEnabled(true);
+        } else {
+          toggleSidebarOpen();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSidebarEnabled]);
 
   function handleSelectManagement(managementId: string | null) {
     setListSearch("");
@@ -2426,9 +2495,46 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
-      {/* Main Content Area (Sidebar desativada conforme solicitado) */}
+      {/* Sidebar Retrátil (quando ativada em Preferências ou via Ctrl+B) */}
+      {isSidebarEnabled && (
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          onToggle={toggleSidebarOpen}
+          managements={effectiveManagements}
+          selectedManagementId={selectedManagementId}
+          onSelectManagement={(id) => {
+            handleSelectManagement(id);
+            if (isSecondaryPage) router.push("/");
+          }}
+          projects={effectiveProjects}
+          selectedProjectId={selectedProjectId}
+          onSelectProject={(id) => {
+            handleSelectProject(id);
+            if (isSecondaryPage) router.push("/");
+          }}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          isConnectedCrm={isConnectedCrm}
+          onOpenCrmModal={() => setIsCrmModalOpen(true)}
+          onHome={() => {
+            handleSelectManagement(null);
+            handleSelectProject(null);
+            if (isSecondaryPage) router.push("/");
+          }}
+          canWrite={canWriteProjects}
+          onCreateProject={() => setIsNewProjectOpen(true)}
+          onCreateManagement={() => setIsNewManagementOpen(true)}
+        />
+      )}
+
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full overflow-hidden pb-16 md:pb-0">
         <AppHeader
+          isSidebarEnabled={isSidebarEnabled}
+          onSidebarEnabledChange={updateSidebarEnabled}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={toggleSidebarOpen}
           isProjectPage={isSecondaryPage}
           isCalendarPage={isCalendarPage}
           onOpenNewEvent={() => openCreateDialog()}
@@ -2700,7 +2806,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                 <TaskAdditionalView
                   mode={viewMode}
                   tasks={filteredTasks}
+                  allTasks={tasks}
+                  projectId={selectedProjectId}
                   members={activeProjectMembers}
+                  canWrite={canWriteProjects}
                   onOpen={handleOpenDetails}
                   onUpdateTask={canWriteProjects ? handleUpdateTask : undefined}
                   onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
