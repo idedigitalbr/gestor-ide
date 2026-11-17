@@ -91,7 +91,10 @@ export async function GET(request: Request) {
     );
   }
   if (platform === "android") {
-    return NextResponse.redirect(`${RELEASES_PAGE_URL}/latest`, 302);
+    return NextResponse.redirect(
+      `https://github.com/idedigitalbr/gestor-ide/releases/download/${FALLBACK_VERSION}/ide-gestor-${FALLBACK_VERSION}.apk`,
+      302
+    );
   }
 
   return NextResponse.redirect(

@@ -70,16 +70,16 @@ const DEFAULT_PLATFORMS: Record<SupportedOS, PlatformInfo> = {
   },
   android: {
     os: "android",
-    name: "ide-gestor.apk",
-    downloadUrl: "https://github.com/idedigitalbr/gestor-ide/releases/latest",
+    name: "ide-gestor-v0.1.7.apk",
+    downloadUrl: "https://github.com/idedigitalbr/gestor-ide/releases/download/v0.1.7/ide-gestor-v0.1.7.apk",
     version: "v0.1.7",
-    available: false,
-    label: "Versão Android (Em Breve)",
-    badge: "Em Compilação",
-    sublabel: "Build em andamento no GitHub",
+    available: true,
+    label: "Baixar para Android (.apk)",
+    badge: "Android 8.0+ Mobile",
+    sublabel: "Instalador Direto APK Oficial",
     highlight: "Acesso Móvel",
     speechText:
-      "Olha aqui do lado! Em breve você poderá baixar o nosso app oficial para Android e gerenciar tarefas na palma da mão com alta performance... 📱",
+      "Olha aqui do lado! Baixa o nosso app oficial para Android e gerencie suas tarefas na palma da mão com alta performance... 📱",
   },
 };
 

@@ -187,13 +187,13 @@ export async function GET(request: Request) {
     },
     android: {
       os: "android",
-      name: "ide-gestor.apk",
-      downloadUrl: `${RELEASES_PAGE_URL}/latest`,
+      name: `ide-gestor-${FALLBACK_VERSION}.apk`,
+      downloadUrl: `https://github.com/idedigitalbr/gestor-ide/releases/download/${FALLBACK_VERSION}/ide-gestor-${FALLBACK_VERSION}.apk`,
       version: FALLBACK_VERSION,
-      available: false,
-      label: "Versão Android (Em Breve)",
-      badge: "Em Compilação",
-      sublabel: "Build em andamento no GitHub",
+      available: true,
+      label: "Baixar para Android (.apk)",
+      badge: "Android 8.0+ Mobile",
+      sublabel: "Instalador Direto APK Oficial",
     },
   };
 
