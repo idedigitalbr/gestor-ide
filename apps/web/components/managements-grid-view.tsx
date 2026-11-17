@@ -15,7 +15,6 @@ import {
   ChevronDown,
   X,
   RotateCcw,
-  CircleDot,
   Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

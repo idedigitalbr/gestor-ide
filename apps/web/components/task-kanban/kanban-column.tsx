@@ -221,9 +221,10 @@ export function KanbanColumn({
   }
 
   // Fechar skeleton se começar drag
+  const closeDwell = dwell.close;
   useEffect(() => {
-    if (isDragging) dwell.close();
-  }, [isDragging, dwell.close]);
+    if (isDragging) closeDwell();
+  }, [isDragging, closeDwell]);
 
   // ─── Collapsed Rail ───────────────────────────────────────────────────────
   if (isCollapsed) {

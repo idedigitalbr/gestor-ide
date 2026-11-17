@@ -21,7 +21,6 @@ import {
   Layers,
   LayoutGrid,
   List,
-  RotateCcw,
   Check,
   X,
   ChevronDown,
@@ -38,7 +37,6 @@ import {
 } from "@/components/members-dialog";
 import {
   stripProjectPrefix,
-  PROJECT_STATUS_LABELS,
   type ListDisplayMode,
 } from "@/lib/list-view-options";
 import {
@@ -347,53 +345,6 @@ export function ManagementProjectsView({
     }
     return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   }, [cardColumns]);
-
-  // Agrupamento de projetos
-  const groupedSections = useMemo(() => {
-    if (groupBy === "none") return null;
-
-    if (groupBy === "status") {
-      const order = ["active", "in_progress", "planning", "paused", "completed"];
-      const labels: Record<string, string> = {
-        active: "Ativo",
-        in_progress: "Em andamento",
-        planning: "Planejamento",
-        paused: "Pausado",
-        completed: "Concluído",
-      };
-      const groups: { key: string; label: string; items: CrmProject[] }[] = [];
-      for (const st of order) {
-        const items = sortedProjects.filter((p) => {
-          const s = (p.status || "active").toLowerCase();
-          return s === st;
-        });
-        if (items.length > 0) {
-          groups.push({ key: st, label: labels[st] || st, items });
-        }
-      }
-      return groups;
-    }
-
-    if (groupBy === "priority") {
-      const order = ["urgent", "high", "medium", "low"];
-      const labels: Record<string, string> = {
-        urgent: "Urgente",
-        high: "Alta",
-        medium: "Média",
-        low: "Baixa",
-      };
-      const groups: { key: string; label: string; items: CrmProject[] }[] = [];
-      for (const pr of order) {
-        const items = sortedProjects.filter((p) => (p.priority || "medium").toLowerCase() === pr);
-        if (items.length > 0) {
-          groups.push({ key: pr, label: labels[pr] || pr, items });
-        }
-      }
-      return groups;
-    }
-
-    return null;
-  }, [sortedProjects, groupBy]);
 
   // Resolução unificada de integrantes com mutações locais
   const resolvedMembers = useMemo<TeamMemberItem[]>(() => {

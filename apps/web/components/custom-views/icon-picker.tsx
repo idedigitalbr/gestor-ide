@@ -128,7 +128,7 @@ export function IconPicker({ value, onChange, className }: IconPickerProps) {
               )}
               title={`${meta.label} (${name})`}
               aria-label={meta.label}
-              aria-selected={isSelected}
+              aria-pressed={isSelected}
             >
               <IconComp className="size-4" />
             </button>

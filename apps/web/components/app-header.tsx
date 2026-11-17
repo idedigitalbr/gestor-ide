@@ -35,7 +35,6 @@ import {
   Settings,
   SlidersHorizontal,
   UserRound,
-  Users,
   X,
 } from "lucide-react";
 import {
@@ -74,12 +73,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
-import { PROJECT_STATUS_LABELS, type ListDisplayMode } from "@/lib/list-view-options";
+import { type ListDisplayMode } from "@/lib/list-view-options";
 import { GROUP_OPTIONS, getGroupByLabel } from "./task-table/task-grouping-menu";
 import { TaskFilterMenu } from "./task-table/task-filter-menu";
 import { HeaderWorkspaceSelector } from "./header-workspace-selector";
@@ -267,8 +263,6 @@ export function AppHeader({
   onListSearchChange,
   listDisplayMode,
   onListDisplayModeChange,
-  listFilter,
-  onListFilterChange,
   onOpenNewProject,
   onOpenNewManagement,
   groupBy = "none",
@@ -283,8 +277,6 @@ export function AppHeader({
   visibleColumnsCount = 5,
   onLogout,
   canWrite = true,
-  projectMembersCount = 0,
-  onOpenProjectMembers,
   cardColumns = 4,
   onCardColumnsChange,
   managementSort = "none",

@@ -2,17 +2,14 @@ import { describe, expect, it } from "bun:test";
 import {
   filterManagements,
   sortManagements,
-  filterProjects,
   sortProjects,
-  sortTasks,
   extractManagementTags,
-  extractProjectTags,
   countActiveManagementFilters,
   countActiveProjectFilters,
   DEFAULT_MANAGEMENT_FILTERS,
   DEFAULT_PROJECT_FILTERS,
 } from "./organization-options";
-import type { CrmProject, CrmProjectManagement, Task } from "@gestor-ide/core";
+import type { CrmProject, CrmProjectManagement } from "@gestor-ide/core";
 
 describe("organization-options", () => {
   const sampleManagements: CrmProjectManagement[] = [

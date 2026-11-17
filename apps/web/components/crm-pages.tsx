@@ -118,7 +118,7 @@ function Feedback({ message }: { message: string }) {
   );
 }
 
-function ExtraSettings({
+export function ExtraSettings({
   settings,
   change,
 }: {

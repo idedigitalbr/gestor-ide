@@ -3,12 +3,9 @@
 import React, { useMemo, useState } from "react";
 import {
   Clock,
-  CircleDot,
   Calendar,
   Users,
-  Shield,
   Pencil,
-  Check,
   ChevronDown,
   ChevronUp,
   MoreHorizontal,
@@ -43,8 +40,6 @@ import { Input } from "@/components/ui/input";
 import { MemberAvatarGroup } from "@/components/member-avatar-group";
 import type { TeamMemberItem } from "@/components/members-dialog";
 import {
-  MANAGEMENT_VISIBILITY_LABELS,
-  PROJECT_STATUS_LABELS,
   stripManagementPrefix,
   stripProjectPrefix,
 } from "@/lib/list-view-options";
@@ -150,7 +145,7 @@ function formatFriendlyDate(dateString?: string | null): string {
   }
 }
 
-const DEFAULT_PROJECT_STATUS_OPTIONS: HeaderOptionItem[] = [
+export const DEFAULT_PROJECT_STATUS_OPTIONS: HeaderOptionItem[] = [
   { value: "active", label: "Ativo" },
   { value: "in_progress", label: "Fazendo agora" },
   { value: "paused", label: "Pausado" },
@@ -158,7 +153,7 @@ const DEFAULT_PROJECT_STATUS_OPTIONS: HeaderOptionItem[] = [
   { value: "planning", label: "Planejamento" },
 ];
 
-const DEFAULT_MANAGEMENT_STATUS_OPTIONS: HeaderOptionItem[] = [
+export const DEFAULT_MANAGEMENT_STATUS_OPTIONS: HeaderOptionItem[] = [
   { value: "active", label: "Ativa" },
   { value: "in_progress", label: "Fazendo agora" },
   { value: "paused", label: "Pausada" },
@@ -166,7 +161,7 @@ const DEFAULT_MANAGEMENT_STATUS_OPTIONS: HeaderOptionItem[] = [
   { value: "archived", label: "Arquivada" },
 ];
 
-const DEFAULT_VISIBILITY_OPTIONS: HeaderOptionItem[] = [
+export const DEFAULT_VISIBILITY_OPTIONS: HeaderOptionItem[] = [
   { value: "team", label: "Equipe" },
   { value: "company", label: "Empresa" },
   { value: "unit", label: "Unidade" },
@@ -182,8 +177,6 @@ export function EntityHeader({
   color,
   createdAt,
   dueDate,
-  status,
-  visibility,
   parentBadge,
   onBack,
   backLabel,
@@ -192,8 +185,6 @@ export function EntityHeader({
   memberCount,
   onOpenMembers,
   canWrite = true,
-  statusOptions,
-  visibilityOptions,
   onUpdate,
   onRefresh,
   bottomBar,
@@ -287,43 +278,6 @@ export function EntityHeader({
     return formatFriendlyDate(dueDate);
   }, [dueDate]);
 
-  // Opções de Status
-  const effectiveStatusOptions = useMemo(() => {
-    if (statusOptions && statusOptions.length > 0) return statusOptions;
-    return type === "project"
-      ? DEFAULT_PROJECT_STATUS_OPTIONS
-      : DEFAULT_MANAGEMENT_STATUS_OPTIONS;
-  }, [statusOptions, type]);
-
-  // Label do status atual
-  const currentStatusLabel = useMemo(() => {
-    const raw = (status || "active").toLowerCase();
-    const found = effectiveStatusOptions.find(
-      (s) => s.value.toLowerCase() === raw || s.label.toLowerCase() === raw
-    );
-    if (found) return found.label;
-    if (PROJECT_STATUS_LABELS[raw]) return PROJECT_STATUS_LABELS[raw];
-    if (raw === "concluida" || raw === "concluído") return type === "management" ? "Concluída" : "Concluído";
-    if (raw === "fazendo") return "Fazendo agora";
-    if (raw === "ativa" || raw === "ativo") return type === "management" ? "Ativa" : "Ativo";
-    return status || (type === "management" ? "Ativa" : "Ativo");
-  }, [status, effectiveStatusOptions, type]);
-
-  // Opções de Visibilidade
-  const effectiveVisibilityOptions = useMemo(() => {
-    if (visibilityOptions && visibilityOptions.length > 0) return visibilityOptions;
-    return DEFAULT_VISIBILITY_OPTIONS;
-  }, [visibilityOptions]);
-
-  // Label da visibilidade atual
-  const currentVisibilityLabel = useMemo(() => {
-    const raw = (visibility || (type === "management" ? "company" : "team")).toLowerCase();
-    const found = effectiveVisibilityOptions.find((v) => v.value.toLowerCase() === raw);
-    if (found) return found.label;
-    if (MANAGEMENT_VISIBILITY_LABELS[raw]) return MANAGEMENT_VISIBILITY_LABELS[raw];
-    return type === "management" ? "Empresa" : "Equipe";
-  }, [visibility, effectiveVisibilityOptions, type]);
-
   async function handleSave() {
     setIsSaving(true);
     try {
@@ -338,24 +292,6 @@ export function EntityHeader({
       console.error(`Erro ao salvar dados do ${type}:`, err);
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function handleSelectStatus(statusValue: string) {
-    try {
-      await onUpdate?.({ status: statusValue });
-      onRefresh?.();
-    } catch (err) {
-      console.error(`Erro ao alterar status do ${type}:`, err);
-    }
-  }
-
-  async function handleSelectVisibility(visValue: string) {
-    try {
-      await onUpdate?.({ visibility: visValue });
-      onRefresh?.();
-    } catch (err) {
-      console.error(`Erro ao alterar visibilidade do ${type}:`, err);
     }
   }
 

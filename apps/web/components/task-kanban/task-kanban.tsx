@@ -4,12 +4,11 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import type { CrmProjectMember } from "@gestor-ide/core";
 import type { Task, TaskStatus, CanonicalTaskStatus } from "@/types/task";
 import { normalizeTaskStatus } from "@/types/task";
-import { ALL_CANONICAL_STATUSES, STATUS_DEFINITIONS } from "../task-status-icon";
+import { ALL_CANONICAL_STATUSES } from "../task-status-icon";
 import { KanbanColumn } from "./kanban-column";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Eye, Plus, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { KanbanGhostCard } from "@/components/kanban-ghost-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -220,7 +219,7 @@ export function TaskKanban({
   const [isDragging, setIsDragging] = useState(false);
 
   // Colunas customizadas criadas no Kanban (apenas locais, por enquanto)
-  const [customColumns, setCustomColumns] = useState<Array<{ name: string; insertAfterIndex: number }>>([]);
+  const [, setCustomColumns] = useState<Array<{ name: string; insertAfterIndex: number }>>([]);
 
   const colSep = useColumnSeparatorDwell(2000, 180);
 

@@ -28,7 +28,6 @@ import {
   Clock,
   Download,
   Sparkles,
-  Layers,
   CheckCircle2,
   Plus,
   Folder,
@@ -152,10 +151,7 @@ export function ProjectViewToolbar({
     onViewModeChange(mode);
   }
 
-  function handlePredefinedClick(
-    v?: CustomProjectView,
-    fallbackName = "Arquivos & Documentos"
-  ) {
+  function handlePredefinedClick(v?: CustomProjectView) {
     if (!v || !v.url) {
       if (v && onEditCustomView) {
         onEditCustomView(v);
