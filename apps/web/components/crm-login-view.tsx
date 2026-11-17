@@ -105,7 +105,7 @@ export function CrmLoginView({
   }
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 text-foreground sm:p-8">
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-x-hidden bg-background p-4 text-foreground sm:p-8">
       {/* Barra de utilitários no topo direito */}
       <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-8 sm:top-8">
         <ThemeSelector position="top-right" />
