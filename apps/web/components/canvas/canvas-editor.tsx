@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useId } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   ReactFlow,
   MiniMap,
@@ -17,6 +17,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { CANVAS_NODE_TYPES } from "./nodes";
+import { FunnelEdge } from "./custom-edge";
 import type { CanvasNodeType } from "@gestor-ide/core";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ interface CanvasEditorProps {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
+  onReconnect?: (oldEdge: Edge, newConnection: Connection) => void;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   onSelectNode: (node: Node | null) => void;
@@ -40,12 +42,19 @@ interface CanvasEditorProps {
   screenToFlowPosition: (pos: { x: number; y: number }) => { x: number; y: number };
 }
 
+const EDGE_TYPES = {
+  default: FunnelEdge,
+  bezier: FunnelEdge,
+  funnel: FunnelEdge,
+};
+
 export function CanvasEditor({
   nodes,
   edges,
   onNodesChange,
   onEdgesChange,
   onConnect,
+  onReconnect,
   selectedNodeId,
   selectedEdgeId,
   onSelectNode,
@@ -56,20 +65,23 @@ export function CanvasEditor({
   screenToFlowPosition,
 }: CanvasEditorProps) {
   // Configuração padrão de arestas (Bézier suave e seta indicadora)
-  const defaultEdgeOptions = {
-    type: "default",
-    animated: false,
-    style: {
-      strokeWidth: 2,
-      stroke: "var(--border-hover, #64748b)",
-    },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      width: 16,
-      height: 16,
-      color: "var(--border-hover, #64748b)",
-    },
-  };
+  const defaultEdgeOptions = useMemo(
+    () => ({
+      type: "default",
+      animated: false,
+      style: {
+        strokeWidth: 2,
+        stroke: "var(--border-hover, #64748b)",
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 14,
+        height: 14,
+        color: "var(--border-hover, #64748b)",
+      },
+    }),
+    []
+  );
 
   // Drag over para aceitar elementos da biblioteca
   const handleDragOver = useCallback((event: React.DragEvent) => {
@@ -154,9 +166,12 @@ export function CanvasEditor({
         nodes={formattedNodes}
         edges={formattedEdges}
         nodeTypes={CANVAS_NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={canEdit ? onConnect : undefined}
+        onReconnect={canEdit ? onReconnect : undefined}
+        edgesReconnectable={canEdit}
         onNodeClick={handleNodeClick}
         onEdgeClick={handleEdgeClick}
         onPaneClick={handlePaneClick}
@@ -187,17 +202,29 @@ export function CanvasEditor({
           <MiniMap
             zoomable
             pannable
-            nodeStrokeWidth={3}
-            className="!bottom-4 !right-4 !border !border-border !bg-card !shadow-lg !rounded-lg overflow-hidden"
-            nodeColor={(n) => {
-              if (n.type === "task") return "var(--primary, #0f172a)";
-              if (n.type === "page") return "var(--chart-3, #10b981)";
-              if (n.type === "source") return "var(--chart-5, #8b5cf6)";
-              if (n.type === "action") return "var(--chart-4, #f59e0b)";
-              if (n.type === "note") return "#eab308";
-              return "var(--muted-foreground, #94a3b8)";
+            nodeStrokeWidth={2}
+            nodeBorderRadius={4}
+            position="bottom-right"
+            style={{
+              width: 190,
+              height: 110,
+              backgroundColor: "hsl(var(--card) / 0.95)",
             }}
-            maskColor="rgba(0, 0, 0, 0.15)"
+            className="!bottom-4 !right-4 !m-0 !rounded-xl !border !border-border !shadow-2xl !backdrop-blur-md overflow-hidden z-10"
+            nodeColor={(n) => {
+              if (n.type === "task") return "#3b82f6";
+              if (n.type === "page") return "#10b981";
+              if (n.type === "source") return "#8b5cf6";
+              if (n.type === "action") return "#f59e0b";
+              if (n.type === "email") return "#06b6d4";
+              if (n.type === "decision") return "#a855f7";
+              if (n.type === "note") return "#eab308";
+              if (n.type === "database") return "#6366f1";
+              return "#94a3b8";
+            }}
+            maskColor="rgba(15, 23, 42, 0.45)"
+            maskStrokeColor="hsl(var(--primary))"
+            maskStrokeWidth={1.5}
           />
         )}
       </ReactFlow>

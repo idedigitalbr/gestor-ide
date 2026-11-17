@@ -13,14 +13,24 @@ import {
   Database,
   StickyNote,
   CheckSquare,
-  LayoutGrid,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   X,
   Layers,
+  Plus,
+  GripVertical,
+  Calendar,
+  AlertCircle,
+  DollarSign,
+  UserCheck,
+  Video,
+  MessageCircle,
 } from "lucide-react";
 import type { Task } from "@/types/task";
 import type { CanvasNodeType } from "@gestor-ide/core";
+import { normalizeTaskStatus } from "@gestor-ide/core";
+import { TaskSolidStatusBadge } from "@/components/task-table/task-solid-status-badge";
 import { cn } from "@/lib/utils";
 
 export interface LibraryItem {
@@ -30,6 +40,7 @@ export interface LibraryItem {
   subtitle?: string;
   data: Record<string, unknown>;
   icon: React.ComponentType<{ className?: string }>;
+  accentColor?: string;
 }
 
 export interface LibraryCategory {
@@ -39,261 +50,212 @@ export interface LibraryCategory {
   items: LibraryItem[];
 }
 
-const CATEGORIES: LibraryCategory[] = [
+const FUNNEL_CATEGORIES: LibraryCategory[] = [
   {
     id: "pages",
-    title: "Telas e Páginas",
+    title: "Telas & Páginas (Wireframes)",
     icon: Globe,
     items: [
       {
         id: "page-landing",
         type: "page",
         title: "Landing Page",
-        subtitle: "Página de captura ou vendas",
-        data: { title: "Landing Page", url: "https://exemplo.com/landing" },
+        subtitle: "Wireframe de vendas e captura",
+        data: { title: "Landing Page", pageType: "landing", visitors: "12.4K visitantes" },
         icon: Globe,
+        accentColor: "text-emerald-500",
       },
       {
         id: "page-checkout",
         type: "page",
         title: "Página de Checkout",
-        subtitle: "Etapa de pagamento e conversão",
-        data: { title: "Checkout", url: "https://exemplo.com/checkout" },
+        subtitle: "Wireframe com cartão e compra",
+        data: { title: "Checkout Seguro", pageType: "checkout", visitors: "4.7K visitas" },
         icon: Globe,
+        accentColor: "text-blue-500",
       },
       {
         id: "page-confirm",
         type: "page",
-        title: "Página de Confirmação",
-        subtitle: "Obrigado ou boas-vindas",
-        data: { title: "Confirmação de Compra" },
+        title: "Confirmação / Obrigado",
+        subtitle: "Wireframe de pedido aprovado",
+        data: { title: "Página de Confirmação", pageType: "thankyou", visitors: "1.1K convertidos" },
         icon: Globe,
+        accentColor: "text-emerald-500",
       },
       {
-        id: "page-blank",
+        id: "page-optin",
         type: "page",
-        title: "Página em Branco",
-        subtitle: "Customizável com screenshot",
-        data: { title: "Nova Página" },
+        title: "Página de Captura (Lead)",
+        subtitle: "Wireframe com e-book e formulário",
+        data: { title: "Captura de Leads", pageType: "optin", visitors: "8.5K leads" },
         icon: Globe,
+        accentColor: "text-purple-500",
+      },
+      {
+        id: "page-vsl",
+        type: "page",
+        title: "Vídeo de Vendas (VSL)",
+        subtitle: "Wireframe com player de vídeo",
+        data: { title: "Vídeo de Vendas (VSL)", pageType: "vsl", visitors: "6.2K visualizações" },
+        icon: Video,
+        accentColor: "text-red-500",
       },
     ],
   },
   {
     id: "sources",
-    title: "Fontes de Tráfego",
+    title: "Fontes de Tráfego (Funnelytics)",
     icon: Share2,
     items: [
+      {
+        id: "src-meta",
+        type: "source",
+        title: "Meta / Facebook Ads",
+        subtitle: "Tráfego pago no feed e stories",
+        data: { title: "Meta Ads", iconKey: "facebook", volume: "8.2K cliques" },
+        icon: Share2,
+        accentColor: "text-[#1877F2]",
+      },
       {
         id: "src-instagram",
         type: "source",
         title: "Instagram Ads",
-        subtitle: "Redes sociais e Stories",
-        data: { title: "Instagram Ads", iconKey: "instagram", category: "Social" },
+        subtitle: "Reels e carrosséis patrocinados",
+        data: { title: "Instagram Ads", iconKey: "instagram", volume: "10.5K cliques" },
         icon: Share2,
-      },
-      {
-        id: "src-facebook",
-        type: "source",
-        title: "Facebook Ads",
-        subtitle: "Campanha de feed/tráfego",
-        data: { title: "Facebook Ads", iconKey: "facebook", category: "Social" },
-        icon: Share2,
+        accentColor: "text-[#E1306C]",
       },
       {
         id: "src-google",
         type: "source",
-        title: "Google Search",
-        subtitle: "Busca paga ou orgânica",
-        data: { title: "Google Search", iconKey: "google", category: "Busca" },
+        title: "Google Ads / Busca",
+        subtitle: "Rede de pesquisa e performance max",
+        data: { title: "Google Ads", iconKey: "google", volume: "6.5K cliques" },
         icon: Search,
-      },
-      {
-        id: "src-youtube",
-        type: "source",
-        title: "YouTube Video",
-        subtitle: "Canal ou anúncios em vídeo",
-        data: { title: "YouTube", iconKey: "youtube", category: "Vídeo" },
-        icon: Share2,
+        accentColor: "text-blue-500",
       },
       {
         id: "src-email",
         type: "source",
-        title: "E-mail de Entrada",
-        subtitle: "Base própria ou newsletter",
-        data: { title: "E-mail / Base", iconKey: "email", category: "Direto" },
+        title: "E-mail Marketing",
+        subtitle: "Disparos e automações de nutrição",
+        data: { title: "E-mail Marketing", iconKey: "email", volume: "3.6K cliques" },
         icon: Mail,
+        accentColor: "text-cyan-500",
       },
       {
-        id: "src-direct",
+        id: "src-youtube",
         type: "source",
-        title: "Tráfego Direto",
-        subtitle: "Acesso por link ou indicação",
-        data: { title: "Acesso Direto", iconKey: "direct", category: "Direto" },
+        title: "YouTube Ads",
+        subtitle: "Vídeos e anúncios in-stream",
+        data: { title: "YouTube Ads", iconKey: "youtube", volume: "4.1K visualizações" },
+        icon: Video,
+        accentColor: "text-red-500",
+      },
+      {
+        id: "src-whatsapp",
+        type: "source",
+        title: "WhatsApp / Direct",
+        subtitle: "Grupos e atendimento direto",
+        data: { title: "WhatsApp Direct", iconKey: "whatsapp", volume: "2.8K mensagens" },
+        icon: MessageCircle,
+        accentColor: "text-emerald-500",
+      },
+      {
+        id: "src-organic",
+        type: "source",
+        title: "Orgânico / SEO",
+        subtitle: "Busca orgânica e tráfego direto",
+        data: { title: "Busca Orgânica", iconKey: "organic", volume: "5.4K acessos" },
         icon: Globe,
+        accentColor: "text-emerald-600",
       },
     ],
   },
   {
     id: "actions",
-    title: "Ações e Conversões",
+    title: "Ações, Metas & Decisões",
     icon: Zap,
     items: [
       {
-        id: "act-click",
-        type: "action",
-        title: "Clique no Botão",
-        subtitle: "CTA de avanço",
-        data: { title: "Clique no Botão CTA", actionType: "click" },
-        icon: Zap,
-      },
-      {
-        id: "act-signup",
-        type: "action",
-        title: "Preencheu Formulário",
-        subtitle: "Captura de lead ou dados",
-        data: { title: "Lead Cadastrado", actionType: "signup" },
-        icon: Zap,
-      },
-      {
         id: "act-buy",
         type: "action",
-        title: "Compra Concluída",
-        subtitle: "Conversão de pagamento",
-        data: { title: "Compra Concluída", actionType: "buy" },
-        icon: Zap,
+        title: "Compra / Receita",
+        subtitle: "Meta de conversão com receita",
+        data: { title: "Compra Concluída", actionType: "buy", revenue: "$186K receita" },
+        icon: DollarSign,
+        accentColor: "text-emerald-500",
       },
       {
-        id: "act-download",
-        type: "action",
-        title: "Download Realizado",
-        subtitle: "Material ou anexo",
-        data: { title: "Download de Arquivo", actionType: "download" },
-        icon: Zap,
-      },
-    ],
-  },
-  {
-    id: "emails",
-    title: "E-mails & Mensagens",
-    icon: Mail,
-    items: [
-      {
-        id: "email-welcome",
-        type: "email",
-        title: "E-mail de Boas-vindas",
-        subtitle: "Disparo inicial da sequência",
-        data: { title: "E-mail de Boas-vindas", sequenceStep: 1 },
-        icon: Mail,
-      },
-      {
-        id: "email-nurture",
-        type: "email",
-        title: "E-mail de Nutrição",
-        subtitle: "Apresentação de conteúdo",
-        data: { title: "E-mail de Nutrição #2", sequenceStep: 2 },
-        icon: Mail,
-      },
-      {
-        id: "email-cart",
-        type: "email",
-        title: "Carrinho Abandonado",
-        subtitle: "Recuperação de venda",
-        data: { title: "Recuperar Carrinho", sequenceStep: 1 },
-        icon: Mail,
-      },
-    ],
-  },
-  {
-    id: "decisions",
-    title: "Decisões e Ramificações",
-    icon: HelpCircle,
-    items: [
-      {
-        id: "dec-general",
+        id: "dec-form",
         type: "decision",
-        title: "Decisão Sim / Não",
-        subtitle: "Ramificação condicional",
-        data: { title: "Condição satisfeita?" },
+        title: "Decisão? (Sim / Não)",
+        subtitle: "Bifurcação de comportamento",
+        data: { title: "Preencheu formulário?", yesLabel: "Sim", noLabel: "Não" },
         icon: HelpCircle,
-      },
-    ],
-  },
-  {
-    id: "process",
-    title: "Processos e Fluxos",
-    icon: Cog,
-    items: [
-      {
-        id: "proc-step",
-        type: "process",
-        title: "Etapa de Processo",
-        subtitle: "Bloco operacional",
-        data: { title: "Executar Etapa", description: "Processamento interno" },
-        icon: Cog,
+        accentColor: "text-purple-500",
       },
       {
-        id: "start-pill",
-        type: "startEnd",
-        title: "Ponto de Início",
-        subtitle: "Início do fluxo",
-        data: { title: "Início", kind: "start" },
-        icon: Play,
+        id: "act-form",
+        type: "action",
+        title: "Envio de Formulário",
+        subtitle: "Cadastro ou aplicação concluída",
+        data: { title: "Formulário Enviado", actionType: "signup", metric: "2.4K leads" },
+        icon: UserCheck,
+        accentColor: "text-amber-500",
       },
       {
-        id: "end-pill",
-        type: "startEnd",
-        title: "Ponto de Fim",
-        subtitle: "Conclusão do fluxo",
-        data: { title: "Fim", kind: "end" },
-        icon: Play,
-      },
-      {
-        id: "db-system",
-        type: "database",
-        title: "Banco de Dados / CRM",
-        subtitle: "Persistência e dados",
-        data: { title: "MySQL / CRM", systemName: "Armazenamento" },
-        icon: Database,
-      },
-      {
-        id: "group-swimlane",
-        type: "group",
-        title: "Raia / Agrupador",
-        subtitle: "Área de responsabilidade",
-        data: { label: "Nova Raia / Área" },
-        icon: Layers,
+        id: "email-node-step",
+        type: "email",
+        title: "Disparo de E-mail",
+        subtitle: "Sequência automática de e-mails",
+        data: { title: "E-mail de Boas-vindas", subject: "Seu acesso foi liberado!", sequenceStep: 1 },
+        icon: Mail,
+        accentColor: "text-sky-500",
       },
     ],
   },
   {
     id: "notes",
-    title: "Notas e Post-its",
+    title: "Anotações & Estrutura",
     icon: StickyNote,
     items: [
       {
         id: "note-yellow",
         type: "note",
         title: "Post-it Amarelo",
-        subtitle: "Anotação rápida",
+        subtitle: "Anotação rápida de estratégia",
         data: { text: "Nota importante...", color: "amber" },
         icon: StickyNote,
+        accentColor: "text-amber-500",
       },
       {
         id: "note-blue",
         type: "note",
-        title: "Nota Azul",
-        subtitle: "Instrução técnica",
-        data: { text: "Especificação técnica...", color: "blue" },
+        title: "Post-it Azul",
+        subtitle: "Instrução técnica ou requisito",
+        data: { text: "Instrução técnica...", color: "blue" },
         icon: StickyNote,
+        accentColor: "text-blue-500",
       },
       {
-        id: "note-green",
-        type: "note",
-        title: "Nota Verde",
-        subtitle: "Meta ou checklist",
-        data: { text: "Meta de entrega...", color: "emerald" },
-        icon: StickyNote,
+        id: "db-system",
+        type: "database",
+        title: "Banco de Dados / CRM",
+        subtitle: "Persistência e dados do usuário",
+        data: { title: "MySQL / CRM", systemName: "Armazenamento" },
+        icon: Database,
+        accentColor: "text-indigo-500",
+      },
+      {
+        id: "group-swimlane",
+        type: "group",
+        title: "Raia / Agrupador",
+        subtitle: "Área visual de responsabilidade",
+        data: { label: "Nova Raia / Área" },
+        icon: Layers,
+        accentColor: "text-slate-500",
       },
     ],
   },
@@ -315,7 +277,7 @@ export function CanvasLibrary({
   canEdit,
 }: CanvasLibraryProps) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<"catalog" | "tasks">("catalog");
+  const [activeTab, setActiveTab] = useState<"tasks" | "catalog">("tasks");
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   if (!isOpen) return null;
@@ -334,7 +296,7 @@ export function CanvasLibrary({
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const filteredCategories = CATEGORIES.map((cat) => {
+  const filteredCategories = FUNNEL_CATEGORIES.map((cat) => {
     if (!search.trim()) return cat;
     const query = search.toLowerCase();
     const items = cat.items.filter(
@@ -347,189 +309,245 @@ export function CanvasLibrary({
 
   const filteredTasks = tasks.filter((t) => {
     if (!search.trim()) return true;
-    return t.title.toLowerCase().includes(search.toLowerCase());
+    const query = search.toLowerCase();
+    return t.title.toLowerCase().includes(query) || t.id.toLowerCase().includes(query);
   });
 
   return (
-    <div className="absolute left-3 top-16 bottom-3 z-20 flex w-72 flex-col rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-2xl transition-all select-none">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 p-3.5">
+    <aside className="shrink-0 h-full w-80 border-r border-border/60 bg-card/60 flex flex-col z-10 select-none backdrop-blur-xs transition-all duration-200">
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between border-b border-border/60 px-3 py-2.5 bg-muted/20">
         <div className="flex items-center gap-2">
-          <LayoutGrid className="size-4 text-primary" />
-          <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-            Biblioteca de Elementos
+          <Layers className="size-4 text-primary" />
+          <h3 className="text-xs font-bold text-foreground tracking-wider uppercase">
+            Elementos & Tarefas
           </h3>
         </div>
         <button
           type="button"
           onClick={onClose}
           className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          title="Fechar biblioteca"
+          title="Recolher painel lateral"
         >
-          <X className="size-4" />
+          <ChevronLeft className="size-4" />
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-border/60 p-1 bg-muted/20">
-        <button
-          type="button"
-          onClick={() => setActiveTab("catalog")}
-          className={cn(
-            "flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors",
-            activeTab === "catalog"
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Elementos
-        </button>
+      {/* Tabs Switcher: Tarefas CRM vs Elementos Funnelytics */}
+      <div className="flex border-b border-border/60 p-1.5 bg-muted/10 gap-1">
         <button
           type="button"
           onClick={() => setActiveTab("tasks")}
           className={cn(
-            "flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5",
+            "flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all",
             activeTab === "tasks"
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-primary text-primary-foreground shadow-xs"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           )}
         >
+          <CheckSquare className="size-3.5" />
           <span>Tarefas CRM</span>
-          <span className="rounded-full bg-primary/10 px-1.5 py-0.2 text-[10px] text-primary font-bold">
+          <span
+            className={cn(
+              "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
+              activeTab === "tasks"
+                ? "bg-primary-foreground/20 text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            )}
+          >
             {tasks.length}
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("catalog")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-semibold transition-all",
+            activeTab === "catalog"
+              ? "bg-primary text-primary-foreground shadow-xs"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          )}
+        >
+          <Globe className="size-3.5" />
+          <span>Funnelytics</span>
         </button>
       </div>
 
       {/* Search Input */}
-      <div className="p-2.5 border-b border-border/60">
+      <div className="p-2 border-b border-border/60">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/70" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={
-              activeTab === "catalog"
-                ? "Buscar blocos, páginas..."
-                : "Buscar tarefas do projeto..."
-            }
-            className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder={activeTab === "tasks" ? "Filtrar tarefas do projeto..." : "Buscar blocos, páginas..."}
+            className="w-full rounded-lg border border-border/60 bg-background/80 py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-hidden"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Content List */}
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-3 custom-scrollbar">
-        {activeTab === "catalog" ? (
-          filteredCategories.length === 0 ? (
-            <div className="py-8 text-center text-xs text-muted-foreground">
-              Nenhum bloco encontrado
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {/* TAB 1: Tarefas CRM Estruturadas (Gantt Tree Style) */}
+        {activeTab === "tasks" && (
+          <div className="space-y-1.5">
+            <div className="px-1 text-[11px] text-muted-foreground flex items-center justify-between">
+              <span>Arraste uma tarefa para o quadro:</span>
+              <span className="font-mono">{filteredTasks.length} itens</span>
             </div>
-          ) : (
-            filteredCategories.map((cat) => {
-              const isCollapsed = collapsedCategories[cat.id];
+
+            {filteredTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center text-xs text-muted-foreground">
+                <AlertCircle className="size-6 text-muted-foreground/40 mb-1.5" />
+                <span>Nenhuma tarefa encontrada.</span>
+              </div>
+            ) : (
+              filteredTasks.map((task, idx) => {
+                const normStatus = normalizeTaskStatus(task.status);
+                const taskCode = `IDE-${String(idx + 1).padStart(2, "0")}`;
+
+                return (
+                  <div
+                    key={task.id}
+                    draggable={canEdit}
+                    onDragStart={(e) =>
+                      handleDragStart(e, "task", { taskId: task.id, title: task.title })
+                    }
+                    className="group relative flex flex-col rounded-lg border border-border/70 bg-card hover:border-primary/60 p-2.5 transition-all shadow-2xs hover:shadow-sm cursor-grab active:cursor-grabbing"
+                  >
+                    {/* Top Row: Code, Status & Add Button */}
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <GripVertical className="size-3 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[9.5px] font-mono font-bold text-muted-foreground">
+                          {taskCode}
+                        </span>
+                        <TaskSolidStatusBadge status={task.status} className="text-[10px] py-0 px-1.5 h-4" />
+                      </div>
+
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onAddItem("task", { taskId: task.id, title: task.title })}
+                          className="opacity-0 group-hover:opacity-100 flex size-5 items-center justify-center rounded bg-primary text-primary-foreground hover:scale-105 transition-all"
+                          title="Inserir no centro do quadro"
+                        >
+                          <Plus className="size-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <h4 className="text-xs font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                      {task.title}
+                    </h4>
+
+                    {/* Footer Row: Due Date */}
+                    {task.dueDate && (
+                      <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
+                        <Calendar className="size-2.5" />
+                        <span>Entrega: {task.dueDate.slice(0, 10)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: Catálogo de Elementos Funnelytics */}
+        {activeTab === "catalog" && (
+          <div className="space-y-3">
+            {filteredCategories.map((category) => {
+              const isCollapsed = Boolean(collapsedCategories[category.id]);
+              const CategoryIcon = category.icon;
+
               return (
-                <div key={cat.id} className="space-y-1">
+                <div key={category.id} className="space-y-1">
+                  {/* Category Header */}
                   <button
                     type="button"
-                    onClick={() => toggleCategory(cat.id)}
-                    className="flex w-full items-center justify-between rounded px-1.5 py-1 text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => toggleCategory(category.id)}
+                    className="flex w-full items-center justify-between px-1.5 py-1 text-left text-xs font-bold text-foreground/80 hover:text-foreground transition-colors"
                   >
                     <div className="flex items-center gap-1.5">
-                      <cat.icon className="size-3 text-primary" />
-                      <span>{cat.title}</span>
+                      <CategoryIcon className="size-3.5 text-primary" />
+                      <span>{category.title}</span>
                     </div>
                     {isCollapsed ? (
-                      <ChevronRight className="size-3" />
+                      <ChevronRight className="size-3.5 text-muted-foreground" />
                     ) : (
-                      <ChevronDown className="size-3" />
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
                     )}
                   </button>
 
+                  {/* Items List */}
                   {!isCollapsed && (
-                    <div className="grid grid-cols-1 gap-1 pl-1">
-                      {cat.items.map((item) => (
-                        <div
-                          key={item.id}
-                          draggable={canEdit}
-                          onDragStart={(e) => handleDragStart(e, item.type, item.data)}
-                          onClick={() => canEdit && onAddItem(item.type, item.data)}
-                          className={cn(
-                            "flex items-center gap-2.5 rounded-xl border border-border/60 bg-card p-2 text-left transition-all",
-                            canEdit
-                              ? "cursor-grab active:cursor-grabbing hover:border-primary/50 hover:bg-muted/40 hover:shadow-sm"
-                              : "opacity-60 cursor-not-allowed"
-                          )}
-                          title={canEdit ? "Clique ou arraste para o canvas" : undefined}
-                        >
-                          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <item.icon className="size-3.5" />
-                          </div>
-                          <div className="flex flex-col truncate">
-                            <span className="text-xs font-semibold text-foreground truncate">
-                              {item.title}
-                            </span>
-                            {item.subtitle && (
-                              <span className="text-[10px] text-muted-foreground truncate">
-                                {item.subtitle}
-                              </span>
+                    <div className="space-y-1 pl-1">
+                      {category.items.map((item) => {
+                        const ItemIcon = item.icon;
+
+                        return (
+                          <div
+                            key={item.id}
+                            draggable={canEdit}
+                            onDragStart={(e) => handleDragStart(e, item.type, item.data)}
+                            className="group flex items-center justify-between rounded-lg border border-border/50 bg-background/60 hover:bg-card hover:border-primary/50 p-2 transition-all cursor-grab active:cursor-grabbing"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                className={cn(
+                                  "flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/60 transition-colors group-hover:bg-primary/10",
+                                  item.accentColor
+                                )}
+                              >
+                                <ItemIcon className="size-3.5" />
+                              </div>
+                              <div className="flex flex-col truncate">
+                                <span className="text-xs font-semibold text-foreground truncate">
+                                  {item.title}
+                                </span>
+                                {item.subtitle && (
+                                  <span className="text-[10px] text-muted-foreground truncate">
+                                    {item.subtitle}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => onAddItem(item.type, item.data)}
+                                className="opacity-0 group-hover:opacity-100 flex size-5 items-center justify-center rounded bg-primary text-primary-foreground hover:scale-105 transition-all"
+                                title="Inserir no quadro"
+                              >
+                                <Plus className="size-3" />
+                              </button>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               );
-            })
-          )
-        ) : (
-          /* Tasks from CRM */
-          <div className="space-y-1.5">
-            <p className="text-[11px] text-muted-foreground px-1 mb-2">
-              Arraste tarefas para o quadro para acompanhar status e prazos reais.
-            </p>
-            {filteredTasks.length === 0 ? (
-              <div className="py-8 text-center text-xs text-muted-foreground">
-                Nenhuma tarefa encontrada no projeto
-              </div>
-            ) : (
-              filteredTasks.map((t) => (
-                <div
-                  key={t.id}
-                  draggable={canEdit}
-                  onDragStart={(e) =>
-                    handleDragStart(e, "task", { taskId: t.id })
-                  }
-                  onClick={() => canEdit && onAddItem("task", { taskId: t.id })}
-                  className={cn(
-                    "flex flex-col gap-1 rounded-xl border border-border/60 bg-card p-2.5 text-left transition-all",
-                    canEdit
-                      ? "cursor-grab active:cursor-grabbing hover:border-primary/50 hover:bg-muted/40 hover:shadow-sm"
-                      : "opacity-60 cursor-not-allowed"
-                  )}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <CheckSquare className="size-3.5 text-primary shrink-0" />
-                    <span className="text-xs font-semibold text-foreground truncate">
-                      {t.title}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>{t.status}</span>
-                    {t.dueDate && <span>Prazo: {t.dueDate.slice(0, 10)}</span>}
-                  </div>
-                </div>
-              ))
-            )}
+            })}
           </div>
         )}
       </div>
-
-      <div className="border-t border-border/60 p-2 text-center text-[10px] text-muted-foreground bg-muted/10 rounded-b-2xl">
-        {canEdit ? "✦ Arraste ou clique para adicionar" : "Modo somente leitura"}
-      </div>
-    </div>
+    </aside>
   );
 }

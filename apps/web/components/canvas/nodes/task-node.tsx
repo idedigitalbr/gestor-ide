@@ -74,14 +74,16 @@ export const TaskNode = memo(({ data, selected }: NodeProps) => {
       )}
     >
       <Handle
+        id="target-left"
         type="target"
         position={Position.Left}
-        className="!size-3 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
       />
       <Handle
+        id="target-top"
         type="target"
         position={Position.Top}
-        className="!size-3 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
       />
 
       {/* Header bar */}
@@ -131,14 +133,16 @@ export const TaskNode = memo(({ data, selected }: NodeProps) => {
       </div>
 
       <Handle
+        id="source-right"
         type="source"
         position={Position.Right}
-        className="!size-3 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
       />
       <Handle
+        id="source-bottom"
         type="source"
         position={Position.Bottom}
-        className="!size-3 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-primary transition-transform group-hover:scale-125"
       />
     </div>
   );

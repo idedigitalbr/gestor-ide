@@ -23,21 +23,23 @@ export const EmailNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div
       className={cn(
-        "group relative w-56 rounded-xl border bg-card text-card-foreground shadow-sm transition-all select-none",
+        "group relative w-56 rounded-xl border bg-card text-card-foreground shadow-md transition-all select-none",
         selected
-          ? "border-sky-500 ring-2 ring-sky-500/30 shadow-md"
-          : "border-border hover:border-border/80"
+          ? "border-sky-500 ring-2 ring-sky-500/40 shadow-xl scale-[1.02]"
+          : "border-border/80 hover:border-sky-500/60"
       )}
     >
       <Handle
+        id="target-left"
         type="target"
         position={Position.Left}
-        className="!size-3 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
       />
       <Handle
+        id="target-top"
         type="target"
         position={Position.Top}
-        className="!size-3 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
       />
 
       <div className="flex items-center justify-between border-b border-border/60 bg-sky-500/10 px-3 py-1.5 rounded-t-xl text-sky-600 dark:text-sky-400">
@@ -70,14 +72,16 @@ export const EmailNode = memo(({ data, selected }: NodeProps) => {
       </div>
 
       <Handle
+        id="source-right"
         type="source"
         position={Position.Right}
-        className="!size-3 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
       />
       <Handle
+        id="source-bottom"
         type="source"
         position={Position.Bottom}
-        className="!size-3 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
+        className="!size-2.5 !border-2 !border-background !bg-sky-500 transition-transform group-hover:scale-125"
       />
     </div>
   );

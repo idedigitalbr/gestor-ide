@@ -87,9 +87,9 @@ export function CanvasInspector({
   };
 
   return (
-    <div className="absolute right-3 top-16 bottom-3 z-20 flex w-80 flex-col rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-2xl transition-all select-none">
+    <aside className="shrink-0 h-full w-80 border-l border-border/60 bg-card/60 flex flex-col z-10 select-none backdrop-blur-xs transition-all duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 p-3.5">
+      <div className="flex items-center justify-between border-b border-border/60 p-3.5 bg-muted/20">
         <div className="flex flex-col truncate">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {selectedNode ? `Elemento: ${selectedNode.type}` : "Conexão"}
@@ -144,6 +144,42 @@ export function CanvasInspector({
                     }
                     placeholder="https://exemplo.com/pagina"
                     className="h-8 text-xs bg-background font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Modelo de Wireframe (Funnelytics)
+                  </Label>
+                  <select
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.pageType as string) || "landing"}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { pageType: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-border bg-background p-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="landing">Landing Page / Vendas</option>
+                    <option value="checkout">Página de Checkout</option>
+                    <option value="thankyou">Confirmação / Obrigado</option>
+                    <option value="optin">Captura de Leads (Opt-in)</option>
+                    <option value="vsl">Vídeo de Vendas (VSL)</option>
+                    <option value="generic">Página em Branco</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Métrica de Visitas / Volume
+                  </Label>
+                  <Input
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.visitors as string) || ""}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { visitors: e.target.value })
+                    }
+                    placeholder="Ex: 12.4K visitantes"
+                    className="h-8 text-xs bg-background"
                   />
                 </div>
 
@@ -234,49 +270,117 @@ export function CanvasInspector({
             )}
 
             {selectedNode.type === "source" && (
-              <div className="space-y-2">
-                <Label className="text-[11px] font-semibold text-muted-foreground">
-                  Ícone / Plataforma
-                </Label>
-                <select
-                  disabled={!canEdit}
-                  value={(selectedNode.data?.iconKey as string) || "instagram"}
-                  onChange={(e) =>
-                    onUpdateNodeData(selectedNode.id, { iconKey: e.target.value })
-                  }
-                  className="w-full rounded-lg border border-border bg-background p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="instagram">Instagram</option>
-                  <option value="facebook">Facebook</option>
-                  <option value="google">Google Search</option>
-                  <option value="youtube">YouTube</option>
-                  <option value="tiktok">TikTok</option>
-                  <option value="email">E-mail</option>
-                  <option value="ads">Anúncio / Mídia</option>
-                  <option value="direct">Acesso Direto</option>
-                </select>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Ícone / Plataforma
+                  </Label>
+                  <select
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.iconKey as string) || "instagram"}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { iconKey: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-border bg-background p-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="instagram">Instagram Ads</option>
+                    <option value="facebook">Meta / Facebook Ads</option>
+                    <option value="google">Google Search / Ads</option>
+                    <option value="youtube">YouTube Ads</option>
+                    <option value="tiktok">TikTok Ads</option>
+                    <option value="email">E-mail Marketing</option>
+                    <option value="whatsapp">WhatsApp Direct</option>
+                    <option value="organic">Orgânico / SEO</option>
+                    <option value="default">Outro Canal</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Volume / Métrica de Tráfego
+                  </Label>
+                  <Input
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.volume as string) || ""}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { volume: e.target.value })
+                    }
+                    placeholder="Ex: 8.2K cliques"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+              </div>
+            )}
+
+            {selectedNode.type === "decision" && (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Rótulo Saída 'Sim' (Direita)
+                  </Label>
+                  <Input
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.yesLabel as string) || "Sim"}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { yesLabel: e.target.value })
+                    }
+                    placeholder="Ex: Sim, Converteu, 38%..."
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Rótulo Saída 'Não' (Abaixo)
+                  </Label>
+                  <Input
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.noLabel as string) || "Não"}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { noLabel: e.target.value })
+                    }
+                    placeholder="Ex: Não, Abandonou, 62%..."
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
               </div>
             )}
 
             {selectedNode.type === "action" && (
-              <div className="space-y-2">
-                <Label className="text-[11px] font-semibold text-muted-foreground">
-                  Tipo de Ação
-                </Label>
-                <select
-                  disabled={!canEdit}
-                  value={(selectedNode.data?.actionType as string) || "click"}
-                  onChange={(e) =>
-                    onUpdateNodeData(selectedNode.id, { actionType: e.target.value })
-                  }
-                  className="w-full rounded-lg border border-border bg-background p-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                  <option value="click">Clique no Botão</option>
-                  <option value="signup">Cadastro / Formulário</option>
-                  <option value="buy">Compra Concluída</option>
-                  <option value="download">Download</option>
-                  <option value="zap">Webhook / Disparo</option>
-                </select>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Tipo de Ação
+                  </Label>
+                  <select
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.actionType as string) || "buy"}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { actionType: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-border bg-background p-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="buy">Compra / Receita (Meta Principal)</option>
+                    <option value="click">Clique no Botão</option>
+                    <option value="signup">Cadastro / Formulário</option>
+                    <option value="download">Download</option>
+                    <option value="zap">Webhook / Disparo</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">
+                    Métrica / Receita da Ação
+                  </Label>
+                  <Input
+                    disabled={!canEdit}
+                    value={(selectedNode.data?.revenue as string) || (selectedNode.data?.metric as string) || ""}
+                    onChange={(e) =>
+                      onUpdateNodeData(selectedNode.id, { revenue: e.target.value, metric: e.target.value })
+                    }
+                    placeholder="Ex: $186K receita, 4.7K vendas"
+                    className="h-8 text-xs bg-background"
+                  />
+                </div>
               </div>
             )}
 
@@ -515,6 +619,6 @@ export function CanvasInspector({
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

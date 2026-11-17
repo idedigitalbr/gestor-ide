@@ -15,6 +15,9 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Minimize2,
+  Scan,
+  PanelLeft,
   Copy,
   Pencil,
   Trash2,
@@ -69,6 +72,8 @@ interface CanvasToolbarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitView: () => void;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
   showMinimap: boolean;
   onToggleMinimap: () => void;
   onExportJson: () => void;
@@ -99,6 +104,8 @@ export function CanvasToolbar({
   onZoomIn,
   onZoomOut,
   onFitView,
+  isFullscreen,
+  onToggleFullscreen,
   showMinimap,
   onToggleMinimap,
   onExportJson,
@@ -162,8 +169,8 @@ export function CanvasToolbar({
             onClick={onToggleLibrary}
             className="h-8 gap-1.5 text-xs font-semibold shadow-sm"
           >
-            <Plus className="size-3.5" />
-            <span className="hidden sm:inline">Elementos</span>
+            <PanelLeft className="size-3.5" />
+            <span className="hidden sm:inline">Elementos & Tarefas</span>
           </Button>
 
           {/* Board Dropdown */}
@@ -357,9 +364,23 @@ export function CanvasToolbar({
               size="sm"
               onClick={onFitView}
               className="size-8 p-0"
-              title="Ajustar Visualização (Fit)"
+              title="Enquadrar Fluxo na Tela (Fit View)"
             >
-              <Maximize2 className="size-3.5" />
+              <Scan className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant={isFullscreen ? "secondary" : "ghost"}
+              size="sm"
+              onClick={onToggleFullscreen}
+              className="size-8 p-0"
+              title={isFullscreen ? "Sair da Tela Cheia (Esc)" : "Tela Cheia (Fullscreen)"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="size-3.5" />
+              ) : (
+                <Maximize2 className="size-3.5" />
+              )}
             </Button>
           </div>
 

@@ -7,6 +7,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
+  reconnectEdge,
   type Node,
   type Edge,
   type OnNodesChange,
@@ -32,6 +33,7 @@ import { CANVAS_TEMPLATES } from "./templates";
 import { useCanvasAutosave } from "./use-canvas-autosave";
 import { Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ProjectTasksCanvasProps {
   projectId: string;
@@ -119,11 +121,42 @@ function ProjectTasksCanvasContent({
   const [currentRevision, setCurrentRevision] = useState<number>(1);
 
   // Seleção e visibilidade de painéis
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(true);
   const [showMinimap, setShowMinimap] = useState<boolean>(false);
+
+  // Sincronização com evento fullscreenchange
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      if (containerRef.current?.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(() => {
+          setIsFullscreen(true);
+        });
+      } else {
+        setIsFullscreen(true);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {
+          setIsFullscreen(false);
+        });
+      } else {
+        setIsFullscreen(false);
+      }
+    }
+  }, []);
 
   // Histórico para Undo / Redo
   const undoStackRef = useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -346,6 +379,18 @@ function ProjectTasksCanvasContent({
       };
       setEdges((eds) => {
         const next = addEdge(newEdge, eds);
+        notifyDocumentChange(rawNodes, next);
+        return next;
+      });
+    },
+    [edges, notifyDocumentChange, pushHistory, rawNodes]
+  );
+
+  const handleReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      pushHistory(rawNodes, edges);
+      setEdges((eds) => {
+        const next = reconnectEdge(oldEdge, newConnection, eds);
         notifyDocumentChange(rawNodes, next);
         return next;
       });
@@ -666,7 +711,15 @@ function ProjectTasksCanvasContent({
   }
 
   return (
-    <div className="relative flex h-[82vh] w-full flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+    <div
+      ref={containerRef}
+      className={cn(
+        "flex flex-col bg-background transition-all",
+        isFullscreen
+          ? "fixed inset-0 z-50 h-screen w-screen rounded-none border-none shadow-none"
+          : "relative h-[84vh] w-full rounded-xl border border-border shadow-sm overflow-hidden"
+      )}
+    >
       {/* Barra de Ferramentas Superior */}
       <CanvasToolbar
         canvases={canvases}
@@ -693,6 +746,8 @@ function ProjectTasksCanvasContent({
         onZoomIn={() => zoomIn({ duration: 250 })}
         onZoomOut={() => zoomOut({ duration: 250 })}
         onFitView={() => fitView({ padding: 0.2, duration: 350 })}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={handleToggleFullscreen}
         showMinimap={showMinimap}
         onToggleMinimap={() => setShowMinimap((v) => !v)}
         onExportJson={handleExportJson}
@@ -721,6 +776,7 @@ function ProjectTasksCanvasContent({
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={handleConnect}
+            onReconnect={handleReconnect}
             selectedNodeId={selectedNodeId}
             selectedEdgeId={selectedEdgeId}
             onSelectNode={(node) => {
