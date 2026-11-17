@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeSelector } from "@/components/theme/theme-selector";
+import { DesktopDownloadCta } from "@/components/desktop-download-cta";
 
 interface CrmLoginViewProps {
   onSuccessConnect: () => Promise<void>;
@@ -107,7 +108,7 @@ export function CrmLoginView({
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 text-foreground sm:p-8">
       {/* Barra de utilitários no topo direito */}
       <div className="absolute right-4 top-4 flex items-center gap-2 sm:right-8 sm:top-8">
-        <ThemeSelector />
+        <ThemeSelector position="top-right" />
       </div>
 
       <div className="w-full max-w-md space-y-6">
@@ -325,6 +326,9 @@ export function CrmLoginView({
           </a>
         </div>
       </div>
+
+      {/* Botão flutuante na direita para download da versão Desktop Windows */}
+      <DesktopDownloadCta />
     </div>
   );
 }

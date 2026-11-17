@@ -333,7 +333,7 @@ export function ProjectViewToolbar({
             type="button"
             role="tab"
             aria-selected={activeCustomViewId === predefinedGdrive?.id}
-            onClick={() => handlePredefinedClick(predefinedGdrive, "Arquivos & Documentos")}
+            onClick={() => handlePredefinedClick(predefinedGdrive)}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               activeCustomViewId === predefinedGdrive?.id
@@ -396,7 +396,7 @@ export function ProjectViewToolbar({
             type="button"
             role="tab"
             aria-selected={activeCustomViewId === predefinedChatGpt?.id}
-            onClick={() => handlePredefinedClick(predefinedChatGpt, "IA")}
+            onClick={() => handlePredefinedClick(predefinedChatGpt)}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               activeCustomViewId === predefinedChatGpt?.id

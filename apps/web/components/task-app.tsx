@@ -27,7 +27,9 @@ import {
   useSaveCustomView,
   useDeleteCustomView,
   useReorderCustomViews,
-} from "@/lib/query/use-project-custom-views";
+  useManagements,
+  useProjects,
+} from "@/lib/query";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
 import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
 import {
@@ -481,7 +483,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     return true;
   });
 
-  // Dados sincronizados do IDE CRM (carregados do cache primeiro)
+  // Dados sincronizados do IDE CRM via TanStack Query + Cache Local
+  const { managements: queryManagements } = useManagements();
+  const { projects: queryProjects } = useProjects();
+
   const [managements, setManagements] = useState<CrmProjectManagement[]>(() => {
     return getCachedManagements() || [];
   });
@@ -902,8 +907,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     };
   }, [isConnectedCrm, isSecondaryPage, loadTasks]);
 
-  const effectiveManagements = managements;
-  const effectiveProjects = projects;
+  const effectiveManagements =
+    queryManagements && queryManagements.length > 0 ? queryManagements : managements;
+  const effectiveProjects =
+    queryProjects && queryProjects.length > 0 ? queryProjects : projects;
 
   useEffect(() => {
     if ((!onlyMyProjects && !onlyMyManagements) || !isConnectedCrm || !currentUser?.id) return;

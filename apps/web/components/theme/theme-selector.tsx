@@ -69,6 +69,30 @@ export function ThemeSelector({
   const dialogRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const colorTriggerRef = useRef<HTMLButtonElement>(null);
+  const [triggerCoords, setTriggerCoords] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    if (!open || !triggerRef.current || position !== "top-right") {
+      setTriggerCoords(null);
+      return;
+    }
+    const updateCoords = () => {
+      if (triggerRef.current) {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setTriggerCoords({
+          top: Math.round(rect.bottom + 8),
+          right: Math.max(12, Math.round(window.innerWidth - rect.right)),
+        });
+      }
+    };
+    updateCoords();
+    window.addEventListener("resize", updateCoords);
+    window.addEventListener("scroll", updateCoords, true);
+    return () => {
+      window.removeEventListener("resize", updateCoords);
+      window.removeEventListener("scroll", updateCoords, true);
+    };
+  }, [open, position]);
 
   // Lista de temas exibidos: busca global no modo, ou filtrado por cor, ou todos no modo Livre
   const displayed = useMemo(
@@ -145,13 +169,23 @@ export function ThemeSelector({
       ref={dialogRef}
       role="dialog"
       aria-label="Aparência"
+      style={
+        triggerCoords
+          ? {
+              top: `${triggerCoords.top}px`,
+              right: `${triggerCoords.right}px`,
+            }
+          : undefined
+      }
       className={cn(
-        "fixed z-[100] flex h-[80vh] min-h-[460px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl",
-        position === "top-right"
-          ? "top-[56px] right-[16px]"
-          : position === "center"
-            ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            : "bottom-[56px] left-[12px]"
+        "fixed z-[100] flex h-[80vh] min-h-[460px] max-h-[calc(100dvh-68px)] w-[354px] max-w-[calc(100vw_-_24px)] flex-col overflow-hidden rounded-[14px] border border-border bg-popover text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150",
+        !triggerCoords && (
+          position === "top-right"
+            ? "top-[56px] right-[16px]"
+            : position === "center"
+              ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+              : "bottom-[56px] left-[12px]"
+        )
       )}
     >
       {/* Cabeçalho do Figma: Pílula de cor à esquerda, Aparência no centro, Modo e Fechar à direita */}

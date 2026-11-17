@@ -205,3 +205,22 @@ html[data-colored-chrome="true"] .planw-app-header {
     transform: scaleX(0);
   }
 }
+
+/* Animação flutuante com pulo para o botão de download desktop */
+@keyframes float-cta {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-float-cta {
+  animation: float-cta 2.4s ease-in-out infinite;
+}
+
+.animate-float-cta:hover {
+  animation-play-state: paused;
+}
+
