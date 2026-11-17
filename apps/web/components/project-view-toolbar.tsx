@@ -96,7 +96,7 @@ const VIEW_OPTIONS: Array<{
   { id: "calendar", label: "Calendário", icon: Calendar, desktopOnly: true },
   { id: "gantt", label: "Gantt", icon: GanttChart, desktopOnly: true },
   { id: "workload", label: "Carga de Trabalho", icon: Users, desktopOnly: true },
-  { id: "canvas", label: "Canvas", icon: Workflow },
+  { id: "canvas", label: "Canvas", icon: Workflow, desktopOnly: true },
 ];
 
 export function ProjectViewToolbar({
@@ -211,23 +211,24 @@ export function ProjectViewToolbar({
   return (
     <div
       className={cn(
-        "relative flex items-center justify-between w-full select-none pt-0.5",
+        "relative flex items-center w-full select-none pt-0.5 min-h-[38px]",
         className
       )}
     >
       {/* ========================================================================= */}
-      {/* 1. LINHA HORIZONTAL ESQUERDA (Conecta a lateral esquerda às abas centrais) */}
+      {/* 1. LINHA HORIZONTAL DE FUNDO (Atravessa toda a extensão do container)    */}
       {/* ========================================================================= */}
-      <div className="flex-1 h-px bg-border/40 min-w-2 sm:min-w-4" />
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border/40 pointer-events-none" />
 
       {/* ========================================================================= */}
-      {/* 2. PÍLULA CENTRAL: Abas de Visualização (Nativas + Predefinidas + Custom + +) */}
+      {/* 2. PÍLULA CENTRAL: Sempre 100% rigorosamente centralizada no centro da tela */}
       {/* ========================================================================= */}
-      <div
-        role="tablist"
-        aria-label="Modo de visualização das tarefas"
-        className="mx-1 sm:mx-3 flex items-center rounded-xl border border-border/70 bg-card/60 p-0.5 shadow-2xs backdrop-blur-xs shrink-0 max-w-[calc(100vw-120px)] sm:max-w-[70vw] overflow-x-auto no-scrollbar scroll-smooth"
-      >
+      <div className="w-full flex justify-center items-center pointer-events-none px-2">
+        <div
+          role="tablist"
+          aria-label="Modo de visualização das tarefas"
+          className="pointer-events-auto relative z-10 flex items-center rounded-xl border border-border/70 bg-card/90 p-0.5 shadow-2xs backdrop-blur-md shrink-0 max-w-[calc(100vw-60px)] sm:max-w-[75vw] overflow-x-auto no-scrollbar scroll-smooth"
+        >
         {/* 1. Tabela */}
         <button
           type="button"
@@ -340,6 +341,32 @@ export function ProjectViewToolbar({
             )}
           />
           <span>Gantt</span>
+        </button>
+
+        {/* 4.5. Canvas */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isNativeActive("canvas")}
+          onClick={() => handleSelectNative("canvas")}
+          className={cn(
+            "group/canvas hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            isNativeActive("canvas")
+              ? "bg-muted/80 border border-border/60 text-foreground shadow-2xs font-semibold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/40 font-medium"
+          )}
+          title="Visualização em Canvas (Fluxos & Funis)"
+        >
+          <Workflow
+            className={cn(
+              "size-3.5 shrink-0 transition-colors duration-200",
+              isNativeActive("canvas")
+                ? "text-foreground"
+                : "text-muted-foreground",
+              "group-hover/canvas:text-indigo-500 dark:group-hover/canvas:text-indigo-400"
+            )}
+          />
+          <span>Canvas</span>
         </button>
 
         {/* 5. Arquivos & Documentos (Predefinida - Hover revela (GDrive)) */}
@@ -650,16 +677,12 @@ export function ProjectViewToolbar({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+    </div>
 
       {/* ========================================================================= */}
-      {/* 3. LINHA HORIZONTAL DIREITA (Conecta as abas centrais aos botões da direita) */}
+      {/* 3. LADO DIREITO: Busca Expansível + Pílula com os Botões de Ação          */}
       {/* ========================================================================= */}
-      <div className="flex-1 h-px bg-border/40 min-w-4" />
-
-      {/* ========================================================================= */}
-      {/* 4. LADO DIREITO: Busca Expansível + Pílula com os 6 Botões de Ícones     */}
-      {/* ========================================================================= */}
-      <div className="ml-2 sm:ml-3 flex items-center gap-1.5 shrink-0">
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex items-center gap-1.5 shrink-0 bg-background/90 backdrop-blur-xs pl-2.5">
         {/* Chip discreto se filtro estiver ativo */}
         {isFiltered && onClearFilters && (
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent/60 border border-border text-[10px] text-muted-foreground">
