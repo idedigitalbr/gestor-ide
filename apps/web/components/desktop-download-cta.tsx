@@ -9,7 +9,7 @@ function emptySubscribe() {
   return () => {};
 }
 
-type TeaserStage = "peek-1" | "peek-2" | "expanded" | "minimized";
+type ConversationStep = "greeting" | "teaser" | "callout" | "minimized";
 
 interface DesktopDownloadCtaProps {
   className?: string;
@@ -29,7 +29,7 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
     () => false
   );
 
-  const [stage, setStage] = useState<TeaserStage>("peek-1");
+  const [step, setStep] = useState<ConversationStep>("greeting");
   const [version, setVersion] = useState<string>("v0.1.6");
   const [downloadUrl, setDownloadUrl] = useState<string>(
     "https://github.com/idedigitalbr/gestor-ide/releases/download/v0.1.6/instalador-ide-gestor-v0.1.6-oneclick.exe"
@@ -38,7 +38,7 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
   const timer1Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timer2Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Buscar última versão da API local/GitHub
+  // Buscar última versão da API local / GitHub
   useEffect(() => {
     let isCancelled = false;
     fetch("/api/desktop/latest")
@@ -58,20 +58,20 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
     };
   }, []);
 
-  // Sequência de 5 segundos de animação teaser automática:
-  // 0s a 2s: peek-1 (apenas ícone suave espiando com balão "Oii, tô aqui... 👀")
-  // 2s a 4.5s: peek-2 (espreitando mais com balão "Quer saber a novidade? ✨")
-  // 4.5s em diante: expanded (se mostra todo no último segundo!)
+  // Sequência de conversa cronometrada de 5 segundos:
+  // 0s a 2s: "Oi.... eiii espia aqui... 👀"
+  // 2s a 4.5s: "Quer saber uma novidade?... ✨"
+  // 4.5s em diante: Revelação completa do convite e botão de download!
   useEffect(() => {
     if (isDismissedInStorage) return;
 
     timer1Ref.current = setTimeout(() => {
-      setStage((prev) => (prev === "peek-1" ? "peek-2" : prev));
+      setStep((prev) => (prev === "greeting" ? "teaser" : prev));
     }, 2000);
 
     timer2Ref.current = setTimeout(() => {
-      setStage((prev) =>
-        prev === "peek-1" || prev === "peek-2" ? "expanded" : prev
+      setStep((prev) =>
+        prev === "greeting" || prev === "teaser" ? "callout" : prev
       );
     }, 4500);
 
@@ -81,33 +81,25 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
     };
   }, [isDismissedInStorage]);
 
-  // Se o usuário passar o mouse ou clicar enquanto estiver espiando, revela imediatamente!
-  function handleTriggerImmediateExpand() {
+  // Se o usuário passar o mouse ou clicar em qualquer momento, revela o convite na hora!
+  function handleImmediateReveal() {
     if (timer1Ref.current) clearTimeout(timer1Ref.current);
     if (timer2Ref.current) clearTimeout(timer2Ref.current);
-    if (stage !== "expanded") {
-      setStage("expanded");
+    if (step !== "callout") {
+      setStep("callout");
     }
   }
 
   function handleDismiss(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setStage("minimized");
+    setStep("minimized");
     if (typeof window !== "undefined") {
       sessionStorage.setItem("ide_hide_desktop_cta", "true");
     }
   }
 
-  function handleCardClick(e: React.MouseEvent) {
-    if (stage !== "expanded") {
-      e.preventDefault();
-      e.stopPropagation();
-      handleTriggerImmediateExpand();
-    }
-  }
-
-  // Não renderizar durante SSR ou se já estiver no app Desktop Tauri nativo
+  // Não renderizar durante SSR ou se o usuário já estiver dentro do app nativo Desktop Tauri
   if (!isClient) return null;
 
   const isDesktop =
@@ -116,142 +108,162 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
 
   if (isDesktop) return null;
 
-  const currentStage: TeaserStage =
-    isDismissedInStorage && stage !== "expanded" ? "minimized" : stage;
+  const currentStep: ConversationStep =
+    isDismissedInStorage && step !== "callout" ? "minimized" : step;
 
-  const isPeeking = currentStage === "peek-1" || currentStage === "peek-2";
-  const isMinimized = currentStage === "minimized";
-  const isFullyExpanded = currentStage === "expanded";
+  const isCallout = currentStep === "callout";
+  const isMinimized = currentStep === "minimized";
 
   return (
     <div
-      onMouseEnter={handleTriggerImmediateExpand}
+      onMouseEnter={handleImmediateReveal}
       className={cn(
-        "fixed bottom-6 right-0 sm:bottom-8 z-40 flex items-center gap-2.5 select-none transition-all duration-700 ease-out",
+        "fixed bottom-6 right-4 sm:bottom-8 sm:right-8 z-40 flex items-end justify-end gap-2.5 select-none",
         className
       )}
     >
-      {/* 1. Balão Teaser provocativo à esquerda da janelinha durante os primeiros 5s */}
-      {isPeeking && (
+      {/* 1. BALÃO DE CONVERSA (Posicionado imediatamente colado à esquerda do ícone) */}
+      {!isMinimized && (
         <div
-          onClick={handleTriggerImmediateExpand}
-          className="cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95"
+          onClick={handleImmediateReveal}
+          className="relative max-w-[calc(100vw-5rem)] cursor-pointer"
         >
-          {currentStage === "peek-1" && (
-            <div className="flex items-center gap-2 rounded-full border border-primary/40 bg-card/95 px-3 py-1.5 shadow-2xl backdrop-blur-md text-[11px] font-semibold text-foreground animate-in fade-in slide-in-from-right-3 duration-300">
-              <span className="relative flex size-2">
+          {/* Passo 1: "Oi.... eiii espia aqui... 👀" */}
+          {currentStep === "greeting" && (
+            <div className="relative flex items-center gap-2 rounded-2xl border border-primary/40 bg-card/95 px-3.5 py-2 shadow-2xl backdrop-blur-md text-xs font-semibold text-foreground animate-spring-in">
+              <span className="relative flex size-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
               </span>
-              <span>Oii, tô aqui... 👀</span>
+              <span className="whitespace-nowrap">Oi.... eiii espia aqui... 👀</span>
+
+              {/* Bico do balão apontando diretamente para o ícone à direita */}
+              <div className="absolute -right-2 top-1/2 -translate-y-1/2 border-y-[6px] border-y-transparent border-l-[8px] border-l-card" />
             </div>
           )}
 
-          {currentStage === "peek-2" && (
-            <div className="flex items-center gap-2 rounded-full border border-primary/60 bg-card/95 px-3.5 py-1.5 shadow-2xl backdrop-blur-md text-[11px] font-bold text-primary animate-in fade-in zoom-in-95 duration-300">
-              <Sparkles className="size-3.5 text-primary animate-pulse" />
-              <span>Quer saber a novidade? ✨</span>
+          {/* Passo 2: "Quer saber uma novidade?... ✨" */}
+          {currentStep === "teaser" && (
+            <div className="relative flex items-center gap-2 rounded-2xl border border-primary/60 bg-card/95 px-4 py-2.5 shadow-2xl backdrop-blur-md text-xs font-bold text-primary animate-spring-in">
+              <Sparkles className="size-4 text-primary animate-pulse shrink-0" />
+              <span className="whitespace-nowrap">Quer saber uma novidade?... ✨</span>
+
+              {/* Bico do balão apontando diretamente para o ícone à direita */}
+              <div className="absolute -right-2 top-1/2 -translate-y-1/2 border-y-[6px] border-y-transparent border-l-[8px] border-l-card" />
+            </div>
+          )}
+
+          {/* Passo 3: Revelação completa do convite e download */}
+          {isCallout && (
+            <div className="relative w-[320px] sm:w-[360px] rounded-2xl border border-primary/40 bg-card/98 p-4 shadow-2xl backdrop-blur-md text-card-foreground animate-spring-in flex flex-col gap-3">
+              {/* Topo do card com versão e fechar */}
+              <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex size-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-xs font-bold text-foreground">
+                    IDE Gestor Desktop
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="h-4 border-primary/30 bg-primary/10 px-1.5 text-[9px] font-bold text-primary"
+                  >
+                    {version}
+                  </Badge>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDismiss}
+                  title="Fechar janelinha"
+                  aria-label="Fechar janelinha"
+                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+
+              {/* Texto conversacional fiel solicitado */}
+              <p className="text-xs leading-relaxed text-foreground font-medium">
+                Olha aqui do lado! Clica e baixa o nosso mais novo app desktop. Com ele você tem{" "}
+                <strong className="text-primary font-bold">3x mais desempenho</strong> do que
+                usar pelo seu navegador, baixa aí... 🚀
+              </p>
+
+              {/* Botão de Download Oficial */}
+              <a
+                href={downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group/btn flex items-center justify-between gap-3 rounded-xl bg-primary px-3.5 py-2.5 text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:scale-[1.02] active:scale-95"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-lg bg-primary-foreground/20 text-primary-foreground">
+                    <Download className="size-4 animate-bounce" />
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-bold leading-tight">
+                      Baixar para Windows (OneClick)
+                    </span>
+                    <span className="text-[10px] opacity-80">
+                      Instalação em 1 clique • ~45MB
+                    </span>
+                  </div>
+                </div>
+                <span className="rounded-md bg-primary-foreground/15 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase">
+                  Grátis
+                </span>
+              </a>
+
+              {/* Rodapé de vantagens */}
+              <div className="flex items-center justify-between pt-0.5 text-[10px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Monitor className="size-3 text-primary" />
+                  Windows 10/11 x64
+                </span>
+                <span className="inline-flex items-center gap-1 font-medium text-primary">
+                  <Sparkles className="size-3" />
+                  3x Mais Desempenho
+                </span>
+              </div>
+
+              {/* Bico do balão apontando para o botão da direita */}
+              <div className="absolute -right-2 bottom-5 border-y-[6px] border-y-transparent border-l-[8px] border-l-card" />
             </div>
           )}
         </div>
       )}
 
-      {/* 2. Janelinha / Card Principal */}
+      {/* 2. ÍCONE FLUTUANTE DA DIREITA (Fixo, chamativo, colado na borda) */}
       <div
-        className={cn(
-          "transition-all duration-700 ease-out",
-          isFullyExpanded && "translate-x-0 mr-4 sm:mr-8 animate-float-cta",
-          currentStage === "peek-1" && "translate-x-[calc(100%-58px)] cursor-pointer",
-          currentStage === "peek-2" && "translate-x-[calc(100%-66px)] cursor-pointer",
-          isMinimized &&
-            "translate-x-[calc(100%-48px)] opacity-60 hover:opacity-100 hover:translate-x-[calc(100%-54px)] cursor-pointer"
-        )}
+        onClick={handleImmediateReveal}
+        className="relative group shrink-0 cursor-pointer"
+        title="Baixar IDE Gestor para Windows"
       >
-        <div className="relative group w-[340px] max-w-[calc(100vw-1.5rem)]">
-          {/* Halo de destaque sutil */}
-          <div
-            className={cn(
-              "absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-primary/30 via-primary/50 to-primary/30 blur-xs transition-opacity duration-500 pointer-events-none",
-              isFullyExpanded
-                ? "opacity-40 group-hover:opacity-100"
-                : "opacity-80 animate-pulse"
-            )}
-          />
+        {/* Halo de pulso e brilho ao redor do ícone */}
+        <div
+          className={cn(
+            "absolute -inset-1 rounded-2xl bg-gradient-to-r from-primary/40 via-primary/60 to-primary/40 blur-xs transition-opacity duration-300 pointer-events-none",
+            isCallout ? "opacity-40 group-hover:opacity-100" : "opacity-90 animate-pulse"
+          )}
+        />
 
-          <div
-            onClick={handleCardClick}
-            className={cn(
-              "relative flex flex-col gap-2.5 rounded-2xl border border-primary/40 bg-card p-3.5 sm:p-4 text-card-foreground shadow-2xl backdrop-blur-md transition-all duration-300",
-              isFullyExpanded
-                ? "group-hover:border-primary/70 group-hover:shadow-primary/10"
-                : "hover:border-primary"
-            )}
-          >
-            {/* Cabeçalho do Card */}
-            <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2">
-              <div className="flex items-center gap-2">
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                </span>
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  Versão Desktop Oficial
-                </span>
-                <Badge
-                  variant="outline"
-                  className="h-4 border-primary/30 bg-primary/10 px-1.5 text-[9px] font-bold text-primary"
-                >
-                  {version}
-                </Badge>
-              </div>
+        <div
+          className={cn(
+            "relative flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-2xl transition-all duration-300 group-hover:scale-110 active:scale-95",
+            !isCallout && "animate-wiggle",
+            isCallout && "animate-float-cta"
+          )}
+        >
+          <Download className="size-6 text-primary-foreground drop-shadow-sm" />
 
-              {isFullyExpanded && (
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  title="Dispensar aviso"
-                  aria-label="Dispensar aviso"
-                  className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Link / Conteúdo Principal */}
-            <a
-              href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleCardClick}
-              className="flex items-center gap-3 rounded-xl p-1 transition-transform group-hover:scale-[1.01]"
-            >
-              <div className="relative flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-transform group-hover:scale-105">
-                <Download className="size-5 animate-bounce" />
-              </div>
-
-              <div className="flex flex-col text-left">
-                <span className="text-xs font-bold leading-snug tracking-tight text-foreground transition-colors group-hover:text-primary">
-                  Clique aqui e Baixe a versão desktop para Windows
-                </span>
-                <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                  Instalador OneClick • 1 Clique e pronto
-                </span>
-              </div>
-            </a>
-
-            {/* Rodapé com pílula de vantagens */}
-            <div className="flex items-center justify-between gap-1.5 pt-0.5 text-[10px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                <Monitor className="size-3 text-primary" />
-                Windows 10/11 x64
-              </span>
-              <span className="inline-flex items-center gap-1 font-medium text-primary">
-                <Sparkles className="size-3" />
-                ~45MB RAM • Rápido
-              </span>
-            </div>
-          </div>
+          {/* Ponto indicador de novidade sobre o ícone */}
+          <span className="absolute -top-1 -right-1 flex size-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex size-3 rounded-full bg-emerald-500 border-2 border-background" />
+          </span>
         </div>
       </div>
     </div>

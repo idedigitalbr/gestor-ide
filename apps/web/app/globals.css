@@ -225,3 +225,46 @@ html[data-colored-chrome="true"] .planw-app-header {
   animation-play-state: paused;
 }
 
+/* Animação de aceno / balanço chamativo para o ícone */
+@keyframes wiggle {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  20% {
+    transform: rotate(-12deg) scale(1.08);
+  }
+  40% {
+    transform: rotate(10deg) scale(1.08);
+  }
+  60% {
+    transform: rotate(-8deg) scale(1.04);
+  }
+  80% {
+    transform: rotate(6deg) scale(1.02);
+  }
+}
+
+.animate-wiggle {
+  animation: wiggle 1.6s ease-in-out infinite;
+}
+
+/* Animação suave elástica de entrada para o balão de conversa */
+@keyframes spring-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(8px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.02) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-spring-in {
+  animation: spring-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
