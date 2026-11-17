@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import { ThemeProvider } from "@/lib/themes/theme-context";
+import { Providers } from "./providers";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
@@ -36,7 +36,9 @@ export default function RootLayout({
         className="h-full bg-background text-foreground antialiased select-none"
         suppressHydrationWarning
       >
-        <ThemeProvider><AppShell>{children}</AppShell></ThemeProvider>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   );

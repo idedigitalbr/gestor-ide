@@ -185,21 +185,25 @@ export function SettingsView() {
   const { appearanceMode, resolvedMode, setAppearanceMode } = useTheme();
 
   // Estados de Configuração Desktop
-  const [isDesktopApp, setIsDesktopApp] = useState(false);
-  const [autostart, setAutostart] = useState(true);
-  const [closeToTray, setCloseToTray] = useState(true);
+  const [isDesktopApp] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
+  });
+  const [autostart, setAutostart] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("ide_desktop_autostart");
+    return stored !== null ? stored === "true" : true;
+  });
+  const [closeToTray, setCloseToTray] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("ide_desktop_close_to_tray");
+    return stored !== null ? stored === "true" : true;
+  });
   const [nativeNotifications, setNativeNotifications] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const hasTauri = "__TAURI_INTERNALS__" in window || "__TAURI__" in window;
-    setIsDesktopApp(hasTauri);
-
-    const storedAutostart = localStorage.getItem("ide_desktop_autostart");
-    if (storedAutostart !== null) setAutostart(storedAutostart === "true");
-
-    const storedCloseToTray = localStorage.getItem("ide_desktop_close_to_tray");
-    if (storedCloseToTray !== null) setCloseToTray(storedCloseToTray === "true");
 
     if (hasTauri && (window as unknown as { __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__) {
       (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args?: unknown) => Promise<unknown> } }).__TAURI_INTERNALS__

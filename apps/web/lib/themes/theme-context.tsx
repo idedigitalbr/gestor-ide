@@ -50,6 +50,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const storedChrome = localStorage.getItem(STORAGE_KEYS.COLORED_CHROME);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (storedChrome === "true") setColoredChromeState(true);
 
       const storedMode = localStorage.getItem(STORAGE_KEYS.MODE);

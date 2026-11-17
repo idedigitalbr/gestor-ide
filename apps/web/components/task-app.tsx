@@ -22,6 +22,12 @@ import {
   type CustomViewOpenMode,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
+import {
+  useProjectCustomViews,
+  useSaveCustomView,
+  useDeleteCustomView,
+  useReorderCustomViews,
+} from "@/lib/query/use-project-custom-views";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
 import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
 import {
@@ -368,12 +374,23 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     }
   });
 
-  // Estados para Visualizações Personalizadas por Projeto
-  const [customViews, setCustomViews] = useState<CustomProjectView[]>([]);
+  // Visualizações Personalizadas por Projeto via TanStack Query + IndexedDB
+  const { views: customViews } = useProjectCustomViews(selectedProjectId);
+  const saveCustomViewMutation = useSaveCustomView(selectedProjectId);
+  const deleteCustomViewMutation = useDeleteCustomView(selectedProjectId);
+  const reorderCustomViewsMutation = useReorderCustomViews(selectedProjectId);
+
   const [activeCustomViewId, setActiveCustomViewId] = useState<string | null>(null);
   const [isCustomViewModalOpen, setIsCustomViewModalOpen] = useState(false);
   const [editingCustomView, setEditingCustomView] = useState<CustomProjectView | null>(null);
   const [viewToDelete, setViewToDelete] = useState<CustomProjectView | null>(null);
+
+  // Reseta a view ativa ao trocar de projeto (padrão de ajuste de estado sem cascata de efeitos)
+  const [prevProjectIdForView, setPrevProjectIdForView] = useState(selectedProjectId);
+  if (selectedProjectId !== prevProjectIdForView) {
+    setPrevProjectIdForView(selectedProjectId);
+    setActiveCustomViewId(null);
+  }
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setActiveCustomViewId(null);
@@ -382,60 +399,6 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       localStorage.setItem("gestor_task_view_mode", mode);
     } catch {}
   }, []);
-
-  // Carregamento reativo e isolado das visualizações do projeto ativo
-  useEffect(() => {
-    // Reseta a view ativa ao trocar de projeto (sincronização com estado externo)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActiveCustomViewId(null);
-    if (!selectedProjectId) {
-      setCustomViews([]);
-      return;
-    }
-
-    // Limpa a lista anterior enquanto o cache IndexedDB/CRM responde
-    setCustomViews([]);
-
-    let active = true;
-    void ideCrmClient
-      .listProjectCustomViews(selectedProjectId)
-      .then(({ views }) => {
-        if (active && views && views.length > 0) {
-          setCustomViews(views);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-    };
-  }, [selectedProjectId]);
-
-  // Atualiza as visualizações quando o cache Local-First revalida as configurações
-  useEffect(() => {
-    if (!selectedProjectId) return;
-
-    function handleRevalidated(event: Event) {
-      const detail = (
-        event as CustomEvent<{
-          key?: string;
-          data?: { settings?: Record<string, unknown> };
-        }>
-      ).detail;
-      if (!detail?.key?.startsWith("crm_/settings")) return;
-
-      const map = detail.data?.settings?.projectCustomViews as
-        | Record<string, CustomProjectView[]>
-        | undefined;
-      const stored = map?.[selectedProjectId as string];
-      if (Array.isArray(stored) && stored.length > 0) {
-        setCustomViews(stored);
-      }
-    }
-
-    window.addEventListener("ide-crm:revalidated", handleRevalidated);
-    return () => window.removeEventListener("ide-crm:revalidated", handleRevalidated);
-  }, [selectedProjectId]);
 
   const activeCustomView = useMemo(() => {
     if (!activeCustomViewId || !selectedProjectId) return null;
@@ -451,73 +414,41 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       openMode: CustomViewOpenMode;
     }) => {
       if (!selectedProjectId) return;
-      let nextList: CustomProjectView[];
-
-      if (viewData.id) {
-        nextList = customViews.map((v) =>
-          v.id === viewData.id
-            ? {
-                ...v,
-                name: viewData.name,
-                icon: viewData.icon,
-                url: viewData.url,
-                openMode: viewData.openMode,
-                updatedAt: new Date().toISOString(),
-              }
-            : v
-        );
-      } else {
-        const newView: CustomProjectView = {
-          id: `view_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          projectId: selectedProjectId,
-          name: viewData.name,
-          icon: viewData.icon,
-          url: viewData.url,
-          openMode: viewData.openMode,
-          order: customViews.length,
-          type: "custom",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        nextList = [...customViews, newView];
-      }
-
-      setCustomViews(nextList);
-
       try {
-        await ideCrmClient.saveProjectCustomViews(selectedProjectId, nextList);
-      } catch {}
+        await saveCustomViewMutation.mutateAsync(viewData);
+      } catch (err) {
+        console.error("Erro ao salvar visualização customizada:", err);
+      }
     },
-    [selectedProjectId, customViews]
+    [selectedProjectId, saveCustomViewMutation]
   );
 
   const handleDeleteCustomView = useCallback(
     async (viewId: string) => {
       if (!selectedProjectId) return;
-      const nextList = customViews.filter((v) => v.id !== viewId);
-      setCustomViews(nextList);
       if (activeCustomViewId === viewId) {
         setActiveCustomViewId(null);
       }
       setViewToDelete(null);
-
       try {
-        await ideCrmClient.deleteProjectCustomView(selectedProjectId, viewId);
-      } catch {}
+        await deleteCustomViewMutation.mutateAsync(viewId);
+      } catch (err) {
+        console.error("Erro ao excluir visualização customizada:", err);
+      }
     },
-    [selectedProjectId, customViews, activeCustomViewId]
+    [selectedProjectId, activeCustomViewId, deleteCustomViewMutation]
   );
 
   const handleReorderCustomViews = useCallback(
     async (newViews: CustomProjectView[]) => {
       if (!selectedProjectId) return;
-      setCustomViews(newViews);
-
       try {
-        await ideCrmClient.saveProjectCustomViews(selectedProjectId, newViews);
-      } catch {}
+        await reorderCustomViewsMutation.mutateAsync(newViews);
+      } catch (err) {
+        console.error("Erro ao reordenar visualizações customizadas:", err);
+      }
     },
-    [selectedProjectId]
+    [selectedProjectId, reorderCustomViewsMutation]
   );
 
   // Estados de visualização ClickUp: subtarefas, tarefas fechadas e campos
