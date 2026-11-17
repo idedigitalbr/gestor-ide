@@ -22,6 +22,7 @@ import {
   type CustomViewOpenMode,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useProjectCustomViews,
   useSaveCustomView,
@@ -30,6 +31,7 @@ import {
   useManagements,
   useProjects,
   useProjectMembers,
+  queryKeys,
 } from "@/lib/query";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
 import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
@@ -485,6 +487,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   });
 
   // Dados sincronizados do IDE CRM via TanStack Query + Cache Local
+  const queryClient = useQueryClient();
   const { managements: queryManagements } = useManagements();
   const { projects: queryProjects } = useProjects();
   const { members: queryProjectMembers } = useProjectMembers(selectedProjectId);
@@ -1281,6 +1284,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             );
             removeCachedTask(tempId);
             addCachedTask(finalTask);
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           }
         })
         .catch(() => {
@@ -1330,6 +1335,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       const releasePending = trackPendingTask(updatedTask.id);
       void ideCrmClient
         .updateTask(updatedTask.id, changedPayload)
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.task(updatedTask.id) });
+        })
         .catch(() => {
           if (previousTask && taskUpdateVersionsRef.current.get(updatedTask.id) === version) {
             setTasks((current) =>
@@ -1357,6 +1366,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       };
       setTasks((previous) => previous.map((task) => task.id === taskId ? { ...task, ...patch } : task));
       if (existing) updateCachedTask({ ...existing, ...patch });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
       return true;
     } catch {
       setSyncError("Não foi possível salvar o responsável no CRM. Tente novamente.");
@@ -1379,7 +1390,11 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     if (isConnectedCrm && !id.startsWith("task-")) {
       void ideCrmClient
         .deleteTask(id)
-        .then(() => removeLocalTaskPresentation(id))
+        .then(() => {
+          removeLocalTaskPresentation(id);
+          void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+        })
         .catch(() => {
           if (deletedTask) {
             setTasks((prev) => {
@@ -1511,6 +1526,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         const releasePending = trackPendingTask(movedTask.id);
         void ideCrmClient
           .updateTask(movedTask.id, payload)
+          .then(() => {
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          })
           .catch(() =>
             setSyncError("Não foi possível salvar a movimentação em lote no CRM. Atualize os dados para conferir.")
           )
@@ -1558,6 +1576,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                   );
                   const updatedTarget = next.find((t) => t.id === taskId);
                   if (updatedTarget) updateCachedTask(updatedTarget);
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.taskChecklist(taskId) });
+                  void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
                   return next;
                 });
               }
@@ -1571,6 +1591,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
         if (removed && !removed.id.startsWith("st-")) {
           void ideCrmClient
             .deleteChecklistItem(taskId, removed.id)
+            .then(() => {
+              void queryClient.invalidateQueries({ queryKey: queryKeys.taskChecklist(taskId) });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
+            })
             .catch(() => setSyncError("Não foi possível excluir o item de checklist no CRM."));
         }
       } else {
@@ -1583,6 +1607,10 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             .updateChecklistItem(taskId, toggled.id, {
               completed: toggled.completed,
               title: toggled.title,
+            })
+            .then(() => {
+              void queryClient.invalidateQueries({ queryKey: queryKeys.taskChecklist(taskId) });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
             })
             .catch(() => setSyncError("Não foi possível atualizar o item de checklist no CRM."));
         }
@@ -1638,6 +1666,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
               );
               const updatedTarget = next.find((t) => t.id === taskId);
               if (updatedTarget) updateCachedTask(updatedTarget);
+              void queryClient.invalidateQueries({ queryKey: queryKeys.taskComments(taskId) });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
               return next;
             });
           }
