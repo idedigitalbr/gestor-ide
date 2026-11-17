@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
-
 const FALLBACK_VERSION = "v0.1.6";
 const FALLBACK_FILENAME = "instalador-ide-gestor-v0.1.6-oneclick.exe";
 const FALLBACK_DOWNLOAD_URL = `https://github.com/idedigitalbr/gestor-ide/releases/download/${FALLBACK_VERSION}/${FALLBACK_FILENAME}`;
