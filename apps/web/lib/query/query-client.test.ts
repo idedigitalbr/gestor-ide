@@ -24,6 +24,16 @@ describe("TanStack Query Client & Keys", () => {
       "tasks",
       { projectId: "proj-1" },
     ]);
+    expect(queryKeys.projectMembers("proj-1")).toEqual([
+      "projects",
+      "proj-1",
+      "members",
+    ]);
+    expect(queryKeys.managementMembers("mgmt-1")).toEqual([
+      "managements",
+      "mgmt-1",
+      "members",
+    ]);
   });
 
   it("configures queryClient with 5min staleTime and 24h gcTime", () => {
