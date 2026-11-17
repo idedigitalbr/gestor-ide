@@ -33,13 +33,33 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure Android SDK & NDK Environment
+        shell: bash
+        run: |
+          echo "Configurando caminhos do Android SDK e NDK pré-instalados..."
+          ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          
+          # Encontrar a versão mais recente do NDK disponível no runner
+          NDK_PATH=$(ls -d $ANDROID_SDK_ROOT/ndk/* 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$NDK_PATH" ]; then
+            echo "Instalando NDK 26 via sdkmanager..."
+            yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;26.1.10909125"
+            NDK_PATH="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
+          fi
+          
+          echo "NDK localizado em: $NDK_PATH"
+          echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> $GITHUB_ENV
+          
+          # Aceitar todas as licenças do SDK automaticamente
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Setup Rust Toolchain for Android
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Install Monorepo Dependencies
         run: bun install
@@ -52,11 +72,9 @@ jobs:
 
       - name: Build Android APK
         shell: bash
-        env:
-          NDK_HOME: ${{ env.ANDROID_NDK_ROOT || env.ANDROID_HOME }}/ndk/26.1.10909125
         run: |
           cd apps/desktop
-          # Build do APK em modo release para Android
+          # Compilar o APK Release universal/aarch64
           bun run tauri android build --apk --target aarch64
 
       - name: Publish APK to GitHub Release
@@ -67,7 +85,7 @@ jobs:
           TAG="${{ inputs.version || github.ref_name }}"
           echo "Buscando APK gerado para o release $TAG..."
           
-          # Localizar arquivo .apk gerado pelo Gradle
+          # Localizar arquivo .apk gerado pelo build
           APK_PATH=$(find apps/desktop/src-tauri/gen/android -name "*.apk" | head -n 1)
           
           if [ -z "$APK_PATH" ]; then
