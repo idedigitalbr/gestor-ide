@@ -268,3 +268,18 @@ html[data-colored-chrome="true"] .planw-app-header {
   animation: spring-in 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Safe area insets para dispositivos móveis (Android notch e iOS Dynamic Island / home bar) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+
