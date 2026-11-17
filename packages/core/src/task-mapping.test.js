@@ -52,3 +52,23 @@ test("envia datas e múltiplas etiquetas e permite limpar etiquetas", () => {
   expect(mapGestorTaskToCrmUpdateInput({ parentTaskId: "parent-2" }).parentTaskId).toBe("parent-2");
   expect(mapGestorTaskToCrmUpdateInput({ parentTaskId: undefined }).parentTaskId).toBeNull();
 });
+
+test("atribui responsável na criação de tarefa tanto por assigneeId quanto por assigneeIds", () => {
+  const fromSingle = mapGestorTaskToCrmCreateInput(
+    { title: "Tarefa com criador", status: "PENDENTE", priority: "Normal", assigneeId: "user-creator" },
+    "proj-1"
+  );
+  expect(fromSingle.assigneeIds).toEqual(["user-creator"]);
+
+  const fromMultiple = mapGestorTaskToCrmCreateInput(
+    { title: "Tarefa com múltiplos", status: "PENDENTE", priority: "Normal", assigneeIds: ["user-creator", "user-peer"] },
+    "proj-1"
+  );
+  expect(fromMultiple.assigneeIds).toEqual(["user-creator", "user-peer"]);
+
+  const withoutAssignee = mapGestorTaskToCrmCreateInput(
+    { title: "Sem responsável", status: "PENDENTE", priority: "Normal" },
+    "proj-1"
+  );
+  expect(withoutAssignee.assigneeIds).toBeUndefined();
+});

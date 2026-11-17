@@ -33,6 +33,26 @@ test("cria projeto na gestão escolhida pela API do CRM", async () => {
   expect(JSON.parse(request.body)).toEqual({ name: "Projeto", description: "Descrição" });
 });
 
+test("cria gestão e projeto com criador como responsável (ownerUserId e memberIds)", async () => {
+  let requestMgmt;
+  let requestProj;
+  globalThis.fetch = async (url, options) => {
+    if (url.includes("/projects/managements/g1/projects")) {
+      requestProj = { url, ...options };
+      return Response.json({ project: { id: "p1", name: "Projeto", ownerUserId: "u1" } }, { status: 201 });
+    }
+    requestMgmt = { url, ...options };
+    return Response.json({ management: { id: "g1", name: "Gestão", ownerUserId: "u1" } }, { status: 201 });
+  };
+  const client = new IdeCrmClient({ baseUrl: "/api/crm", getToken: () => "token-teste" });
+
+  await client.createManagement({ name: "Gestão", ownerUserId: "u1", memberIds: ["u1"] });
+  expect(JSON.parse(requestMgmt.body)).toEqual({ name: "Gestão", ownerUserId: "u1", memberIds: ["u1"] });
+
+  await client.createProject("g1", { name: "Projeto", ownerUserId: "u1", memberIds: ["u1"] });
+  expect(JSON.parse(requestProj.body)).toEqual({ name: "Projeto", ownerUserId: "u1", memberIds: ["u1"] });
+});
+
 test("envia token, dados e chave de idempotência ao criar tarefa", async () => {
   let request;
   globalThis.fetch = async (url, options) => {

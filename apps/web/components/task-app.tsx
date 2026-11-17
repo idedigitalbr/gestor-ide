@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   mapCrmTaskToGestorTask,
@@ -124,6 +125,21 @@ function getHighestCodeNumber(list: Task[]): number {
   }
   return max;
 }
+
+const ProjectTasksCanvas = dynamic(
+  () => import("@/components/canvas/project-tasks-canvas").then((mod) => mod.ProjectTasksCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[75vh] w-full items-center justify-center rounded-xl border border-border bg-card">
+        <div className="flex flex-col items-center gap-2">
+          <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-xs text-muted-foreground">Carregando Canvas v2...</p>
+        </div>
+      </div>
+    ),
+  }
+);
 
 export function TaskApp({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -391,7 +407,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
       const saved = localStorage.getItem("gestor_task_view_mode");
-      return saved === "kanban" || saved === "table" || saved === "calendar" || saved === "gantt" || saved === "workload"
+      return saved === "kanban" || saved === "table" || saved === "calendar" || saved === "gantt" || saved === "workload" || saved === "canvas"
         ? (saved as ViewMode)
         : "table";
     } catch {
@@ -1401,8 +1417,28 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
       setSyncError("Selecione um projeto antes de criar uma tarefa no CRM.");
       return;
     }
-    const newTask: Task = {
+
+    const activeUser = currentUser || getCachedSession();
+    const defaultAssigneeId = data.assigneeId ?? (activeUser?.id || undefined);
+    const defaultAssignee = data.assignee ?? (activeUser?.name || activeUser?.email || undefined);
+    const defaultAssigneeAvatar = data.assigneeAvatar ?? (activeUser?.avatarUrl || undefined);
+    const defaultAssigneeIds =
+      data.assigneeIds && data.assigneeIds.length > 0
+        ? data.assigneeIds
+        : defaultAssigneeId
+        ? [defaultAssigneeId]
+        : undefined;
+
+    const taskPayload = {
       ...data,
+      assigneeId: defaultAssigneeId,
+      assignee: defaultAssignee,
+      assigneeAvatar: defaultAssigneeAvatar,
+      assigneeIds: defaultAssigneeIds,
+    };
+
+    const newTask: Task = {
+      ...taskPayload,
       id: tempId,
       code: data.code || generateTaskCode(),
       projectId: targetProjectId,
@@ -1412,8 +1448,9 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
     addCachedTask(newTask);
 
     if (isConnectedCrm && targetProjectId) {
+      const crmInput = mapGestorTaskToCrmCreateInput(taskPayload, targetProjectId);
       void ideCrmClient
-        .createTask(mapGestorTaskToCrmCreateInput(data, targetProjectId))
+        .createTask(crmInput)
         .then((res) => {
           if (res?.task) {
             const synced = mapCrmTaskToGestorTask(res.task, 0);
@@ -1422,7 +1459,14 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             const finalTask = {
               ...synced,
               ...presentation,
-              ...(res.task.assignees === undefined ? { assigneeId: newTask.assigneeId, assignee: newTask.assignee, assigneeAvatar: newTask.assigneeAvatar } : {}),
+              ...(res.task.assignees === undefined || (Array.isArray(res.task.assignees) && res.task.assignees.length === 0)
+                ? {
+                    assigneeId: newTask.assigneeId,
+                    assignee: newTask.assignee,
+                    assigneeAvatar: newTask.assigneeAvatar,
+                    assigneeIds: newTask.assigneeIds,
+                  }
+                : {}),
               code: newTask.code,
             };
             setTasks((prev) =>
@@ -1432,6 +1476,12 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             );
             removeCachedTask(tempId);
             addCachedTask(finalTask);
+
+            // Se a API do CRM não atribuiu o responsável na resposta de criação, reforça via setTaskAssignees
+            if (newTask.assigneeId && (!res.task.assignees || res.task.assignees.length === 0)) {
+              void ideCrmClient.setTaskAssignees(res.task.id, [newTask.assigneeId]).catch(() => {});
+            }
+
             void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           }
@@ -1441,7 +1491,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           void enqueueOutboxItem({
             type: "CREATE_TASK",
             tempTaskId: tempId,
-            payload: mapGestorTaskToCrmCreateInput(data, targetProjectId),
+            payload: mapGestorTaskToCrmCreateInput(taskPayload, targetProjectId),
           });
           setSyncError("Modo offline: tarefa gravada no dispositivo e será sincronizada assim que a conexão retornar.");
         });
@@ -1872,6 +1922,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
             dueDate: taskData.dueDate,
             tag: taskData.tag,
             tags: taskData.tags ?? t.tags,
+            itemType: taskData.itemType !== undefined ? taskData.itemType : t.itemType,
+            parentTaskId: taskData.parentTaskId !== undefined ? taskData.parentTaskId : t.parentTaskId,
             estimate: taskData.estimate,
             projectId: taskData.projectId ?? t.projectId,
             projectName: taskData.projectName ?? t.projectName,
@@ -2616,12 +2668,27 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           managements={effectiveManagements}
           selectedManagementId={selectedManagementId}
           connected={isConnectedCrm}
-          onCreated={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+          currentUser={currentUser}
+          onCreated={async (newProj) => {
+            const mgmtId = newProj?.projectManagementId ?? selectedManagementId;
+            const projId = newProj?.id ?? null;
+            if (projId) {
+              handleSelectProject(projId);
+            }
+            await syncWithIdeCrm(projId, mgmtId);
+          }}
         />}
         {isNewManagementOpen && <NewManagementDialog
           onClose={() => setIsNewManagementOpen(false)}
           connected={isConnectedCrm}
-          onCreated={() => syncWithIdeCrm(selectedProjectId, selectedManagementId)}
+          currentUser={currentUser}
+          onCreated={async (newMgmt) => {
+            const mgmtId = newMgmt?.id ?? null;
+            if (mgmtId) {
+              handleSelectManagement(mgmtId);
+            }
+            await syncWithIdeCrm(null, mgmtId);
+          }}
         />}
         <main
           className={cn(
@@ -2802,6 +2869,19 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                   isFiltered={isFiltered}
                   onClearFilters={handleClearFilters}
                 />
+              ) : viewMode === "canvas" && selectedProjectId ? (
+                <ProjectTasksCanvas
+                  projectId={selectedProjectId}
+                  tasks={tasks}
+                  members={activeProjectMembers}
+                  canWrite={canWriteProjects}
+                  onOpenTask={(taskId: string) => {
+                    const target = tasks.find((t) => t.id === taskId);
+                    if (target) {
+                      handleOpenDetails(target);
+                    }
+                  }}
+                />
               ) : viewMode === "calendar" || viewMode === "gantt" || viewMode === "workload" ? (
                 <TaskAdditionalView
                   mode={viewMode}
@@ -2874,6 +2954,13 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           setIsModalOpen(false);
         }}
         task={selectedTask}
+        tasks={tasks}
+        onNavigateToTask={(taskId) => {
+          const target = tasks.find((x) => x.id === taskId);
+          if (target) {
+            handleOpenDetails(target);
+          }
+        }}
         syncError={syncError}
         remoteConflictWarning={hasModalRemoteConflict}
         onReloadRemote={() => {

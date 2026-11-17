@@ -857,29 +857,122 @@ export class IdeCrmClient {
   }
 
   // --------------------------------------------------------------------------
-  // Módulo: IDE Gestor Canvas v2
+  // --------------------------------------------------------------------------
+  // Módulo: IDE Gestor Canvas v2 (com fallback resiliente via CRM Settings)
   // --------------------------------------------------------------------------
 
+  private async getSettingsCanvasMap(projectId: string): Promise<Record<string, CanvasDetail>> {
+    try {
+      const { settings } = await this.getSettings();
+      const all = (settings?.projectCanvases as Record<string, Record<string, CanvasDetail>> | undefined) || {};
+      return all[projectId] || {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async saveSettingsCanvasMap(projectId: string, map: Record<string, CanvasDetail>): Promise<void> {
+    try {
+      const { settings } = await this.getSettings();
+      const all = (settings?.projectCanvases as Record<string, Record<string, CanvasDetail>> | undefined) || {};
+      const updatedAll = { ...all, [projectId]: map };
+      const updatedSettings = { ...settings, projectCanvases: updatedAll };
+      await this.saveSettings(updatedSettings);
+      void this.cache.set("crm_/settings", { settings: updatedSettings });
+    } catch (err) {
+      console.warn("Aviso ao persistir canvas no CRM Settings:", err);
+      throw err;
+    }
+  }
+
   async listProjectCanvases(projectId: string): Promise<{ canvases: CanvasSummary[] }> {
-    return this.request(`/projects/${encodeURIComponent(projectId)}/canvases`);
+    try {
+      return await this.request(`/projects/${encodeURIComponent(projectId)}/canvases`);
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        const canvases: CanvasSummary[] = Object.values(map)
+          .filter((c) => !c.archivedAt)
+          .map((c) => ({
+            id: c.id,
+            projectId: c.projectId,
+            name: c.name,
+            revision: c.revision,
+            createdByUserId: c.createdByUserId,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+          }));
+        return { canvases };
+      }
+      throw err;
+    }
   }
 
   async getProjectCanvas(projectId: string, canvasId: string): Promise<CanvasDetail> {
-    return this.request(`/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`);
+    try {
+      return await this.request(
+        `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`
+      );
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        const found = map[canvasId];
+        if (found) {
+          return found;
+        }
+      }
+      throw err;
+    }
   }
 
   async createProjectCanvas(
     projectId: string,
     input: CanvasCreateInput
   ): Promise<{ id: string; projectId: string; name: string; revision: number; updatedAt: string }> {
-    return this.request(
-      `/projects/${encodeURIComponent(projectId)}/canvases`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      },
-      true
-    );
+    try {
+      return await this.request(
+        `/projects/${encodeURIComponent(projectId)}/canvases`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true
+      );
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        const newId = `canvas_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const now = new Date().toISOString();
+        const newDetail: CanvasDetail = {
+          id: newId,
+          projectId,
+          name: input.name.trim(),
+          description: input.description,
+          templateKey: input.templateKey,
+          revision: 1,
+          createdByUserId: "current_user",
+          createdAt: now,
+          updatedAt: now,
+          document: input.document || {
+            schemaVersion: 1,
+            nodes: [],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+          },
+          canEdit: true,
+        };
+        map[newId] = newDetail;
+        await this.saveSettingsCanvasMap(projectId, map);
+        return {
+          id: newDetail.id,
+          projectId: newDetail.projectId,
+          name: newDetail.name,
+          revision: newDetail.revision,
+          updatedAt: newDetail.updatedAt,
+        };
+      }
+      throw err;
+    }
   }
 
   async updateProjectCanvas(
@@ -887,13 +980,52 @@ export class IdeCrmClient {
     canvasId: string,
     input: CanvasUpdateInput
   ): Promise<{ id: string; revision: number; updatedAt: string }> {
-    return this.request(
-      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(input),
+    try {
+      return await this.request(
+        `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        }
+      );
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        const found = map[canvasId];
+        if (!found) {
+          throw new Error("Quadro Canvas não encontrado.");
+        }
+        if (input.expectedRevision && found.revision !== input.expectedRevision) {
+          const conflictError: any = new Error("Conflito de versão no canvas.");
+          conflictError.status = 409;
+          conflictError.payload = {
+            code: "CANVAS_REVISION_CONFLICT",
+            message: "O quadro foi alterado em outra sessão.",
+            currentRevision: found.revision,
+          };
+          throw conflictError;
+        }
+
+        const now = new Date().toISOString();
+        const updatedRevision = found.revision + 1;
+        const updatedDetail: CanvasDetail = {
+          ...found,
+          name: input.name !== undefined ? input.name.trim() : found.name,
+          description: input.description !== undefined ? input.description : found.description,
+          document: input.document !== undefined ? input.document : found.document,
+          revision: updatedRevision,
+          updatedAt: now,
+        };
+        map[canvasId] = updatedDetail;
+        await this.saveSettingsCanvasMap(projectId, map);
+        return {
+          id: canvasId,
+          revision: updatedRevision,
+          updatedAt: now,
+        };
       }
-    );
+      throw err;
+    }
   }
 
   async duplicateProjectCanvas(
@@ -901,23 +1033,69 @@ export class IdeCrmClient {
     canvasId: string,
     input?: CanvasDuplicateInput
   ): Promise<{ id: string; projectId: string; name: string; revision: number; updatedAt: string }> {
-    return this.request(
-      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}/duplicate`,
-      {
-        method: "POST",
-        body: JSON.stringify(input ?? {}),
-      },
-      true
-    );
+    try {
+      return await this.request(
+        `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}/duplicate`,
+        {
+          method: "POST",
+          body: JSON.stringify(input ?? {}),
+        },
+        true
+      );
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        const original = map[canvasId];
+        if (!original) {
+          throw new Error("Quadro original não encontrado para duplicação.");
+        }
+
+        const newId = `canvas_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const now = new Date().toISOString();
+        const duplicateDetail: CanvasDetail = {
+          ...original,
+          id: newId,
+          name: input?.name ? input.name.trim() : `${original.name} (Cópia)`,
+          revision: 1,
+          createdAt: now,
+          updatedAt: now,
+        };
+        map[newId] = duplicateDetail;
+        await this.saveSettingsCanvasMap(projectId, map);
+        return {
+          id: duplicateDetail.id,
+          projectId: duplicateDetail.projectId,
+          name: duplicateDetail.name,
+          revision: duplicateDetail.revision,
+          updatedAt: duplicateDetail.updatedAt,
+        };
+      }
+      throw err;
+    }
   }
 
   async archiveProjectCanvas(projectId: string, canvasId: string): Promise<{ ok: boolean }> {
-    return this.request(
-      `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
-      {
-        method: "DELETE",
+    try {
+      return await this.request(
+        `/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 502 || err?.message?.includes("404")) {
+        const map = await this.getSettingsCanvasMap(projectId);
+        if (map[canvasId]) {
+          map[canvasId] = {
+            ...map[canvasId],
+            archivedAt: new Date().toISOString(),
+          };
+          await this.saveSettingsCanvasMap(projectId, map);
+        }
+        return { ok: true };
       }
-    );
+      throw err;
+    }
   }
 
   async uploadCanvasAsset(

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { getAllowedGroupTypes, hasTaskDetails, isBelowPageOrModule } from "./task-item-type";
+import { getAllowedGroupTypes, hasTaskDetails, isBelowPageOrModule, inferTaskItemType } from "./task-item-type";
 
 test("tipos de grupo são liberados conforme o nível pai", () => {
   expect(getAllowedGroupTypes(null)).toEqual(["STAGE"]);
@@ -33,3 +33,18 @@ test("título e conclusão mantêm checklist; detalhes tornam subtarefa", () => 
   expect(hasTaskDetails({ description: "Conteúdo" })).toBe(true);
   expect(hasTaskDetails({ priority: "Alta" })).toBe(true);
 });
+
+test("inferTaskItemType infere o tipo corretamente por título ou hierarquia", () => {
+  expect(inferTaskItemType({ title: "ETAPA 05 — GO-LIVE, ENTREGA E LANÇAMENTO" })).toBe("STAGE");
+  expect(inferTaskItemType({ title: "Fase 1: Concepção" })).toBe("STAGE");
+  expect(inferTaskItemType({ title: "M01 - Criação de reserva" })).toBe("MODULE");
+  expect(inferTaskItemType({ title: "Módulo Financeiro" })).toBe("MODULE");
+  expect(inferTaskItemType({ title: "2.1 — PG 01 — HOME" })).toBe("PAGE");
+  expect(inferTaskItemType({ title: "Página de Detalhes" })).toBe("PAGE");
+  expect(inferTaskItemType({ title: "Marco de Entrega V1" })).toBe("MILESTONE");
+  expect(inferTaskItemType({ title: "Seção de Recursos" })).toBe("SECTION");
+  expect(inferTaskItemType({ title: "5.1 — Homologação" })).toBe("TASK");
+  expect(inferTaskItemType({ id: "root-stage", title: "Geral", parentTaskId: null }, [{ id: "c1", parentTaskId: "root-stage" }])).toBe("STAGE");
+  expect(inferTaskItemType({ itemType: "PAGE", title: "ETAPA 01" })).toBe("PAGE"); // respeita itemType explícito
+});
+

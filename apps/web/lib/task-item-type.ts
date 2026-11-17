@@ -150,3 +150,36 @@ export function isTaskContentFilled(description?: string | null): boolean {
   const stripped = description.replace(/<[^>]*>/g, "").trim();
   return stripped.length > 0;
 }
+
+/**
+ * Infere o tipo de item caso não esteja explicitamente definido.
+ * Considera prefixos no título (Etapa, Módulo, Página, Marco, Seção)
+ * ou se é uma tarefa raiz com filhos (Etapa).
+ */
+export function inferTaskItemType(
+  task?: { title?: string; itemType?: string; parentTaskId?: string | null } | null,
+  allTasks?: readonly { id: string; parentTaskId?: string | null; itemType?: string }[]
+): ProjectTaskItemType {
+  if (!task) return "TASK";
+  if (task.itemType && isValidItemType(task.itemType)) {
+    return normalizeItemType(task.itemType);
+  }
+  const title = (task.title || "").trim();
+  if (/(?:^|[\s—\-_])(?:ETAPA|FASE)\b/i.test(title)) return "STAGE";
+  if (/(?:^|[\s—\-_])(?:M[ÓO]DULO|MODULO|M\d+)\b/i.test(title)) return "MODULE";
+  if (/(?:^|[\s—\-_])(?:P[ÁA]GINA|PAGINA|PG\s*\d+|PG|TELA)\b/i.test(title)) return "PAGE";
+  if (/(?:^|[\s—\-_])(?:MARCO|MILESTONE)\b/i.test(title)) return "MILESTONE";
+  if (/(?:^|[\s—\-_])(?:SE[ÇC][ÃA]O|SECAO|SECTION)\b/i.test(title)) return "SECTION";
+
+  if (
+    !task.parentTaskId &&
+    allTasks &&
+    "id" in task &&
+    typeof (task as { id?: unknown }).id === "string" &&
+    allTasks.some((t) => t.parentTaskId === (task as { id: string }).id)
+  ) {
+    return "STAGE";
+  }
+  return "TASK";
+}
+

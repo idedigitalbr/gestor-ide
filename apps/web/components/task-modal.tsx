@@ -73,7 +73,10 @@ import {
   CircleDashed,
   Clock,
   Copy,
+  CornerLeftUp,
+  ExternalLink,
   Flame,
+  Folder,
   Image as ImageIcon,
   Layers,
   MessageSquareMore,
@@ -92,6 +95,16 @@ import {
 } from "lucide-react";
 import { useMobileBackButton } from "@/lib/use-mobile-back-button";
 import { cn } from "@/lib/utils";
+import { TaskItemTypeSelector, TaskItemTypeIcon } from "@/components/task-item-type-selector";
+import {
+  getItemTypeDefinition,
+  normalizeItemType,
+  isValidItemType,
+  inferTaskItemType,
+  type ProjectTaskItemType,
+} from "@/lib/task-item-type";
+import { canReparentTask } from "@/lib/task-hierarchy";
+import { getLocalTaskPresentation, setLocalTaskPresentation } from "@/lib/gestor-cache";
 
 export interface TaskModalContentHandle {
   requestClose: () => void;
@@ -101,6 +114,8 @@ interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   task: Task | null;
+  tasks?: Task[];
+  onNavigateToTask?: (taskId: string) => void;
   syncError?: string | null;
   remoteConflictWarning?: boolean;
   onReloadRemote?: () => void;
@@ -125,6 +140,8 @@ interface TaskModalProps {
 
 interface TaskModalContentProps {
   task: Task | null;
+  tasks?: Task[];
+  onNavigateToTask?: (taskId: string) => void;
   syncError?: string | null;
   remoteConflictWarning?: boolean;
   onReloadRemote?: () => void;
@@ -326,6 +343,8 @@ const TaskModalContent = forwardRef<
     onDelete,
     onUpdateSubtasks,
     onAddComment,
+    tasks = [],
+    onNavigateToTask,
   },
   ref
 ) {
@@ -373,6 +392,67 @@ const TaskModalContent = forwardRef<
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
 
   const [estimate, setEstimate] = useState(task?.estimate ?? "");
+
+  // Tipo de Item (ETAPA | MODULO | PAGINA | TAREFA etc.)
+  const initialItemType = useMemo<ProjectTaskItemType>(() => {
+    if (task?.itemType && isValidItemType(task.itemType)) {
+      return normalizeItemType(task.itemType);
+    }
+    if (task?.id) {
+      const cached = getLocalTaskPresentation(task.id);
+      if (cached?.itemType && isValidItemType(cached.itemType)) {
+        return normalizeItemType(cached.itemType);
+      }
+    }
+    if (task) {
+      return inferTaskItemType(task, tasks);
+    }
+    return "TASK";
+  }, [task, tasks]);
+
+  const [itemType, setItemType] = useState<ProjectTaskItemType>(initialItemType);
+
+  // Hierarquia: Tarefa acima (parentTaskId)
+  const [parentTaskId, setParentTaskId] = useState<string | undefined>(
+    task?.parentTaskId ?? undefined
+  );
+
+  const parentTask = useMemo(() => {
+    if (!parentTaskId || !tasks || tasks.length === 0) return null;
+    return tasks.find((t) => t.id === parentTaskId) ?? null;
+  }, [parentTaskId, tasks]);
+
+  const availableParentCandidates = useMemo(() => {
+    if (!tasks || tasks.length === 0) return [];
+    return tasks.filter((candidate) => {
+      if (task && candidate.id === task.id) return false;
+      if (task && !canReparentTask(tasks, task.id, candidate.id)) return false;
+      if (task?.projectId && candidate.projectId && candidate.projectId !== task.projectId) {
+        return false;
+      }
+      return true;
+    });
+  }, [tasks, task]);
+
+  // Sugestões de etiquetas existentes no projeto
+  const allProjectTags = useMemo(() => {
+    if (!tasks || tasks.length === 0) return [];
+    const set = new Set<string>();
+    for (const t of tasks) {
+      if (t.tags && Array.isArray(t.tags)) {
+        for (const tag of t.tags) {
+          if (tag && tag.trim()) set.add(tag.trim());
+        }
+      } else if (t.tag && t.tag.trim()) {
+        set.add(t.tag.trim());
+      }
+    }
+    return Array.from(set);
+  }, [tasks]);
+
+  const availableSuggestedTags = useMemo(() => {
+    return allProjectTags.filter((t) => !tags.includes(t));
+  }, [allProjectTags, tags]);
 
   // Capa & Ícone estilo Notion
   // Toda tarefa vem sem ícone e sem capa por padrão
@@ -479,6 +559,8 @@ const TaskModalContent = forwardRef<
       assigneeAvatar,
       tags,
       tag: tags[0] ?? task.tag,
+      itemType,
+      parentTaskId: parentTaskId || undefined,
       estimate,
       coverUrl,
       icon,
@@ -488,6 +570,30 @@ const TaskModalContent = forwardRef<
       updatedAt: new Date().toISOString(),
     };
     onUpdateTask?.(updated);
+  }
+
+  function handleSelectItemType(nextType: ProjectTaskItemType) {
+    const norm = normalizeItemType(nextType);
+    setItemType(norm);
+    syncTaskField({ itemType: norm });
+    if (task?.id) {
+      setLocalTaskPresentation(task.id, { itemType: norm });
+    }
+  }
+
+  function handleSelectParentTask(newParentId: string | null | undefined) {
+    const val = newParentId || undefined;
+    setParentTaskId(val);
+    syncTaskField({ parentTaskId: val });
+  }
+
+  function handleAddSuggestedTag(tagToAdd: string) {
+    if (!tags.includes(tagToAdd)) {
+      const next = [...tags, tagToAdd];
+      setTags(next);
+      syncTaskField({ tags: next, tag: next[0] });
+    }
+    setIsTagPopoverOpen(false);
   }
 
   function buildNewTaskPayload() {
@@ -506,6 +612,8 @@ const TaskModalContent = forwardRef<
       assigneeAvatar: assigneeAvatar || undefined,
       tags,
       tag: tags[0],
+      itemType,
+      parentTaskId: parentTaskId || undefined,
       estimate,
       coverUrl,
       icon,
@@ -1526,13 +1634,34 @@ const TaskModalContent = forwardRef<
                 )}
               />
 
-              {/* 4. Projeto / Módulo Pill (somente leitura) */}
+              {/* 4. Tipo de tarefa Pill */}
+              <TaskItemTypeSelector
+                value={itemType}
+                onChange={handleSelectItemType}
+                variant="badge"
+                className="h-[26px] text-[11.5px] cursor-pointer shrink-0"
+              />
+
+              {/* 5. Tarefa acima Pill (se houver pai) */}
+              {parentTask && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToTask?.(parentTask.id)}
+                  title={`Tarefa acima: ${parentTask.title}. Clique para abrir.`}
+                  className="h-[26px] max-w-[170px] rounded-full border border-border bg-secondary hover:bg-accent px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-secondary-foreground transition-all cursor-pointer outline-none shrink-0"
+                >
+                  <CornerLeftUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">{parentTask.title}</span>
+                </button>
+              )}
+
+              {/* 6. Projeto Pill */}
               <span
                 title={projectName || "Projeto atual"}
                 className="h-[26px] rounded-full border border-primary/30 bg-primary/10 px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-primary shrink-0"
               >
-                <Layers className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate max-w-[150px]">
+                <Folder className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate max-w-[140px]">
                   {projectName || "Projeto atual"}
                 </span>
               </span>
@@ -1600,8 +1729,8 @@ const TaskModalContent = forwardRef<
                 </button>
               </div>
 
-              {/* Row 1: Status | Prioridade | Prazo | Projeto / Módulo */}
-              <div className="grid grid-cols-2 sm:grid-cols-[1.05fr_0.95fr_1fr_1.2fr] gap-2">
+              {/* Row 1: Status | Prioridade | Prazo | Tipo de tarefa */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {/* Card 1: Status */}
                 <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
@@ -1736,27 +1865,162 @@ const TaskModalContent = forwardRef<
                   </div>
                 </div>
 
-                {/* Card 4: Projeto / Módulo */}
+                {/* Card 4: Tipo de tarefa */}
                 <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                    <Layers className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span>Projeto / Módulo</span>
+                    <TaskItemTypeIcon type={itemType} size={14} className="text-muted-foreground" />
+                    <span>Tipo de tarefa</span>
+                  </div>
+                  <div className="mt-1.5">
+                    <TaskItemTypeSelector
+                      value={itemType}
+                      onChange={handleSelectItemType}
+                      variant="badge"
+                      className="w-full h-[26px] justify-between px-2.5 text-[11.5px] cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Tarefa acima (Hierarquia) | Projeto | Responsável | Estimativa */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Card 5: Tarefa acima (Hierarquia) */}
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <CornerLeftUp className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Tarefa acima</span>
+                  </div>
+                  <div className="mt-1.5">
+                    {parentTask ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            title={`Tarefa acima: ${parentTask.title}`}
+                            className="w-full h-[26px] rounded-full border border-border bg-secondary hover:bg-accent px-2.5 flex items-center justify-between text-[11.5px] font-semibold text-secondary-foreground transition-all cursor-pointer outline-none"
+                          >
+                            <span className="flex items-center gap-1.5 truncate">
+                              <TaskItemTypeIcon
+                                type={parentTask.itemType || inferTaskItemType(parentTask, tasks)}
+                                size={13}
+                              />
+                              <span className="truncate">{parentTask.title}</span>
+                            </span>
+                            <ChevronDown className="w-3.5 h-3.5 opacity-70 shrink-0 ml-1" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-64 max-h-72 overflow-y-auto bg-popover border-border text-popover-foreground p-1">
+                          <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase px-2 py-1">
+                            Hierarquia
+                          </DropdownMenuLabel>
+                          {onNavigateToTask && (
+                            <DropdownMenuItem
+                              onClick={() => onNavigateToTask(parentTask.id)}
+                              className="text-xs gap-2 cursor-pointer text-primary focus:text-primary font-medium"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Abrir tarefa acima</span>
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator className="my-1" />
+                          <DropdownMenuItem
+                            onClick={() => handleSelectParentTask(null)}
+                            className="text-xs gap-2 cursor-pointer text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                            <span>Tornar nível superior (remover pai)</span>
+                          </DropdownMenuItem>
+                          {availableParentCandidates.length > 0 && (
+                            <>
+                              <DropdownMenuSeparator className="my-1" />
+                              <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase px-2 py-1">
+                                Trocar tarefa acima
+                              </DropdownMenuLabel>
+                              {availableParentCandidates.map((candidate) => {
+                                const candidateType = candidate.itemType || inferTaskItemType(candidate, tasks);
+                                const isCurrent = candidate.id === parentTaskId;
+                                return (
+                                  <DropdownMenuItem
+                                    key={candidate.id}
+                                    onClick={() => handleSelectParentTask(candidate.id)}
+                                    className={cn(
+                                      "text-xs justify-between cursor-pointer rounded-md px-2 py-1.5",
+                                      isCurrent ? "bg-accent font-semibold" : "hover:bg-accent/60"
+                                    )}
+                                  >
+                                    <span className="flex items-center gap-2 truncate">
+                                      <TaskItemTypeIcon type={candidateType} size={13} />
+                                      <span className="truncate">{candidate.title}</span>
+                                    </span>
+                                    {isCurrent && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                                  </DropdownMenuItem>
+                                );
+                              })}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            title="Definir tarefa acima na hierarquia"
+                            className="w-full h-[26px] rounded-full border border-dashed border-border bg-background hover:bg-accent/50 px-2.5 flex items-center justify-between text-[11.5px] font-medium text-muted-foreground transition-all cursor-pointer outline-none"
+                          >
+                            <span className="flex items-center gap-1.5 truncate">
+                              <CornerLeftUp className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                              <span className="truncate">Nenhuma (Raiz)</span>
+                            </span>
+                            <ChevronDown className="w-3.5 h-3.5 opacity-50 shrink-0 ml-1" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-64 max-h-72 overflow-y-auto bg-popover border-border text-popover-foreground p-1">
+                          <DropdownMenuLabel className="text-[11px] font-semibold text-muted-foreground uppercase px-2 py-1">
+                            Vincular a uma tarefa acima
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator className="my-1" />
+                          {availableParentCandidates.length === 0 ? (
+                            <div className="p-2 text-xs text-muted-foreground text-center">Nenhuma tarefa disponível</div>
+                          ) : (
+                            availableParentCandidates.map((candidate) => {
+                              const candidateType = candidate.itemType || inferTaskItemType(candidate, tasks);
+                              return (
+                                <DropdownMenuItem
+                                  key={candidate.id}
+                                  onClick={() => handleSelectParentTask(candidate.id)}
+                                  className="text-xs flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-accent/60"
+                                >
+                                  <TaskItemTypeIcon type={candidateType} size={13} />
+                                  <span className="truncate">{candidate.title}</span>
+                                </DropdownMenuItem>
+                              );
+                            })
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card 6: Projeto */}
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <Folder className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Projeto</span>
                   </div>
                   <div className="mt-1.5">
                     <span
                       title={projectName || "Projeto atual"}
                       className="h-[26px] max-w-full rounded-full border border-primary/30 bg-primary/10 px-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-primary truncate"
                     >
-                      <Layers className="w-3.5 h-3.5 shrink-0" />
+                      <Folder className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">{projectName || "Projeto atual"}</span>
                     </span>
                   </div>
                 </div>
-              </div>
 
-              {/* Row 2: Responsável | Etiquetas | Estimativa */}
-              <div className="grid grid-cols-1 sm:grid-cols-[1.18fr_1.68fr_1fr] gap-2">
-                {/* Card 5: Responsável */}
+                {/* Card 7: Responsável */}
                 <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                     <User className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1800,72 +2064,7 @@ const TaskModalContent = forwardRef<
                   </div>
                 </div>
 
-                {/* Card 6: Etiquetas */}
-                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                    <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span>Etiquetas</span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    {tags.map((t, idx) => (
-                      <span
-                        key={t}
-                        className={cn(
-                          "h-[25px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-medium",
-                          getTagChipStyle(t, idx)
-                        )}
-                      >
-                        <span>{t}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTag(t)}
-                          aria-label={`Remover etiqueta ${t}`}
-                          className="opacity-80 hover:opacity-100 cursor-pointer"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-
-                    <Popover
-                      open={isTagPopoverOpen}
-                      onOpenChange={setIsTagPopoverOpen}
-                    >
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Adicionar etiqueta"
-                          className="h-[25px] w-[25px] rounded-[7px] border border-border bg-secondary inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="start"
-                        className="w-48 p-2.5 bg-popover border-border text-popover-foreground"
-                      >
-                        <form onSubmit={handleAddTag} className="flex gap-1.5">
-                          <Input
-                            autoFocus
-                            placeholder="Nova etiqueta..."
-                            value={newTagInput}
-                            onChange={(e) => setNewTagInput(e.target.value)}
-                            className="h-7 text-xs bg-background border-border text-foreground"
-                          />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            className="h-7 px-2 text-xs cursor-pointer"
-                          >
-                            OK
-                          </Button>
-                        </form>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                {/* Card 7: Estimativa */}
+                {/* Card 8: Estimativa */}
                 <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
                   <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                     <Clock className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1897,6 +2096,99 @@ const TaskModalContent = forwardRef<
                           }}
                           className="h-7 text-xs bg-background border-border text-foreground"
                         />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Etiquetas */}
+              <div className="grid grid-cols-1 gap-2">
+                {/* Card 9: Etiquetas */}
+                <div className="rounded-[11px] border border-border bg-background/70 px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                      <Tag className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span>Etiquetas</span>
+                    </div>
+                    <span className="text-[10.5px] text-muted-foreground/70">
+                      Sincronizado com CRM
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {tags.map((t, idx) => (
+                      <span
+                        key={t}
+                        className={cn(
+                          "h-[25px] rounded-[7px] border px-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-medium",
+                          getTagChipStyle(t, idx)
+                        )}
+                      >
+                        <span>{t}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTag(t)}
+                          aria-label={`Remover etiqueta ${t}`}
+                          className="opacity-80 hover:opacity-100 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+
+                    <Popover
+                      open={isTagPopoverOpen}
+                      onOpenChange={setIsTagPopoverOpen}
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Adicionar etiqueta"
+                          className="h-[25px] px-2 rounded-[7px] border border-border bg-secondary inline-flex items-center gap-1 text-[11.5px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Adicionar</span>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="w-56 p-2.5 bg-popover border-border text-popover-foreground space-y-2"
+                      >
+                        <form onSubmit={handleAddTag} className="flex gap-1.5">
+                          <Input
+                            autoFocus
+                            placeholder="Nova etiqueta..."
+                            value={newTagInput}
+                            onChange={(e) => setNewTagInput(e.target.value)}
+                            className="h-7 text-xs bg-background border-border text-foreground"
+                          />
+                          <Button
+                            type="submit"
+                            size="sm"
+                            className="h-7 px-2 text-xs cursor-pointer"
+                          >
+                            OK
+                          </Button>
+                        </form>
+                        {availableSuggestedTags.length > 0 && (
+                          <div className="space-y-1.5 pt-1.5 border-t border-border">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                              Sugeridas no projeto
+                            </span>
+                            <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                              {availableSuggestedTags.map((sugTag) => (
+                                <button
+                                  key={sugTag}
+                                  type="button"
+                                  onClick={() => handleAddSuggestedTag(sugTag)}
+                                  className="h-5 px-1.5 rounded text-[11px] bg-secondary hover:bg-accent text-secondary-foreground transition-colors cursor-pointer"
+                                >
+                                  + {sugTag}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </PopoverContent>
                     </Popover>
                   </div>
@@ -2690,6 +2982,8 @@ export function TaskModal(props: TaskModalProps) {
             ref={contentRef}
             onClose={props.onClose}
             task={props.task}
+            tasks={props.tasks}
+            onNavigateToTask={props.onNavigateToTask}
             syncError={props.syncError}
             remoteConflictWarning={props.remoteConflictWarning}
             onReloadRemote={props.onReloadRemote}
