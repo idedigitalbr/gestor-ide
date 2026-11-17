@@ -106,6 +106,10 @@ import { TaskTableSkeleton, TaskKanbanSkeleton } from "@/components/task-skeleto
 import { ProjectViewToolbar } from "@/components/project-view-toolbar";
 import { cn } from "@/lib/utils";
 import { useCalendarDialog } from "@/components/calendar-dialog-context";
+import { MobileFab } from "@/components/mobile-fab";
+import { MobileBottomNav, type MobileTab } from "@/components/mobile-bottom-nav";
+import { MobileMenuDrawer } from "@/components/mobile-menu-drawer";
+import { setGlobalFallbackBackHandler } from "@/lib/use-mobile-back-button";
 
 function getHighestCodeNumber(list: Task[]): number {
   let max = 100;
@@ -596,6 +600,69 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   const [hasModalRemoteConflict, setHasModalRemoteConflict] = useState(false);
   const [isProjectMembersOpen, setIsProjectMembersOpen] = useState(false);
   const [managementForMembersDialog, setManagementForMembersDialog] = useState<CrmProjectManagement | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setGlobalFallbackBackHandler(() => {
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+        return true;
+      }
+      if (isProjectMembersOpen) {
+        setIsProjectMembersOpen(false);
+        return true;
+      }
+      if (isNewProjectOpen) {
+        setIsNewProjectOpen(false);
+        return true;
+      }
+      if (isNewManagementOpen) {
+        setIsNewManagementOpen(false);
+        return true;
+      }
+      if (isFieldsModalOpen) {
+        setIsFieldsModalOpen(false);
+        return true;
+      }
+      if (isCustomViewModalOpen) {
+        setIsCustomViewModalOpen(false);
+        return true;
+      }
+      if (isCrmModalOpen) {
+        setIsCrmModalOpen(false);
+        return true;
+      }
+      if (selectedProjectId) {
+        handleSelectProject(null);
+        return true;
+      }
+      if (selectedManagementId) {
+        handleSelectManagement(null);
+        return true;
+      }
+      if (isSecondaryPage) {
+        router.push("/");
+        return true;
+      }
+      return false;
+    });
+
+    return () => {
+      setGlobalFallbackBackHandler(null);
+    };
+  }, [
+    isMobileMenuOpen,
+    isProjectMembersOpen,
+    isNewProjectOpen,
+    isNewManagementOpen,
+    isFieldsModalOpen,
+    isCustomViewModalOpen,
+    isCrmModalOpen,
+    selectedProjectId,
+    selectedManagementId,
+    isSecondaryPage,
+    router,
+  ]);
   const isModalDirtyRef = useRef(false);
   const isModalOpenRef = useRef(isModalOpen);
   useEffect(() => {
@@ -2367,7 +2434,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-full w-full overflow-hidden bg-background text-foreground">
       {/* Main Content Area (Sidebar desativada conforme solicitado) */}
-      <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 h-full overflow-hidden pb-16 md:pb-0">
         <AppHeader
           isProjectPage={isSecondaryPage}
           isCalendarPage={isCalendarPage}
@@ -2822,6 +2889,53 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Botão Flutuante Móvel (+ Nova Tarefa) Estilo Notion / ClickUp */}
+      <MobileFab
+        onClick={() => handleOpenNewTask("PENDENTE")}
+        disabled={!canWriteProjects}
+        hasBottomNav={true}
+      />
+
+      {/* Barra de Navegação Inferior Móvel Estilo Notion / ClickUp */}
+      <MobileBottomNav
+        activeTab={
+          isCalendarPage
+            ? "calendar"
+            : selectedProjectId
+            ? "tasks"
+            : selectedManagementId
+            ? "projects"
+            : "home"
+        }
+        onSelectTab={(tab) => {
+          if (tab === "home") {
+            handleSelectProject(null);
+            handleSelectManagement(null);
+            if (isSecondaryPage) router.push("/");
+          } else if (tab === "projects") {
+            handleSelectProject(null);
+            if (isSecondaryPage) router.push("/");
+          } else if (tab === "tasks") {
+            if (!selectedProjectId && effectiveProjects.length > 0) {
+              handleSelectProject(effectiveProjects[0].id);
+            }
+            if (isSecondaryPage) router.push("/");
+          } else if (tab === "calendar") {
+            router.push("/projects/calendar");
+          } else if (tab === "menu") {
+            setIsMobileMenuOpen(true);
+          }
+        }}
+      />
+
+      {/* Gaveta Móvel de Preferências e Menu */}
+      <MobileMenuDrawer
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        currentUser={currentUser}
+        onLogout={() => void handleDisconnectCrm()}
+      />
     </div>
   );
 }

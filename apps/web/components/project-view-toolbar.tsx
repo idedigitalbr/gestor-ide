@@ -684,13 +684,13 @@ export function ProjectViewToolbar({
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center justify-center size-7 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 relative focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    "flex items-center justify-center size-9 sm:size-7 rounded-lg sm:rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 relative focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                     isSortActive && "text-primary bg-primary/10 ring-1 ring-primary/40 font-semibold"
                   )}
                   title={`Ordenar tarefas (${TASK_SORT_LABELS[taskSort] || "Padrão"})`}
                   aria-label="Ordenar tarefas"
                 >
-                  <ArrowUpDown className="size-3.5" />
+                  <ArrowUpDown className="size-4 sm:size-3.5" />
                   {isSortActive && (
                     <span className="absolute top-1 right-1 size-1.5 rounded-full bg-primary" />
                   )}
@@ -728,11 +728,11 @@ export function ProjectViewToolbar({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex items-center justify-center size-9 sm:size-7 rounded-lg sm:rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 title="Ações rápidas e automações"
                 aria-label="Ações rápidas e automações"
               >
-                <Zap className="size-3.5" />
+                <Zap className="size-4 sm:size-3.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 text-xs">
@@ -785,11 +785,11 @@ export function ProjectViewToolbar({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex items-center justify-center size-9 sm:size-7 rounded-lg sm:rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 title="Piloto IA (Assistente Inteligente)"
                 aria-label="Piloto IA"
               >
-                <Wand2 className="size-3.5" />
+                <Wand2 className="size-4 sm:size-3.5" />
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-3 shadow-2xl space-y-2.5">
@@ -832,13 +832,13 @@ export function ProjectViewToolbar({
               type="button"
               onClick={() => setIsSearchOpen(true)}
               className={cn(
-                "flex items-center justify-center size-7 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "flex items-center justify-center size-9 sm:size-7 rounded-lg sm:rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 Boolean(searchQuery) && "text-primary bg-primary/10 ring-1 ring-primary/40 font-semibold"
               )}
               title="Buscar tarefas no projeto"
               aria-label="Buscar tarefas"
             >
-              <Search className="size-3.5" />
+              <Search className="size-4 sm:size-3.5" />
             </button>
           )}
 
@@ -847,11 +847,11 @@ export function ProjectViewToolbar({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="flex items-center justify-center size-9 sm:size-7 rounded-lg sm:rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 title="Configurações da visualização e campos"
                 aria-label="Configurações da visualização"
               >
-                <SlidersHorizontal className="size-3.5" />
+                <SlidersHorizontal className="size-4 sm:size-3.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 text-xs">

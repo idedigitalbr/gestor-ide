@@ -179,7 +179,7 @@ export function KanbanCard({
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
-                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-surface-hover opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer rounded"
+                className="min-h-[36px] min-w-[36px] sm:h-6 sm:w-6 p-0 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-surface-hover opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer rounded"
                 aria-label={`Menu de ações rápidas da tarefa ${task.title}`}
                 title="Ações rápidas"
               >
@@ -383,7 +383,7 @@ export function KanbanCard({
                 moveLeft();
               }}
               title={`Voltar para ${STATUS_ORDER[currentIndex - 1]}`}
-              className="p-1 rounded hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center justify-center p-1 rounded hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               aria-label={`Mover para ${STATUS_ORDER[currentIndex - 1]}`}
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -398,7 +398,7 @@ export function KanbanCard({
                 moveRight();
               }}
               title={`Avançar para ${STATUS_ORDER[currentIndex + 1]}`}
-              className="p-1 rounded hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 flex items-center justify-center p-1 rounded hover:bg-surface-hover text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               aria-label={`Mover para ${STATUS_ORDER[currentIndex + 1]}`}
             >
               <ChevronRight className="w-3.5 h-3.5" />

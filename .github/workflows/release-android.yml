@@ -70,6 +70,71 @@ jobs:
           cd apps/desktop
           bun run tauri android init --ci --skip-targets-install
 
+      - name: Patch MainActivity for Android Hardware & Gesture Back Button
+        shell: bash
+        run: |
+          MAIN_ACTIVITY="apps/desktop/src-tauri/gen/android/app/src/main/java/digital/suporteide/gestor/MainActivity.kt"
+          if [ -f "$MAIN_ACTIVITY" ]; then
+            echo "Aprimorando MainActivity.kt com interceptador de retorno do Android..."
+            cat << 'EOF' > "$MAIN_ACTIVITY"
+          package digital.suporteide.gestor
+
+          import android.annotation.SuppressLint
+          import android.os.Bundle
+          import android.view.KeyEvent
+          import android.webkit.WebView
+          import app.tauri.plugin.TauriActivity
+
+          class MainActivity : TauriActivity() {
+              private var webViewInstance: WebView? = null
+
+              override fun onWebViewCreate(webView: WebView) {
+                  webViewInstance = webView
+                  super.onWebViewCreate(webView)
+              }
+
+              @SuppressLint("MissingSuperCall")
+              @Deprecated("Deprecated in Java")
+              override fun onBackPressed() {
+                  handleBackAction()
+              }
+
+              override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+                  if (keyCode == KeyEvent.KEYCODE_BACK) {
+                      handleBackAction()
+                      return true
+                  }
+                  return super.onKeyDown(keyCode, event)
+              }
+
+              private fun handleBackAction() {
+                  val wv = webViewInstance
+                  if (wv != null) {
+                      wv.evaluateJavascript(
+                          "(function() { try { if (window.__handleAndroidBack && window.__handleAndroidBack()) { return true; } } catch (e) {} return false; })()"
+                      ) { result ->
+                          val handled = result == "true" || result == "\"true\""
+                          if (!handled) {
+                              runOnUiThread {
+                                  if (wv.canGoBack()) {
+                                      wv.goBack()
+                                  } else {
+                                      finish()
+                                  }
+                              }
+                          }
+                      }
+                  } else {
+                      finish()
+                  }
+              }
+          }
+          EOF
+            echo "MainActivity.kt atualizado com sucesso!"
+          else
+            echo "::warning::MainActivity.kt nao encontrado em: $MAIN_ACTIVITY"
+          fi
+
       - name: Build Android APK
         shell: bash
         run: |

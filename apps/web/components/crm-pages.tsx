@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -19,8 +19,6 @@ import type {
   CrmCalendarEvent,
   CrmCalendarEventType,
   CrmCalendarTaskItem,
-  CrmProject,
-  CrmProjectsDashboard,
 } from "@gestor-ide/core";
 import { ideCrmClient } from "@gestor-ide/sdk";
 import { Button } from "@/components/ui/button";
@@ -54,6 +52,7 @@ import {
 } from "@/lib/calendar-date";
 import { CALENDAR_EVENT_TYPE_LABELS } from "@/lib/calendar-labels";
 import { stripManagementPrefix, stripProjectPrefix } from "@/lib/list-view-options";
+import { useProjectsDashboard, useCalendarEvents, useProjects } from "@/lib/query";
 
 function Shell({
   title,
@@ -376,39 +375,7 @@ export function AccountPage() {
 }
 
 export function DashboardPage() {
-  const [data, setData] = useState<CrmProjectsDashboard | null>(null);
-  const [error, setError] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const loadData = useCallback(async () => {
-    setIsRefreshing(true);
-    setError("");
-    try {
-      const r = await ideCrmClient.getProjectsDashboard();
-      setData(r.dashboard);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar indicadores.");
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void ideCrmClient
-      .getProjectsDashboard()
-      .then((r) => {
-        if (!cancelled) setData(r.dashboard);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Erro ao carregar indicadores.");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { dashboard: data, isLoading, isFetching, error, refetch } = useProjectsDashboard();
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 animate-in fade-in duration-150">
@@ -430,18 +397,18 @@ export function DashboardPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => void loadData()}
-          disabled={isRefreshing}
+          onClick={() => void refetch()}
+          disabled={isFetching}
           className="gap-2 cursor-pointer text-xs"
         >
-          <RefreshCw className={isRefreshing ? "size-3.5 animate-spin" : "size-3.5"} />
-          <span>{isRefreshing ? "Atualizando..." : "Atualizar dados"}</span>
+          <RefreshCw className={isFetching ? "size-3.5 animate-spin" : "size-3.5"} />
+          <span>{isFetching ? "Atualizando..." : "Atualizar dados"}</span>
         </Button>
       </div>
 
       <Feedback message={error} />
 
-      {!data && !error && (
+      {!data && isLoading && (
         <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
           Carregando indicadores do painel...
         </div>
@@ -593,15 +560,9 @@ export function CalendarPage() {
   const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [projectFilter, setProjectFilter] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<CalendarTypeFilter>("ALL");
-  const [projects, setProjects] = useState<CrmProject[]>([]);
-  const [rawEvents, setRawEvents] = useState<CrmCalendarEvent[]>([]);
-  const [rawTasks, setRawTasks] = useState<CrmCalendarTaskItem[]>([]);
+  const { projects } = useProjects();
   const [selectedEvent, setSelectedEvent] = useState<CrmCalendarEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<CrmCalendarTaskItem | null>(null);
-  const [error, setError] = useState("");
-  const [fallback, setFallback] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const requestVersion = useRef(0);
   const {
     open: dialog,
     setOpen: setDialog,
@@ -615,91 +576,24 @@ export function CalendarPage() {
     openCreateDialog,
   } = useCalendarDialog();
 
-  useEffect(() => {
-    let cancelled = false;
-    void ideCrmClient
-      .listProjects()
-      .then((res) => {
-        if (!cancelled) setProjects(res.projects ?? []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const queryRange = useMemo(
     () => computeCalendarQueryRange(date, viewMode),
     [date, viewMode]
   );
 
-  const load = useCallback(async () => {
-    const version = ++requestVersion.current;
-    setLoading(true);
-    setError("");
-    setFallback(false);
-    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-
-    try {
-      const r = await ideCrmClient.getCalendar(
-        queryRange.start.toISOString(),
-        queryRange.end.toISOString(),
-        projectFilter || null
-      );
-      if (version !== requestVersion.current) return;
-      setRawEvents(r.events ?? []);
-      setRawTasks(r.tasks ?? []);
-    } catch {
-      if (version !== requestVersion.current) return;
-      try {
-        const result = await ideCrmClient.listCalendarFallbackTasks(projectFilter || null);
-        if (version !== requestVersion.current) return;
-        setRawEvents([]);
-        setRawTasks(
-          result.tasks
-            .filter((task) => (task.dueDate ?? task.startDate)?.slice(0, 7) === month)
-            .map((task) => ({
-              id: task.id,
-              projectId: task.projectId,
-              title: task.title,
-              description: task.description ?? null,
-              status: task.status,
-              priority: task.priority,
-              startDate: task.startDate ?? null,
-              dueDate: task.dueDate ?? null,
-              project: task.project ?? null,
-              assignees: task.assignees?.flatMap((a) =>
-                a.user
-                  ? [
-                      {
-                        user: {
-                          id: a.user.id,
-                          name: a.user.name,
-                          avatarUrl: a.user.avatarUrl,
-                        },
-                      },
-                    ]
-                  : []
-              ),
-            }))
-        );
-        setFallback(true);
-      } catch (reason) {
-        if (version !== requestVersion.current) return;
-        setRawEvents([]);
-        setRawTasks([]);
-        setError(
-          reason instanceof Error ? reason.message : "Não foi possível carregar as tarefas."
-        );
-      }
-    } finally {
-      if (version === requestVersion.current) setLoading(false);
-    }
-  }, [date, queryRange, projectFilter]);
-
-  useEffect(() => {
-    void Promise.resolve().then(load);
-  }, [load]);
+  const {
+    events: rawEvents,
+    tasks: rawTasks,
+    isFallback: fallback,
+    isLoading: loading,
+    isFetching,
+    error,
+    refetch,
+  } = useCalendarEvents({
+    start: queryRange.start.toISOString(),
+    end: queryRange.end.toISOString(),
+    projectId: projectFilter || null,
+  });
 
   useEffect(() => {
     setCanCreate(!loading && !fallback && !error);
@@ -821,10 +715,10 @@ export function CalendarPage() {
             variant="outline"
             size="icon"
             aria-label="Atualizar agenda"
-            disabled={loading}
-            onClick={() => void load()}
+            disabled={isFetching}
+            onClick={() => void refetch()}
           >
-            <RefreshCw className={loading ? "animate-spin" : undefined} />
+            <RefreshCw className={isFetching ? "animate-spin" : undefined} />
           </Button>
         </div>
 
@@ -898,7 +792,7 @@ export function CalendarPage() {
           <button
             type="button"
             className="text-primary underline"
-            onClick={() => void load()}
+            onClick={() => void refetch()}
           >
             Tentar novamente
           </button>
@@ -975,7 +869,9 @@ export function CalendarPage() {
         projects={projects}
         open={dialog}
         onOpenChange={setDialog}
-        onSaved={load}
+        onSaved={async () => {
+          await refetch();
+        }}
       />
     </div>
   );

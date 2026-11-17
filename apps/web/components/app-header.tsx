@@ -1688,7 +1688,7 @@ export function AppHeader({
           </div> : <Button size="sm" className="h-8 gap-1.5" disabled={!canWrite} title={canWrite ? undefined : "Sem permissão de escrita no IDE CRM"} onClick={selectedManagementId ? onOpenNewProject : onOpenNewManagement}><Plus className="w-3.5 h-3.5" /> {selectedManagementId ? "Projeto" : "Gestão"}</Button>) : isCalendarPage ? (
             <Button size="sm" className="h-8 gap-1.5" onClick={onOpenNewEvent} disabled={!canCreateCalendarEvent}><Plus className="w-3.5 h-3.5" /> Evento</Button>
           ) : null}
-          <SyncStatusIndicator className="hidden sm:inline-flex" />
+          <SyncStatusIndicator className="inline-flex" />
           <HeaderNotifications
             connected={Boolean(currentUser)}
             currentUser={currentUser}
@@ -1701,7 +1701,7 @@ export function AppHeader({
           {/* Avatar do Usuário com Indicador Online Verde */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 shrink-0 rounded-full" aria-label="Abrir menu da conta">
+              <Button variant="ghost" size="icon" className="relative size-9 sm:h-8 sm:w-8 shrink-0 rounded-full" aria-label="Abrir menu da conta">
               <span className="h-7 w-7 rounded-full bg-primary border border-border/80 flex items-center justify-center text-[10px] font-bold text-primary-foreground overflow-hidden shadow-xs">
                 <MemberAvatarContent
                   key={currentUser?.avatarUrl ?? "no-avatar"}

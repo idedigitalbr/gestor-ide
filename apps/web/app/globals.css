@@ -282,4 +282,60 @@ html[data-colored-chrome="true"] .planw-app-header {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Ocultar barra de rolagem mantendo a navegação por toque */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ========================================================================= */
+/* OTIMIZAÇÕES MOBILE & DISPOSITIVOS DE TOQUE (EXPERIÊNCIA NOTION / CLICKUP) */
+/* ========================================================================= */
+@media (hover: none) or (pointer: coarse) {
+  /* Evitar duplo toque com atraso e permitir toques rápidos */
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  /*
+   * Em celulares e telas de toque, botões que dependiam de hover do mouse
+   * ficavam totalmente invisíveis (opacity-0). Tornamos todos visíveis
+   * e clicáveis com áreas generosas de toque para os dedos.
+   */
+  .opacity-0.group-hover\/notion-top\:opacity-100,
+  .opacity-0.group-hover\/row\:opacity-100,
+  .opacity-0.group-hover\/mitem\:opacity-100,
+  .opacity-0.group-hover\/mchild\:opacity-100,
+  .opacity-0.group-hover\/subrow\:opacity-100,
+  .opacity-0.group-hover\/title\:opacity-100,
+  .opacity-0.group-hover\/desc\:opacity-100,
+  .opacity-0.group-hover\/due\:opacity-100,
+  .opacity-0.group-hover\/gdrive\:opacity-100,
+  .opacity-0.group-hover\/chatgpt\:opacity-100,
+  .opacity-0.group-hover\/customview\:opacity-100,
+  .opacity-0.group-hover\/freeheader\:opacity-100,
+  .opacity-0.group-hover\/groupheader\:opacity-100,
+  .opacity-0.group-hover\:opacity-100,
+  .opacity-0.sm\:group-hover\/row\:opacity-100,
+  .opacity-0.sm\:group-hover\:opacity-100 {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Feedback tátil suave ao tocar */
+  button:active,
+  [role="button"]:active {
+    opacity: 0.85;
+  }
+}
+
+
 

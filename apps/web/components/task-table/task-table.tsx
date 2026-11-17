@@ -1201,14 +1201,14 @@ export function TaskTable({
               type="button"
               onClick={() => toggleSelectTask(task.id)}
               className={cn(
-                "w-4 h-4 rounded-xs border flex items-center justify-center transition-all cursor-pointer shrink-0 mr-0.5",
+                "size-5 sm:w-4 sm:h-4 rounded-sm border flex items-center justify-center transition-all cursor-pointer shrink-0 mr-1",
                 isSelected
                   ? "opacity-100 bg-primary border-primary text-primary-foreground"
-                  : "opacity-0 group-hover/row:opacity-100 border-border hover:border-foreground bg-background"
+                  : "opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 border-border hover:border-foreground bg-background"
               )}
               aria-label={`Selecionar tarefa ${task.title}`}
             >
-              {isSelected && <Check className="w-3 h-3 stroke-[2.5]" />}
+              {isSelected && <Check className="w-3.5 h-3.5 sm:w-3 sm:h-3 stroke-[2.5]" />}
             </button>
 
             {/* Seta para expandir / recolher descendentes */}
@@ -1450,10 +1450,10 @@ export function TaskTable({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="opacity-0 group-hover/row:opacity-100 focus:opacity-100 p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-opacity cursor-pointer"
+                    className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 focus:opacity-100 size-8 sm:size-7 flex items-center justify-center text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-opacity cursor-pointer"
                     aria-label={`Mais opções para ${task.title}`}
                   >
-                    <MoreHorizontal className="w-3.5 h-3.5" />
+                    <MoreHorizontal className="size-4 sm:size-3.5" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent

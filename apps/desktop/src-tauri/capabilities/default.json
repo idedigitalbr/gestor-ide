@@ -8,5 +8,11 @@
   "permissions": [
     "core:default",
     "notification:default"
-  ]
+  ],
+  "remote": {
+    "urls": [
+      "https://gestor.suporteide.digital/*",
+      "https://gestor.suporteide.digital"
+    ]
+  }
 }
