@@ -30,9 +30,9 @@ export function DesktopDownloadCta({ className = "" }: DesktopDownloadCtaProps) 
   );
 
   const [step, setStep] = useState<ConversationStep>("greeting");
-  const [version, setVersion] = useState<string>("v0.1.6");
+  const [version, setVersion] = useState<string>("v0.1.7");
   const [downloadUrl, setDownloadUrl] = useState<string>(
-    "https://github.com/idedigitalbr/gestor-ide/releases/download/v0.1.6/instalador-ide-gestor-v0.1.6-oneclick.exe"
+    "https://github.com/idedigitalbr/gestor-ide/releases/download/v0.1.7/instalador-ide-gestor-v0.1.7-oneclick.exe"
   );
 
   const timer1Ref = useRef<ReturnType<typeof setTimeout> | null>(null);

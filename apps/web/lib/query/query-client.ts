@@ -21,6 +21,10 @@ export const queryKeys = {
     ["tasks", filters ?? {}] as const,
   task: (taskId: string | null | undefined) =>
     ["tasks", taskId ?? ""] as const,
+  taskComments: (taskId: string | null | undefined) =>
+    ["tasks", taskId ?? "", "comments"] as const,
+  taskChecklist: (taskId: string | null | undefined) =>
+    ["tasks", taskId ?? "", "checklist"] as const,
   session: () => ["crm-session"] as const,
   settings: () => ["crm-settings"] as const,
   dashboard: () => ["dashboard", "projects"] as const,

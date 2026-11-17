@@ -29,6 +29,7 @@ import {
   useReorderCustomViews,
   useManagements,
   useProjects,
+  useProjectMembers,
 } from "@/lib/query";
 import { CustomViewModal } from "@/components/custom-views/custom-view-modal";
 import { EmbeddedCustomView } from "@/components/custom-views/embedded-custom-view";
@@ -486,6 +487,7 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   // Dados sincronizados do IDE CRM via TanStack Query + Cache Local
   const { managements: queryManagements } = useManagements();
   const { projects: queryProjects } = useProjects();
+  const { members: queryProjectMembers } = useProjectMembers(selectedProjectId);
 
   const [managements, setManagements] = useState<CrmProjectManagement[]>(() => {
     return getCachedManagements() || [];
@@ -1735,11 +1737,14 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
   }
 
   const activeProjectMembers = useMemo<CrmProjectMember[]>(() => {
+    if (queryProjectMembers && queryProjectMembers.length > 0) {
+      return queryProjectMembers;
+    }
     if (projectMembers?.projectId && projectMembers.projectId === selectedProjectId) {
       return projectMembers.members;
     }
     return [];
-  }, [projectMembers, selectedProjectId]);
+  }, [queryProjectMembers, projectMembers, selectedProjectId]);
 
   // Estados locais para mutações otimistas de membros do projeto
   const [projectRoleOverrides, setProjectRoleOverrides] = useState<Map<string, CanonicalMemberRole>>(
@@ -2640,20 +2645,8 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
           isModalDirtyRef.current = dirty;
         }}
         currentUser={currentUser}
-        members={
-          projectMembers &&
-          (selectedTask?.projectId ?? selectedProjectId) &&
-          projectMembers.projectId === (selectedTask?.projectId ?? selectedProjectId)
-            ? projectMembers.members
-            : []
-        }
-        onChangeAssignee={
-          projectMembers &&
-          selectedTask &&
-          projectMembers.projectId === selectedTask.projectId
-            ? handleChangeAssignee
-            : undefined
-        }
+        members={activeProjectMembers}
+        onChangeAssignee={selectedTask ? handleChangeAssignee : undefined}
         initialStatus={modalInitialStatus}
         onSave={handleSaveFromModal}
         onUpdateTask={handleUpdateTask}
