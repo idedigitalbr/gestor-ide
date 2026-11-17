@@ -206,7 +206,7 @@ function NewColumnGhost({
 }
 
 export function TaskKanban({
-  tasks,
+  tasks = [],
   members = [],
   onChangeAssignee,
   onUpdateTask,
@@ -260,7 +260,8 @@ export function TaskKanban({
   }
 
   function handleConfirmNewColumn(name: string) {
-    const gapIndex = colSep.activeIndex!;
+    if (colSep.activeIndex === null) return;
+    const gapIndex = colSep.activeIndex;
     setCustomColumns((prev) => [
       ...prev,
       { name, insertAfterIndex: gapIndex },

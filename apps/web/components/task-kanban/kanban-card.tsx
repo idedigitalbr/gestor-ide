@@ -114,8 +114,8 @@ export function KanbanCard({
       ...task,
       assigneeId: member?.userId,
       assigneeIds: member ? [member.userId] : [],
-      assignee: member?.user.name || member?.user.email || undefined,
-      assigneeAvatar: member?.user.avatarUrl || undefined,
+      assignee: member?.user?.name || member?.user?.email || undefined,
+      assigneeAvatar: member?.user?.avatarUrl || undefined,
     });
   }
 
@@ -133,11 +133,11 @@ export function KanbanCard({
 
   const formattedDate = formatDateDeterministic(task.dueDate);
   const totalSubtasks = task.subtasks?.length ?? 0;
-  const completedSubtasks = task.subtasks?.filter((s) => s.completed).length ?? 0;
+  const completedSubtasks = task.subtasks?.filter((s) => s?.completed).length ?? 0;
 
   // Tag bullet colors (faithful to It's a Plan palette)
   function getTagBulletColor(tag?: string) {
-    if (!tag) return "bg-zinc-500";
+    if (!tag || typeof tag !== "string") return "bg-zinc-500";
     const t = tag.toLowerCase();
     if (t.includes("front")) return "bg-emerald-500";
     if (t.includes("tab") || t.includes("enhanc")) return "bg-purple-500";
@@ -147,7 +147,7 @@ export function KanbanCard({
     return "bg-neutral-500";
   }
 
-  const isAgentTask = !task.assignee && Boolean(task.tag?.includes("agent"));
+  const isAgentTask = !task.assignee && Boolean(typeof task.tag === "string" && task.tag.includes("agent"));
 
   return (
     <>
@@ -265,6 +265,7 @@ export function KanbanCard({
                     <DropdownMenuSeparator className="bg-border" />
                     {members.map((member) => {
                       const isSelected = task.assigneeId === member.userId;
+                      const memberName = member?.user?.name || member?.user?.email || "Membro";
                       return (
                         <DropdownMenuItem
                           key={member.userId}
@@ -277,13 +278,13 @@ export function KanbanCard({
                           <span className="flex items-center gap-2 min-w-0">
                             <span className="w-4 h-4 rounded-full bg-muted overflow-hidden flex items-center justify-center text-[9px] font-semibold shrink-0">
                               <MemberAvatarContent
-                                name={member.user.name || member.user.email}
-                                src={member.user.avatarUrl}
+                                name={memberName}
+                                src={member?.user?.avatarUrl}
                                 initialsLength={1}
                               />
                             </span>
                             <span className="truncate">
-                              {member.user.name || member.user.email}
+                              {memberName}
                             </span>
                           </span>
                           {isSelected && (
@@ -320,7 +321,7 @@ export function KanbanCard({
           />
         </span>
         <h4 className="text-xs font-normal text-card-foreground leading-snug line-clamp-2">
-          {task.title}
+          {task.title || "Sem título"}
         </h4>
       </div>
 

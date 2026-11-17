@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { ThemeProvider } from "@/lib/themes/theme-context";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { getQueryClient } from "@/lib/query/query-client";
 import { queryPersister } from "@/lib/query/persister";
 
@@ -22,7 +23,11 @@ export function Providers({ children }: ProvidersProps) {
         buster: "v1",
       }}
     >
-      <ThemeProvider>{children}</ThemeProvider>
+      <ThemeProvider>
+        <TooltipProvider delayDuration={150}>
+          {children}
+        </TooltipProvider>
+      </ThemeProvider>
     </PersistQueryClientProvider>
   );
 }

@@ -57,14 +57,16 @@ export function MemberAvatar({
   if (!showTooltip) return avatarNode;
 
   return (
-    <Tooltip delayDuration={150}>
-      <TooltipTrigger asChild>{avatarNode}</TooltipTrigger>
-      <TooltipContent side="top" className="text-xs py-1 px-2.5 shadow-md">
-        <p className="font-semibold text-foreground">{name || "Membro da equipe"}</p>
-        {role && <p className="text-[10px] text-muted-foreground capitalize">{role}</p>}
-        {email && <p className="text-[10px] text-muted-foreground">{email}</p>}
-      </TooltipContent>
-    </Tooltip>
+    <TooltipProvider delayDuration={150}>
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>{avatarNode}</TooltipTrigger>
+        <TooltipContent side="top" className="text-xs py-1 px-2.5 shadow-md">
+          <p className="font-semibold text-foreground">{name || "Membro da equipe"}</p>
+          {role && <p className="text-[10px] text-muted-foreground capitalize">{role}</p>}
+          {email && <p className="text-[10px] text-muted-foreground">{email}</p>}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -3,6 +3,7 @@
 import { Suspense, useSyncExternalStore, type ReactNode } from "react";
 import { TaskApp } from "@/components/task-app";
 import { CalendarDialogProvider } from "@/components/calendar-dialog-context";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const emptySubscribe = () => () => {};
 
@@ -31,9 +32,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       ) : (
-        <Suspense fallback={<AppShellFallback />}>
-          <TaskApp>{children}</TaskApp>
-        </Suspense>
+        <ErrorBoundary
+          title="Erro ao carregar a aplicação"
+          description="Ocorreu uma falha inesperada. Clique abaixo para recarregar com a visualização padrão."
+          onReset={() => {
+            try {
+              localStorage.setItem("gestor_task_view_mode", "table");
+            } catch {}
+          }}
+        >
+          <Suspense fallback={<AppShellFallback />}>
+            <TaskApp>{children}</TaskApp>
+          </Suspense>
+        </ErrorBoundary>
       )}
     </CalendarDialogProvider>
   );

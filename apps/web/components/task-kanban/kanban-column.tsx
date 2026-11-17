@@ -180,7 +180,7 @@ function TaskSeparator({
 
 export function KanbanColumn({
   status,
-  tasks,
+  tasks = [],
   members = [],
   onChangeAssignee,
   isCollapsed = false,

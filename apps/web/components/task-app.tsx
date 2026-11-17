@@ -98,6 +98,7 @@ import {
 } from "@/components/members-dialog";
 import { TaskTable } from "@/components/task-table/task-table";
 import { TaskKanban } from "@/components/task-kanban/task-kanban";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { TaskAdditionalView } from "@/components/task-additional-view";
 import { TaskModal } from "@/components/task-modal";
 import { EmptyState } from "@/components/empty-state";
@@ -2705,15 +2706,24 @@ export function TaskApp({ children }: { children: React.ReactNode }) {
                   onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
                 />
               ) : viewMode === "kanban" ? (
-                <TaskKanban
-                  tasks={filteredTasks}
-                  members={activeProjectMembers}
-                  onUpdateTask={handleUpdateTask}
-                  onDeleteTask={handleDeleteTask}
-                  onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
-                  onOpenDetails={handleOpenDetails}
-                  onQuickAdd={handleOpenNewTask}
-                />
+                <ErrorBoundary
+                  title="Erro ao carregar o quadro Kanban"
+                  description="Ocorreu um erro ao renderizar os cartões do Kanban."
+                  secondaryAction={{
+                    label: "Mudar para Tabela",
+                    onClick: () => handleViewModeChange("table"),
+                  }}
+                >
+                  <TaskKanban
+                    tasks={filteredTasks}
+                    members={activeProjectMembers}
+                    onUpdateTask={handleUpdateTask}
+                    onDeleteTask={handleDeleteTask}
+                    onChangeAssignee={canWriteProjects ? handleChangeAssignee : undefined}
+                    onOpenDetails={handleOpenDetails}
+                    onQuickAdd={handleOpenNewTask}
+                  />
+                </ErrorBoundary>
               ) : (
                 <div className="w-full overflow-x-auto">
                   <TaskTable
